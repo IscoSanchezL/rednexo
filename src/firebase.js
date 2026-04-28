@@ -1,5 +1,12 @@
 import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
+  signOut,
+} from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 
 const firebaseConfig = {
@@ -18,5 +25,12 @@ export const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: "select_account" });
 
-export const loginWithGoogle = () => signInWithPopup(auth, provider);
+// Popup en localhost, redirect en producción
+const isLocalhost = window.location.hostname === "localhost";
+export const loginWithGoogle = () =>
+  isLocalhost
+    ? signInWithPopup(auth, provider)
+    : signInWithRedirect(auth, provider);
+
+export { getRedirectResult };
 export const logout = () => signOut(auth);

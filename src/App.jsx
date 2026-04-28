@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { auth, loginWithGoogle, logout, db } from "./firebase";
+import { auth, loginWithGoogle, logout, db, getRedirectResult } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
@@ -1992,6 +1992,11 @@ export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const publicSurveyId = urlParams.get("survey");
   if (publicSurveyId) return <PublicSurvey surveyId={publicSurveyId} />;
+
+  // ── MANEJAR REDIRECT DE GOOGLE (producción) ────────────────
+  useEffect(() => {
+    getRedirectResult(auth).catch(() => {});
+  }, []);
 
   // ── TEMA ──────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(true);
