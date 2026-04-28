@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { auth, loginWithGoogle, logout, db, getRedirectResult } from "./firebase";
+import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import {
   collection,
@@ -1995,7 +1995,6 @@ export default function App() {
 
   // ── MANEJAR REDIRECT DE GOOGLE (producción) ────────────────
   useEffect(() => {
-    getRedirectResult(auth).catch(() => {});
   }, []);
 
   // ── TEMA ──────────────────────────────────────────────────
