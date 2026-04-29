@@ -1404,132 +1404,98 @@ function SocioMatrix({ students, conns }) {
   const [hovRow, setHovRow] = useState(null);
   const [hovCol, setHovCol] = useState(null);
   const [selCell, setSelCell] = useState(null);
-  const cvRef = useRef(null);
-  const afRef = useRef(null);
-  const tickRef = useRef(0);
-  const particlesRef = useRef([]);
+  const [tick, setTick] = useState(0);
 
   const toggleG = (g) => setSelGroups(p => p.includes(g) ? (p.length > 1 ? p.filter(x => x !== g) : p) : [...p, g]);
   const allSel = selGroups.length === GROUPS.length;
   const fs = students.filter(s => selGroups.includes(s.group));
 
-  // Partículas neurales que viajan por las conexiones activas
+  // Ticker para animaciones CSS (pulsos cada 2s)
   useEffect(() => {
-    particlesRef.current = [];
-  }, [fs.length, conns.length]);
-
-  // Canvas animado para las partículas de fondo
-  useEffect(() => {
-    const cv = cvRef.current;
-    if (!cv) return;
-    const ctx = cv.getContext("2d");
-    const W = cv.offsetWidth, H = cv.offsetHeight;
-    cv.width = W * 2; cv.height = H * 2;
-    ctx.scale(2, 2);
-
-    const draw = () => {
-      tickRef.current++;
-      ctx.clearRect(0, 0, W, H);
-
-      // Pulsos de fondo que viajan aleatoriamente
-      if (tickRef.current % 8 === 0 && particlesRef.current.length < 40) {
-        const randConn = conns[Math.floor(Math.random() * conns.length)];
-        if (randConn) {
-          const fi = fs.findIndex(s => s.id === randConn.f);
-          const ti = fs.findIndex(s => s.id === randConn.t);
-          if (fi >= 0 && ti >= 0) {
-            particlesRef.current.push({
-              fi, ti, t: 0,
-              color: randConn.tp === "pos" ? "#2dd4bf" : randConn.tp === "neg" ? "#f87171" : "#fbbf24",
-              speed: 0.008 + Math.random() * 0.012,
-            });
-          }
-        }
-      }
-
-      // Actualizar y dibujar partículas
-      particlesRef.current = particlesRef.current.filter(p => p.t < 1);
-      particlesRef.current.forEach(p => {
-        p.t += p.speed;
-        const cellSize = 36;
-        const startX = (p.fi + 1.5) * cellSize;
-        const startY = (p.ti + 0.5) * cellSize;
-        const endX = (p.ti + 1.5) * cellSize;
-        const endY = (p.fi + 0.5) * cellSize;
-        const x = startX + (endX - startX) * p.t;
-        const y = startY + (endY - startY) * p.t;
-        const alpha = Math.sin(p.t * Math.PI);
-        const glow = ctx.createRadialGradient(x, y, 0, x, y, 6);
-        glow.addColorStop(0, p.color + Math.round(alpha * 200).toString(16).padStart(2, "0"));
-        glow.addColorStop(1, "transparent");
-        ctx.fillStyle = glow;
-        ctx.beginPath(); ctx.arc(x, y, 6, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#fff";
-        ctx.globalAlpha = alpha * 0.9;
-        ctx.beginPath(); ctx.arc(x, y, 1.5, 0, Math.PI * 2); ctx.fill();
-        ctx.globalAlpha = 1;
-      });
-
-      afRef.current = requestAnimationFrame(draw);
-    };
-    draw();
-    return () => cancelAnimationFrame(afRef.current);
-  }, [fs, conns]);
+    const id = setInterval(() => setTick(t => t + 1), 2000);
+    return () => clearInterval(id);
+  }, []);
 
   const cellSize = 36;
 
+  // Conexiones activas para el efecto de "pulso" animado
+  const activeConns = conns.filter(c =>
+    fs.some(s => s.id === c.f) && fs.some(s => s.id === c.t)
+  );
+
   return (
     <div>
+      <style>{`
+        @keyframes neuron-pulse {
+          0%   { opacity: 0; transform: scale(0.4); }
+          40%  { opacity: 1; transform: scale(1.2); }
+          100% { opacity: 0; transform: scale(0.4); }
+        }
+        @keyframes travel-h {
+          0%   { left: 0%;  opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { left: 100%; opacity: 0; }
+        }
+        @keyframes travel-v {
+          0%   { top: 0%;  opacity: 0; }
+          10%  { opacity: 1; }
+          90%  { opacity: 1; }
+          100% { top: 100%; opacity: 0; }
+        }
+        .nm-cell:hover { filter: brightness(1.3); }
+        .nm-row:hover .nm-rowhead { background: rgba(255,77,106,0.12) !important; }
+      `}</style>
+
       {/* Filtros de grupo */}
       <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: C.t2 }}>Grupos:</span>
-        <button onClick={() => setSelGroups(allSel ? [GROUPS[0]] : GROUPS.slice())} style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${allSel ? C.rx + "50" : C.border}`, background: allSel ? C.rx + "15" : "transparent", color: allSel ? C.rx : C.t3, transition: "all .2s" }}>
+        <button onClick={() => setSelGroups(allSel ? [GROUPS[0]] : GROUPS.slice())}
+          style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${allSel ? C.rx + "50" : C.border}`, background: allSel ? C.rx + "15" : "transparent", color: allSel ? C.rx : C.t3, transition: "all .2s" }}>
           {allSel ? "✓ Todos" : "Todos"}
         </button>
         {GROUPS.map(g => {
           const on = selGroups.includes(g);
           return (
-            <button key={g} onClick={() => toggleG(g)} style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? GC[g] + "80" : C.border}`, background: on ? GC[g] + "18" : "transparent", color: on ? GC[g] : C.t3, transition: "all .2s", display: "flex", alignItems: "center", gap: 4 }}>
+            <button key={g} onClick={() => toggleG(g)}
+              style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? GC[g] + "80" : C.border}`, background: on ? GC[g] + "18" : "transparent", color: on ? GC[g] : C.t3, transition: "all .2s", display: "flex", alignItems: "center", gap: 4 }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: on ? GC[g] : C.t3 + "40" }} />{g}
             </button>
           );
         })}
-        <span style={{ marginLeft: "auto", fontSize: 10, color: C.t3 }}>{fs.length} participantes · {conns.length} conexiones</span>
+        <span style={{ marginLeft: "auto", fontSize: 10, color: C.t3 }}>{fs.length} participantes · {activeConns.length} conexiones</span>
       </div>
 
       {/* Título */}
-      <div style={{ marginBottom: 12 }}>
+      <div style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 16, fontWeight: 800, color: C.text }}>Matriz Sociométrica Neural</div>
-        <div style={{ fontSize: 11, color: C.t2, marginTop: 2 }}>Las partículas viajan por las conexiones reales · Haz clic en cualquier celda para ver detalle</div>
+        <div style={{ fontSize: 11, color: C.t2, marginTop: 2 }}>
+          Celdas iluminadas = conexión activa · Haz clic para ver detalle
+        </div>
       </div>
 
-      {/* Contenedor de la matriz */}
-      <div style={{ position: "relative", overflowX: "auto" }}>
-        {/* Canvas de partículas (overlay) */}
-        <canvas
-          ref={cvRef}
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none", zIndex: 2, borderRadius: 10 }}
-        />
-
-        <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, position: "relative", zIndex: 1 }}>
+      {/* Tabla */}
+      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}` }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, minWidth: "100%" }}>
           <thead>
             <tr>
-              {/* Corner cell */}
-              <th style={{ width: cellSize * 2, minWidth: cellSize * 2, padding: "8px 10px", background: "#0a0a14", border: `1px solid ${C.border}`, position: "sticky", left: 0, zIndex: 4, borderRadius: "8px 0 0 0" }}>
-                <div style={{ fontSize: 9, color: C.t3, textAlign: "center", lineHeight: 1.4 }}>De ↓<br/>Para →</div>
+              <th style={{ width: 80, minWidth: 80, padding: "8px 10px", background: "#0a0a14", border: `1px solid ${C.border}`, position: "sticky", left: 0, zIndex: 4 }}>
+                <div style={{ fontSize: 9, color: C.t3, textAlign: "center", lineHeight: 1.5 }}>De ↓<br/>Para →</div>
               </th>
-              {fs.map((s, ci) => {
+              {fs.map(s => {
                 const isHov = hovCol === s.id;
                 const gc = GC[s.group] || C.rx;
                 return (
-                  <th key={s.id} onMouseEnter={() => setHovCol(s.id)} onMouseLeave={() => setHovCol(null)}
-                    style={{ width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? gc + "20" : "#0c0c18", border: `1px solid ${isHov ? gc + "60" : C.border}`, textAlign: "center", transition: "all .15s", cursor: "default" }}>
+                  <th key={s.id}
+                    onMouseEnter={() => setHovCol(s.id)}
+                    onMouseLeave={() => setHovCol(null)}
+                    style={{ width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? gc + "22" : "#0c0c18", border: `1px solid ${isHov ? gc + "60" : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: gc + "22", border: `1.5px solid ${gc}60`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 9, color: gc, margin: "0 auto" }}>{s.av}</div>
-                    <div style={{ fontSize: 7, color: gc + "aa", marginTop: 2, letterSpacing: ".3px" }}>{s.group}</div>
+                    <div style={{ fontSize: 7, color: gc + "99", marginTop: 2 }}>{s.group}</div>
                   </th>
                 );
               })}
-              <th style={{ padding: "6px 8px", background: C.rx + "18", border: `1px solid ${C.border}`, fontSize: 10, color: C.rx, fontWeight: 700, textAlign: "center" }}>Σ+</th>
+              <th style={{ padding: "6px 8px", background: C.teal + "18", border: `1px solid ${C.border}`, fontSize: 10, color: C.teal, fontWeight: 700, textAlign: "center" }}>Σ+</th>
               <th style={{ padding: "6px 8px", background: C.err + "18", border: `1px solid ${C.border}`, fontSize: 10, color: C.err, fontWeight: 700, textAlign: "center" }}>Σ−</th>
             </tr>
           </thead>
@@ -1539,8 +1505,10 @@ function SocioMatrix({ students, conns }) {
               const isHovRow = hovRow === from.id;
               const gcFrom = GC[from.group] || C.rx;
               return (
-                <tr key={from.id} onMouseEnter={() => setHovRow(from.id)} onMouseLeave={() => setHovRow(null)}>
-                  <td style={{ padding: "5px 10px", background: isHovRow ? gcFrom + "18" : "#0c0c18", border: `1px solid ${isHovRow ? gcFrom + "60" : C.border}`, fontWeight: 700, color: gcFrom, position: "sticky", left: 0, zIndex: 3, fontSize: 10, whiteSpace: "nowrap", transition: "all .15s" }}>
+                <tr key={from.id} className="nm-row"
+                  onMouseEnter={() => setHovRow(from.id)}
+                  onMouseLeave={() => setHovRow(null)}>
+                  <td style={{ padding: "5px 10px", background: isHovRow ? gcFrom + "18" : "#0c0c18", border: `1px solid ${isHovRow ? gcFrom + "60" : C.border}`, fontWeight: 700, color: gcFrom, position: "sticky", left: 0, zIndex: 3, fontSize: 10, whiteSpace: "nowrap", transition: "background .15s, border-color .15s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <div style={{ width: 22, height: 22, borderRadius: 5, background: gcFrom + "22", border: `1px solid ${gcFrom}50`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 8, flexShrink: 0 }}>{from.av}</div>
                       <span style={{ fontSize: 9, color: C.t2, fontWeight: 400 }}>{from.name.split(" ")[0]}</span>
@@ -1549,60 +1517,80 @@ function SocioMatrix({ students, conns }) {
                   {fs.map((to, ci) => {
                     if (from.id === to.id) {
                       return (
-                        <td key={to.id} style={{ padding: 0, width: cellSize, height: cellSize, background: "#0a0a14", border: `1px solid ${C.border}`, textAlign: "center" }}>
-                          <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", background: "linear-gradient(135deg, #1a1a2a 25%, #0a0a14 75%)" }}>
-                            <span style={{ fontSize: 14, color: C.t3 + "40" }}>◇</span>
-                          </div>
+                        <td key={to.id} style={{ width: cellSize, height: cellSize, background: "linear-gradient(135deg,#1a1a2a 25%,#0a0a14 75%)", border: `1px solid ${C.border}`, textAlign: "center" }}>
+                          <span style={{ fontSize: 13, color: C.t3 + "30" }}>◇</span>
                         </td>
                       );
                     }
-                    const conn = conns.find(c => c.f === from.id && c.t === to.id);
-                    const rev  = conns.find(c => c.f === to.id  && c.t === from.id);
+                    const conn   = conns.find(c => c.f === from.id && c.t === to.id);
+                    const rev    = conns.find(c => c.f === to.id   && c.t === from.id);
                     const mutual = conn && rev;
-                    const isHov = (hovRow === from.id || hovCol === to.id);
-                    const isSel = selCell && selCell.f === from.id && selCell.t === to.id;
+                    const isHov  = hovRow === from.id || hovCol === to.id;
+                    const isSel  = selCell && selCell.f === from.id && selCell.t === to.id;
                     if (conn?.tp === "pos") pos++;
                     if (conn?.tp === "neg") neg++;
 
-                    const col = conn ? (conn.tp === "pos" ? (mutual ? C.ok : C.teal) : conn.tp === "neg" ? C.err : C.amber) : null;
-                    const bgBase = conn ? (conn.tp === "pos" ? (mutual ? C.ok : C.teal) : conn.tp === "neg" ? C.err : C.amber) + "18" : "transparent";
-                    const bgHov  = conn ? col + "30" : C.t3 + "08";
-                    const sym = conn ? (conn.tp === "pos" ? (mutual ? "⬥" : "▲") : conn.tp === "neg" ? "▼" : "◯") : "";
+                    const col    = conn ? (conn.tp === "pos" ? (mutual ? C.ok : C.teal) : conn.tp === "neg" ? C.err : C.amber) : null;
+                    const bgCell = isSel ? col + "40" : isHov && conn ? col + "28" : conn ? col + "14" : isHov ? C.t3 + "08" : "transparent";
+                    const sym    = conn ? (conn.tp === "pos" ? (mutual ? "⬥" : "▲") : conn.tp === "neg" ? "▼" : "◯") : "";
+
+                    // Pulso CSS animado en celdas con conexión
+                    const isPulsing = conn && (tick + ri * 3 + ci) % 7 === 0;
 
                     return (
-                      <td key={to.id}
+                      <td key={to.id} className="nm-cell"
                         onClick={() => setSelCell(isSel ? null : conn ? { f: from.id, t: to.id, conn, mutual, from, to } : null)}
                         onMouseEnter={() => { setHovRow(from.id); setHovCol(to.id); }}
                         onMouseLeave={() => { setHovRow(null); setHovCol(null); }}
                         title={conn ? `${from.name} → ${to.name}: ${conn.tp}${mutual ? " (mutuo)" : ""}` : "Sin conexión"}
-                        style={{ padding: 0, width: cellSize, height: cellSize, background: isSel ? col + "40" : isHov ? bgHov : bgBase, border: `1px solid ${isSel ? col + "80" : isHov && conn ? col + "60" : C.border + "80"}`, textAlign: "center", cursor: conn ? "pointer" : "default", transition: "all .12s", position: "relative" }}>
+                        style={{ padding: 0, width: cellSize, height: cellSize, background: bgCell, border: `1px solid ${isSel ? col + "80" : isHov && conn ? col + "50" : C.border + "80"}`, textAlign: "center", cursor: conn ? "pointer" : "default", transition: "background .12s, border-color .12s", position: "relative", overflow: "hidden" }}>
+
+                        {/* Pulso neural CSS — no usa canvas */}
+                        {conn && isPulsing && (
+                          <div style={{
+                            position: "absolute", inset: 0,
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            pointerEvents: "none",
+                          }}>
+                            <div style={{
+                              width: 20, height: 20, borderRadius: "50%",
+                              background: col + "60",
+                              animation: "neuron-pulse 1.2s ease-out forwards",
+                            }} />
+                          </div>
+                        )}
+
+                        {/* Glow hover */}
+                        {isHov && conn && (
+                          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${col}20, transparent)`, pointerEvents: "none" }} />
+                        )}
+
                         {conn && (
-                          <>
-                            {/* Glow interior */}
-                            {isHov && <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${col}25, transparent)`, pointerEvents: "none" }} />}
-                            <span style={{ fontSize: mutual ? 14 : 12, color: col, fontWeight: mutual ? 800 : 600, position: "relative", zIndex: 1, textShadow: isHov ? `0 0 8px ${col}` : "none", transition: "text-shadow .15s" }}>{sym}</span>
-                          </>
+                          <span style={{ fontSize: mutual ? 14 : 12, color: col, fontWeight: mutual ? 800 : 600, position: "relative", zIndex: 1, textShadow: isHov ? `0 0 8px ${col}` : "none", transition: "text-shadow .15s" }}>
+                            {sym}
+                          </span>
                         )}
                       </td>
                     );
                   })}
-                  <td style={{ padding: "4px 8px", background: C.rx + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: pos > 0 ? C.teal : C.t3, fontSize: 12 }}>{pos}</td>
-                  <td style={{ padding: "4px 8px", background: C.err + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: neg > 0 ? C.err : C.t3, fontSize: 12 }}>{neg}</td>
+                  <td style={{ padding: "4px 8px", background: C.teal + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: pos > 0 ? C.teal : C.t3, fontSize: 12 }}>{pos}</td>
+                  <td style={{ padding: "4px 8px", background: C.err  + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: neg > 0 ? C.err  : C.t3, fontSize: 12 }}>{neg}</td>
                 </tr>
               );
             })}
-            {/* Fila de recibidas */}
+
+            {/* Fila de recibidas con barras */}
             <tr>
               <td style={{ padding: "6px 10px", background: "#0c0c18", border: `1px solid ${C.border}`, fontWeight: 700, fontSize: 9, color: C.t2, position: "sticky", left: 0, zIndex: 3, letterSpacing: ".3px" }}>RECIBIDAS</td>
               {fs.map(to => {
-                const rec = conns.filter(c => c.t === to.id && c.tp === "pos").length;
+                const rec  = conns.filter(c => c.t === to.id && c.tp === "pos").length;
                 const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && c.tp === "pos").length), 1);
-                const pct = rec / maxR;
-                const gc = GC[to.group] || C.teal;
+                const pct  = rec / maxR;
+                const gc   = GC[to.group] || C.teal;
                 return (
-                  <td key={to.id} style={{ padding: "2px", background: "transparent", border: `1px solid ${C.border}`, textAlign: "center" }}>
-                    <div style={{ position: "relative", height: cellSize - 8, display: "flex", flexDirection: "column", justifyContent: "flex-end", alignItems: "center", gap: 2 }}>
-                      <div style={{ width: "70%", height: `${Math.max(pct * 100, 4)}%`, background: `linear-gradient(to top, ${gc}, ${gc}44)`, borderRadius: "2px 2px 0 0", minHeight: 3, transition: "height .3s", boxShadow: pct > 0.5 ? `0 0 6px ${gc}60` : "none" }} />
+                  <td key={to.id} style={{ padding: "3px 2px", background: "transparent", border: `1px solid ${C.border}`, textAlign: "center" }}>
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: cellSize - 6, gap: 1 }}>
+                      <div style={{ width: "65%", height: `${Math.max(pct * 100, 4)}%`, background: `linear-gradient(to top, ${gc}, ${gc}55)`, borderRadius: "2px 2px 0 0", minHeight: 3, boxShadow: pct > 0.5 ? `0 0 6px ${gc}60` : "none", transition: "height .4s" }} />
                       <span style={{ fontSize: 9, fontWeight: 800, color: rec > 0 ? gc : C.t3 }}>{rec}</span>
                     </div>
                   </td>
@@ -1614,9 +1602,9 @@ function SocioMatrix({ students, conns }) {
         </table>
       </div>
 
-      {/* Tooltip de celda seleccionada */}
+      {/* Detalle de celda seleccionada */}
       {selCell && (
-        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: C.cardAlt, border: `1px solid ${selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber}40`, display: "flex", alignItems: "center", gap: 14 }}>
+        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: C.cardAlt, border: `1px solid ${selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber}40`, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: (GC[selCell.from.group] || C.rx) + "20", border: `1.5px solid ${GC[selCell.from.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.from.group] || C.rx }}>{selCell.from.av}</div>
           <div style={{ fontSize: 20, color: selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber }}>→</div>
           <div style={{ width: 36, height: 36, borderRadius: 9, background: (GC[selCell.to.group] || C.rx) + "20", border: `1.5px solid ${GC[selCell.to.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.to.group] || C.rx }}>{selCell.to.av}</div>
@@ -1643,11 +1631,11 @@ function SocioMatrix({ students, conns }) {
             <span style={{ fontSize: 13, color: l.col }}>{l.sym}</span>{l.lab}
           </span>
         ))}
-        <span style={{ marginLeft: "auto", color: C.t3, fontSize: 9 }}>Las partículas animan conexiones reales en tiempo real</span>
       </div>
     </div>
   );
 }
+
 
 // ════════ SURVEY EXECUTION ════════
 
@@ -3077,21 +3065,33 @@ export default function App() {
       )}
 
       <main style={{ padding: 22, animation: "slideIn .3s ease" }}>
-        {tab === "dashboard" && (
-          <>
+        {tab === "dashboard" && (() => {
+          // ── Cálculos dinámicos del dashboard ──
+          const visStudents = students.filter(s => visibleGroups.includes(s.group));
+          const visConns = conns.filter(c => visStudents.some(s => s.id === c.f) && visStudents.some(s => s.id === c.t));
+          const n = visStudents.length;
+          const posibles = n > 1 ? n * (n - 1) : 1;
+          const densidad = ((visConns.length / posibles) * 100).toFixed(1);
+
+          // KPIs del nodo seleccionado
+          const elecciones = pC.filter(c => c.f === selNode).length;
+          const recibidas  = pC.filter(c => c.t === selNode).length;
+          const reciprocas = pC.filter(c => c.f === selNode && conns.some(r => r.f === c.t && r.t === selNode)).length;
+          const indice     = n > 1 ? (recibidas / (n - 1)).toFixed(2) : "0.00";
+
+          return (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
               {[
-                { i: "👥", v: students.length, l: "Participantes", c: C.rx, t: "+12%" },
-                { i: "🔗", v: conns.length, l: "Conexiones", c: C.teal, t: "+8%" },
-                { i: "📊", v: "3.2", l: "Densidad", c: C.amber, t: "-2%" },
-                { i: "🎯", v: GROUPS.length, l: "Grupos", c: C.violet, t: "+5%" },
+                { i: "👥", v: visStudents.length, l: "Participantes", c: C.rx },
+                { i: "🔗", v: visConns.length,    l: "Conexiones",    c: C.teal },
+                { i: "📊", v: `${densidad}%`,     l: "Densidad",      c: C.amber },
+                { i: "🎯", v: visibleGroups.length, l: "Grupos vis.", c: C.violet },
               ].map((s) => (
                 <Card key={s.l} glow={s.c} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: s.c + "12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{s.i}</div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
                     <div style={{ fontSize: 9, color: C.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{s.l}</div>
-                    <div style={{ fontSize: 9, color: s.t.startsWith("+") ? C.ok : C.err }}>{s.t.startsWith("+") ? `↑ ${s.t}` : `↓ ${s.t}`}</div>
                   </div>
                 </Card>
               ))}
@@ -3119,8 +3119,8 @@ export default function App() {
                 <div style={{ position: "relative", height: 420, overflow: "hidden" }}>
                   <SociogramCanvas
                     filter={filter} selNode={selNode} setSelNode={setSelNode}
-                    students={students.filter((s) => visibleGroups.includes(s.group))}
-                    conns={conns.filter((c) => { const vs = students.filter((s) => visibleGroups.includes(s.group)); return vs.some((s) => s.id === c.f) && vs.some((s) => s.id === c.t); })}
+                    students={visStudents}
+                    conns={visConns}
                   />
                   <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 8, background: `${C.bg}dd`, padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}` }}>
                     {Object.entries(GC).map(([n, c]) => (
@@ -3161,7 +3161,12 @@ export default function App() {
                         <div><div style={{ fontSize: 14, fontWeight: 700 }}>{sp.name}</div><div style={{ fontSize: 11, color: GC[sp.group] }}>{sp.group}</div></div>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
-                        {[{ l: "Elecciones", v: pC.filter((c) => c.f === selNode).length, c: C.rx }, { l: "Recibidas", v: pC.filter((c) => c.t === selNode).length, c: C.teal }, { l: "Recíprocas", v: 2, c: C.amber }, { l: "Índice", v: "0.72", c: C.violet }].map((m) => (
+                        {[
+                          { l: "Elecciones", v: elecciones, c: C.rx },
+                          { l: "Recibidas",  v: recibidas,  c: C.teal },
+                          { l: "Recíprocas", v: reciprocas, c: C.amber },
+                          { l: "Índice",     v: indice,     c: C.violet },
+                        ].map((m) => (
                           <div key={m.l} style={{ background: C.bgSub, borderRadius: 8, padding: "7px 8px", textAlign: "center" }}>
                             <div style={{ fontSize: 16, fontWeight: 800, color: m.c }}>{m.v}</div>
                             <div style={{ fontSize: 8, color: C.t3, textTransform: "uppercase" }}>{m.l}</div>
@@ -3202,8 +3207,8 @@ export default function App() {
                 </Card>
               </div>
             </div>
-          </>
-        )}
+          </>);
+        })()}
 
         {tab === "surveys" && <SurveyBuilder role={role} students={students} GROUPS={dynGROUPS} />}
         {tab === "matrix" && <SocioMatrix students={students} conns={conns} />}
