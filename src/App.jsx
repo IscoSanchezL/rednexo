@@ -1,3 +1,9 @@
+useEffect(() => {
+  const { getRedirectResult } = require("firebase/auth");
+  getRedirectResult(auth).then((result) => {
+    if (result?.user) console.log("Login redirect ok:", result.user.email);
+  }).catch((e) => console.error("Redirect error:", e));
+}, []);
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
