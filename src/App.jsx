@@ -611,12 +611,20 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
         zIndex: 1,
       }}>
         <div style={{ animation: "fadeUp .5s ease both" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
-            <SchoolLogo size={80} style={{ boxShadow: "0 0 40px rgba(255,77,106,0.3), 0 8px 32px rgba(0,0,0,0.4)" }} />
-            <div style={{ width: 1, height: 56, background: "linear-gradient(to bottom, transparent, rgba(255,255,255,0.2), transparent)" }} />
-            <LogoIcon size={80} />
-          </div>
-          <div style={{ marginTop: 32, fontSize: 48, fontWeight: 900, lineHeight: 1.1, color: "#fff", letterSpacing: "-2px" }}>
+          <img
+            src="/rednexo-logo.webp"
+            alt="RedNexo"
+            style={{
+              display: "block",
+              width: "min(500px, 100%)",
+              height: "auto",
+              marginLeft: -16,
+              filter: "drop-shadow(0 0 28px rgba(59,130,246,0.30))",
+              userSelect: "none",
+              pointerEvents: "none",
+            }}
+          />
+          <div style={{ marginTop: 8, fontSize: 48, fontWeight: 900, lineHeight: 1.1, color: "#fff", letterSpacing: "-2px" }}>
             Entiende<br/>
             <span style={{ color: "#ff4d6a" }}>las conexiones</span><br/>
             de tu aula.
@@ -635,6 +643,10 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
                 <div style={{ fontSize: 11, color: "#555770", textTransform: "uppercase", letterSpacing: "1px" }}>{s.l}</div>
               </div>
             ))}
+          </div>
+          <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 14 }}>
+            <SchoolLogo size={44} style={{ boxShadow: "0 0 24px rgba(255,77,106,0.25), 0 6px 20px rgba(0,0,0,0.4)" }} />
+            <span style={{ fontSize: 11, color: "#555770", textTransform: "uppercase", letterSpacing: "1.5px" }}>Plataforma institucional</span>
           </div>
         </div>
       </div>
