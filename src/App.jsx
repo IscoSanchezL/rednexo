@@ -626,7 +626,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
           />
           <div style={{ marginTop: 8, fontSize: 48, fontWeight: 900, lineHeight: 1.1, color: "#fff", letterSpacing: "-2px" }}>
             Entiende<br/>
-            <span style={{ color: "#ff4d6a" }}>las conexiones</span><br/>
+            <span style={{ background: "linear-gradient(90deg,#38bdf8 0%,#3b82f6 50%,#a78bfa 100%)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "#3b82f6" }}>las conexiones</span><br/>
             de tu aula.
           </div>
           <div style={{ marginTop: 20, fontSize: 15, color: "#9498ae", lineHeight: 1.7, maxWidth: 380 }}>
@@ -639,7 +639,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
               { v: "PDF", l: "Reportes" },
             ].map((s) => (
               <div key={s.l} style={{ animation: "fadeUp .7s ease both" }}>
-                <div style={{ fontSize: 20, fontWeight: 800, color: "#ff4d6a" }}>{s.v}</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: "#38bdf8" }}>{s.v}</div>
                 <div style={{ fontSize: 11, color: "#555770", textTransform: "uppercase", letterSpacing: "1px" }}>{s.l}</div>
               </div>
             ))}
