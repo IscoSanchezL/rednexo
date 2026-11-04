@@ -395,22 +395,34 @@ const Sel = ({ label, value, onChange, options, disabled }) => (
 
 // ════════ LOGO — Pulso Social (rojizo) ════════
 
+// size = alto del emblema; el ancho sale de su proporción real (1.4:1)
 const LogoIcon = ({ size = 40 }) => (
   <img
     src="/rednexo-icon.webp"
     alt="RedNexo"
-    width={size}
     height={size}
-    style={{ display: "block", flexShrink: 0, objectFit: "contain", filter: "drop-shadow(0 0 8px rgba(59,130,246,0.35))" }}
+    width={Math.round(size * 1.4)}
+    style={{ display: "block", flexShrink: 0, objectFit: "contain", filter: "drop-shadow(0 0 8px rgba(59,130,246,0.30))" }}
   />
 );
 
 const Logo = ({ size = "md" }) => {
   const cfg = {
     lg: { iconSize: 76, title: 30, sub: 11, gap: 16, subSpacing: "2.5px" },
-    md: { iconSize: 42, title: 17, sub: 9, gap: 10, subSpacing: "1.8px" },
-    sm: { iconSize: 30, title: 13, sub: 0, gap: 8, subSpacing: "1.5px" },
-  }[size] || { iconSize: 38, title: 17, sub: 9, gap: 10, subSpacing: "1.8px" };
+    md: { iconSize: 46, title: 17, sub: 9, gap: 8, subSpacing: "1.8px" },
+    sm: { iconSize: 32, title: 13, sub: 0, gap: 6, subSpacing: "1.5px" },
+  }[size] || { iconSize: 40, title: 17, sub: 9, gap: 8, subSpacing: "1.8px" };
+
+  // Versión grande (registro, pantalla de carga): logo completo con el nombre
+  if (size === "lg") {
+    return (
+      <img
+        src="/rednexo-logo.webp"
+        alt="RedNexo"
+        style={{ display: "block", width: "min(300px, 80vw)", height: "auto", filter: "drop-shadow(0 0 24px rgba(59,130,246,0.28))", userSelect: "none" }}
+      />
+    );
+  }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: cfg.gap }}>
