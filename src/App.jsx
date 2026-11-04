@@ -56,7 +56,7 @@ const C = {
 const _D = {
   bg:"#08080c",bgSub:"#0c0c12",surface:"#12131a",card:"#16171f",
   cardHov:"#1e1f2b",border:"#252637",borderLit:"#35374a",
-  rx:"#ff4d6a",teal:"#2dd4bf",violet:"#a78bfa",amber:"#fbbf24",
+  rx:"#3b82f6",teal:"#2dd4bf",violet:"#a78bfa",amber:"#fbbf24",
   sky:"#38bdf8",text:"#eaedf6",t2:"#9498ae",t3:"#555770",
   ok:"#34d399",err:"#f87171",
 };
@@ -64,7 +64,7 @@ const _D = {
 const _L = {
   bg:"#f0f2f8",bgSub:"#e8eaf2",surface:"#ffffff",card:"#ffffff",
   cardHov:"#eef0fa",border:"#dde1f0",borderLit:"#c5cae0",
-  rx:"#e8324f",teal:"#0fa89a",violet:"#7c5fe8",amber:"#c98f00",
+  rx:"#2563eb",teal:"#0fa89a",violet:"#7c5fe8",amber:"#c98f00",
   sky:"#0e8fc0",text:"#0d0f1a",t2:"#444666",t3:"#888aaa",
   ok:"#1a9e72",err:"#d63c3c",
 };
@@ -80,7 +80,7 @@ const THEME_CSS = `
   --c-bg:#08080c;--c-bgSub:#0c0c12;--c-surface:#12131a;
   --c-card:#16171f;--c-cardAlt:#1a1b25;--c-cardHov:#1e1f2b;
   --c-border:#252637;--c-borderLit:#35374a;
-  --c-rx:#ff4d6a;--c-rxDim:#ff4d6a12;--c-rxGlow:#ff4d6a25;
+  --c-rx:#3b82f6;--c-rxDim:#3b82f612;--c-rxGlow:#3b82f625;
   --c-teal:#2dd4bf;--c-tealDim:#2dd4bf12;
   --c-violet:#a78bfa;--c-violetDim:#a78bfa12;
   --c-amber:#fbbf24;--c-amberDim:#fbbf2412;
@@ -92,7 +92,7 @@ const THEME_CSS = `
   --c-bg:#f0f2f8;--c-bgSub:#e8eaf2;--c-surface:#ffffff;
   --c-card:#ffffff;--c-cardAlt:#f5f6fc;--c-cardHov:#eef0fa;
   --c-border:#dde1f0;--c-borderLit:#c5cae0;
-  --c-rx:#e8324f;--c-rxDim:#e8324f18;--c-rxGlow:#e8324f30;
+  --c-rx:#2563eb;--c-rxDim:#2563eb18;--c-rxGlow:#2563eb30;
   --c-teal:#0fa89a;--c-tealDim:#0fa89a18;
   --c-violet:#7c5fe8;--c-violetDim:#7c5fe818;
   --c-amber:#c98f00;--c-amberDim:#c98f0018;
@@ -101,6 +101,14 @@ const THEME_CSS = `
   --c-ok:#1a9e72;--c-err:#d63c3c;
 }
 `;
+
+// Inyecta las variables de tema una sola vez, para que registro, carga y encuesta pública también tengan colores
+if (typeof document !== "undefined" && !document.getElementById("rn-theme-vars")) {
+  const st = document.createElement("style");
+  st.id = "rn-theme-vars";
+  st.textContent = THEME_CSS;
+  document.head.appendChild(st);
+}
 
 const ROLES = {
   superadmin: {
@@ -348,7 +356,7 @@ const Inp = ({
         fontFamily: "inherit",
         opacity: disabled ? 0.5 : 1,
       }}
-      onFocus={(e) => (e.target.style.borderColor = "#ff4d6a60")}
+      onFocus={(e) => (e.target.style.borderColor = "#3b82f660")}
       onBlur={(e) => (e.target.style.borderColor = "")}
     />
   </div>
@@ -387,62 +395,21 @@ const Sel = ({ label, value, onChange, options, disabled }) => (
 
 // ════════ LOGO — Pulso Social (rojizo) ════════
 
-const LogoIcon = ({ size = 40 }) => {
-  const s = size;
-  const r = s / 40;
-  const cx = s / 2,
-    cy = s / 2;
-  const pts = [
-    [4, 20],
-    [9, 20],
-    [12, 13],
-    [15, 27],
-    [17, 7],
-    [19, 27],
-    [22, 20],
-    [32, 20],
-    [36, 20],
-  ]
-    .map(([x, y]) => `${x * r},${y * r}`)
-    .join(" ");
-  const peakX = 17 * r,
-    peakY = 7 * r;
-  return (
-    <svg
-      width={s}
-      height={s}
-      viewBox={`0 0 ${s} ${s}`}
-      fill="none"
-      style={{ display: "block", flexShrink: 0 }}
-    >
-      <rect width={s} height={s} rx={s * 0.22} fill="#1a0608" />
-      <ellipse
-        cx={cx}
-        cy={cy + 2 * r}
-        rx={14 * r}
-        ry={5 * r}
-        fill="#ff4d6a"
-        opacity="0.09"
-      />
-      <circle cx={6 * r} cy={7 * r} r={1.8 * r} fill="#ff4d6a" opacity="0.4" />
-      <circle cx={30 * r} cy={7 * r} r={1.8 * r} fill="#ff4d6a" opacity="0.4" />
-      <circle cx={6 * r} cy={33 * r} r={1.4 * r} fill="#ff4d6a" opacity="0.25" />
-      <circle cx={30 * r} cy={33 * r} r={1.4 * r} fill="#ff4d6a" opacity="0.25" />
-      <line x1={6 * r} y1={7 * r} x2={peakX} y2={peakY} stroke="#ff4d6a" strokeWidth={0.7 * r} opacity="0.2" />
-      <line x1={30 * r} y1={7 * r} x2={peakX} y2={peakY} stroke="#ff4d6a" strokeWidth={0.7 * r} opacity="0.2" />
-      <polyline points={pts} stroke="#ff4d6a" strokeWidth={1.8 * r} strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={peakX} cy={peakY} r={3.5 * r} fill="#ff4d6a" opacity="0.2" />
-      <circle cx={peakX} cy={peakY} r={2.2 * r} fill="#ff4d6a" />
-      <circle cx={peakX} cy={peakY} r={1 * r} fill="#1a0608" />
-    </svg>
-  );
-};
+const LogoIcon = ({ size = 40 }) => (
+  <img
+    src="/rednexo-icon.webp"
+    alt="RedNexo"
+    width={size}
+    height={size}
+    style={{ display: "block", flexShrink: 0, objectFit: "contain", filter: "drop-shadow(0 0 8px rgba(59,130,246,0.35))" }}
+  />
+);
 
 const Logo = ({ size = "md" }) => {
   const cfg = {
-    lg: { iconSize: 58, title: 28, sub: 11, gap: 16, subSpacing: "2.5px" },
-    md: { iconSize: 38, title: 17, sub: 9, gap: 10, subSpacing: "1.8px" },
-    sm: { iconSize: 28, title: 13, sub: 0, gap: 8, subSpacing: "1.5px" },
+    lg: { iconSize: 76, title: 30, sub: 11, gap: 16, subSpacing: "2.5px" },
+    md: { iconSize: 42, title: 17, sub: 9, gap: 10, subSpacing: "1.8px" },
+    sm: { iconSize: 30, title: 13, sub: 0, gap: 8, subSpacing: "1.5px" },
   }[size] || { iconSize: 38, title: 17, sub: 9, gap: 10, subSpacing: "1.8px" };
 
   return (
@@ -529,19 +496,19 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
         .rn-edge { stroke-dasharray: 6 4; animation: dash 4s linear infinite; }
         .rn-login-card { animation: fadeUp .6s ease both; }
         .rn-google-btn:hover:not(:disabled) {
-          box-shadow: 0 0 0 3px #ff4d6a30, 0 8px 32px rgba(255,77,106,.2) !important;
+          box-shadow: 0 0 0 3px #3b82f630, 0 8px 32px rgba(59,130,246,.2) !important;
           transform: translateY(-2px) !important;
         }
         .rn-google-btn:active:not(:disabled) { transform: translateY(0) !important; }
-        .rn-req-btn:hover { background: #ff4d6a22 !important; border-color: #ff4d6a60 !important; color: #ff4d6a !important; }
+        .rn-req-btn:hover { background: #3b82f622 !important; border-color: #3b82f660 !important; color: #3b82f6 !important; }
       `}</style>
 
       {/* ── Fondo: red animada de nodos ── */}
       <svg style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }} preserveAspectRatio="xMidYMid slice">
         <defs>
           <radialGradient id="rg1" cx="30%" cy="25%">
-            <stop offset="0%" stopColor="#ff4d6a" stopOpacity=".12"/>
-            <stop offset="100%" stopColor="#ff4d6a" stopOpacity="0"/>
+            <stop offset="0%" stopColor="#3b82f6" stopOpacity=".12"/>
+            <stop offset="100%" stopColor="#3b82f6" stopOpacity="0"/>
           </radialGradient>
           <radialGradient id="rg2" cx="75%" cy="70%">
             <stop offset="0%" stopColor="#a78bfa" stopOpacity=".1"/>
@@ -562,33 +529,33 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
         )))}
         {/* Red de nodos decorativa */}
         <g opacity=".35">
-          <line className="rn-edge" x1="12%" y1="18%" x2="28%" y2="8%"  stroke="#ff4d6a" strokeWidth="1.2"/>
-          <line className="rn-edge" x1="28%" y1="8%"  x2="48%" y2="22%" stroke="#ff4d6a" strokeWidth="1"/>
+          <line className="rn-edge" x1="12%" y1="18%" x2="28%" y2="8%"  stroke="#3b82f6" strokeWidth="1.2"/>
+          <line className="rn-edge" x1="28%" y1="8%"  x2="48%" y2="22%" stroke="#3b82f6" strokeWidth="1"/>
           <line className="rn-edge" x1="48%" y1="22%" x2="72%" y2="12%" stroke="#a78bfa" strokeWidth="1"/>
           <line className="rn-edge" x1="72%" y1="12%" x2="88%" y2="28%" stroke="#a78bfa" strokeWidth="1.2"/>
-          <line className="rn-edge" x1="12%" y1="18%" x2="18%" y2="48%" stroke="#ff4d6a" strokeWidth="1"/>
+          <line className="rn-edge" x1="12%" y1="18%" x2="18%" y2="48%" stroke="#3b82f6" strokeWidth="1"/>
           <line className="rn-edge" x1="18%" y1="48%" x2="8%"  y2="72%" stroke="#2dd4bf" strokeWidth="1"/>
           <line className="rn-edge" x1="88%" y1="28%" x2="92%" y2="58%" stroke="#a78bfa" strokeWidth="1"/>
           <line className="rn-edge" x1="92%" y1="58%" x2="82%" y2="82%" stroke="#2dd4bf" strokeWidth="1"/>
           <line className="rn-edge" x1="8%"  y1="72%" x2="22%" y2="88%" stroke="#2dd4bf" strokeWidth="1"/>
-          <line className="rn-edge" x1="22%" y1="88%" x2="52%" y2="82%" stroke="#ff4d6a" strokeWidth="1"/>
+          <line className="rn-edge" x1="22%" y1="88%" x2="52%" y2="82%" stroke="#3b82f6" strokeWidth="1"/>
           <line className="rn-edge" x1="52%" y1="82%" x2="82%" y2="82%" stroke="#a78bfa" strokeWidth="1"/>
-          <line className="rn-edge" x1="18%" y1="48%" x2="48%" y2="22%" stroke="#ff4d6a" strokeWidth=".8" opacity=".5"/>
+          <line className="rn-edge" x1="18%" y1="48%" x2="48%" y2="22%" stroke="#3b82f6" strokeWidth=".8" opacity=".5"/>
           <line className="rn-edge" x1="48%" y1="22%" x2="52%" y2="82%" stroke="#a78bfa" strokeWidth=".8" opacity=".4"/>
         </g>
         <g>
           {[
-            { cx:"12%", cy:"18%", r:7,  c:"#ff4d6a" },
-            { cx:"28%", cy:"8%",  r:5,  c:"#ff8a5c" },
-            { cx:"48%", cy:"22%", r:9,  c:"#ff4d6a" },
+            { cx:"12%", cy:"18%", r:7,  c:"#3b82f6" },
+            { cx:"28%", cy:"8%",  r:5,  c:"#a78bfa" },
+            { cx:"48%", cy:"22%", r:9,  c:"#3b82f6" },
             { cx:"72%", cy:"12%", r:6,  c:"#a78bfa" },
             { cx:"88%", cy:"28%", r:7,  c:"#a78bfa" },
             { cx:"18%", cy:"48%", r:5,  c:"#2dd4bf" },
             { cx:"8%",  cy:"72%", r:6,  c:"#2dd4bf" },
             { cx:"92%", cy:"58%", r:5,  c:"#a78bfa" },
             { cx:"82%", cy:"82%", r:7,  c:"#2dd4bf" },
-            { cx:"22%", cy:"88%", r:5,  c:"#ff4d6a" },
-            { cx:"52%", cy:"82%", r:8,  c:"#ff4d6a" },
+            { cx:"22%", cy:"88%", r:5,  c:"#3b82f6" },
+            { cx:"52%", cy:"82%", r:8,  c:"#3b82f6" },
           ].map((n, i) => (
             <g key={i} className="rn-node">
               <circle cx={n.cx} cy={n.cy} r={n.r+6} fill={n.c} opacity=".07"/>
@@ -645,7 +612,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
             ))}
           </div>
           <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 14 }}>
-            <SchoolLogo size={44} style={{ boxShadow: "0 0 24px rgba(255,77,106,0.25), 0 6px 20px rgba(0,0,0,0.4)" }} />
+            <SchoolLogo size={44} style={{ boxShadow: "0 0 24px rgba(59,130,246,0.25), 0 6px 20px rgba(0,0,0,0.4)" }} />
             <span style={{ fontSize: 11, color: "#555770", textTransform: "uppercase", letterSpacing: "1.5px" }}>Plataforma institucional</span>
           </div>
         </div>
@@ -654,7 +621,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
       {/* ── Divisor vertical ── */}
       <div style={{
         width: 1,
-        background: "linear-gradient(to bottom, transparent, #ff4d6a30 30%, #ff4d6a30 70%, transparent)",
+        background: "linear-gradient(to bottom, transparent, #3b82f630 30%, #3b82f630 70%, transparent)",
         alignSelf: "stretch",
         flexShrink: 0,
         position: "relative",
@@ -677,10 +644,10 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
           <div style={{
             background: "rgba(22,23,31,0.85)",
             backdropFilter: "blur(24px)",
-            border: "1px solid rgba(255,77,106,0.2)",
+            border: "1px solid rgba(59,130,246,0.2)",
             borderRadius: 20,
             padding: 36,
-            boxShadow: "0 0 80px rgba(255,77,106,.08), 0 24px 64px rgba(0,0,0,.5)",
+            boxShadow: "0 0 80px rgba(59,130,246,.08), 0 24px 64px rgba(0,0,0,.5)",
           }}>
             {/* Header del card */}
             <div style={{ marginBottom: 32 }}>
@@ -810,7 +777,7 @@ function RegistrationPage({ onSubmit, onBack }) {
 
   if (submitted)
     return (
-      <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center", maxWidth: 420 }}>
           <div style={{ width: 80, height: 80, borderRadius: 20, background: C.amber + "20", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 }}>⏳</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: C.text }}>Solicitud enviada</div>
@@ -827,7 +794,7 @@ function RegistrationPage({ onSubmit, onBack }) {
     );
 
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: 24 }}>
+    <div style={{ fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: 24 }}>
       <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 25% 25%,${C.rx}06 0%,transparent 60%),radial-gradient(ellipse at 75% 75%,${C.teal}04 0%,transparent 60%)` }} />
       <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(${C.border}40 1px,transparent 1px)`, backgroundSize: "32px 32px" }} />
       <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 420 }}>
@@ -1138,7 +1105,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
         if (!gNodes.length) return;
         const gcx = gNodes.reduce((a, n) => a + n.x, 0) / gNodes.length;
         const gcy = gNodes.reduce((a, n) => a + n.y, 0) / gNodes.length;
-        const gcColor = GC[g] || "#ff4d6a";
+        const gcColor = GC[g] || "#3b82f6";
         const aura = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, 90);
         aura.addColorStop(0, gcColor + "12");
         aura.addColorStop(1, "transparent");
@@ -1456,7 +1423,7 @@ function SocioMatrix({ students, conns }) {
           100% { top: 100%; opacity: 0; }
         }
         .nm-cell:hover { filter: brightness(1.3); }
-        .nm-row:hover .nm-rowhead { background: rgba(255,77,106,0.12) !important; }
+        .nm-row:hover .nm-rowhead { background: rgba(59,130,246,0.12) !important; }
       `}</style>
 
       {/* Filtros de grupo */}
@@ -1679,9 +1646,9 @@ function SurveyExec({ students, onComplete }) {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
         {students.map((p) => (
           <button key={p.id} onClick={() => setRespondent(p)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all .2s", fontFamily: "inherit" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = GC[p.group] || "#ff4d6a")}
+            onMouseEnter={(e) => (e.currentTarget.style.borderColor = GC[p.group] || "#3b82f6")}
             onMouseLeave={(e) => (e.currentTarget.style.borderColor = "")}>
-            <span style={{ width: 30, height: 30, borderRadius: 7, background: (GC[p.group] || "#ff4d6a") + "18", color: GC[p.group] || "#ff4d6a", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10 }}>{p.av}</span>
+            <span style={{ width: 30, height: 30, borderRadius: 7, background: (GC[p.group] || "#3b82f6") + "18", color: GC[p.group] || "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10 }}>{p.av}</span>
             <div style={{ textAlign: "left" }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.name}</div>
               <div style={{ fontSize: 10, color: C.t3 }}>{p.group}</div>
@@ -1700,7 +1667,7 @@ function SurveyExec({ students, onComplete }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 6, background: (GC[respondent.group] || "#ff4d6a") + "18", color: GC[respondent.group], display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9 }}>{respondent.av}</span>
+        <span style={{ width: 26, height: 26, borderRadius: 6, background: (GC[respondent.group] || "#3b82f6") + "18", color: GC[respondent.group], display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9 }}>{respondent.av}</span>
         <span style={{ fontSize: 12, color: C.t2 }}>Respondiendo: <b style={{ color: C.text }}>{respondent.name}</b></span>
         <Btn sm v="ghost" onClick={() => { setRespondent(null); setQIdx(0); setSel([]); }}>Cambiar</Btn>
       </div>
@@ -1714,8 +1681,8 @@ function SurveyExec({ students, onComplete }) {
         {students.filter((p) => p.id !== respondent.id).map((p) => {
           const s = sel.includes(p.id);
           return (
-            <button key={p.id} onClick={() => toggle(p.id)} style={{ background: s ? (GC[p.group] || "#ff4d6a") + "12" : C.surface, border: `1px solid ${s ? GC[p.group] || "#ff4d6a" : C.border}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C.text, transition: "all .2s", fontFamily: "inherit" }}>
-              <span style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${s ? GC[p.group] || "#ff4d6a" : C.border}`, background: s ? GC[p.group] || "#ff4d6a" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", transition: "all .2s" }}>{s && "✓"}</span>
+            <button key={p.id} onClick={() => toggle(p.id)} style={{ background: s ? (GC[p.group] || "#3b82f6") + "12" : C.surface, border: `1px solid ${s ? GC[p.group] || "#3b82f6" : C.border}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C.text, transition: "all .2s", fontFamily: "inherit" }}>
+              <span style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${s ? GC[p.group] || "#3b82f6" : C.border}`, background: s ? GC[p.group] || "#3b82f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", transition: "all .2s" }}>{s && "✓"}</span>
               {p.name}
               <span style={{ marginLeft: "auto", fontSize: 10, color: C.t3 }}>{p.group}</span>
             </button>
@@ -1980,7 +1947,7 @@ function ProgressTracker({ students }) {
         <Badge color={pct === 100 ? C.ok : C.amber}>{pct}% completado</Badge>
       </div>
       <div style={{ height: 8, borderRadius: 4, background: C.border, marginBottom: 14, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${C.rx},#ff8a5c)`, transition: "width .5s" }} />
+        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${C.rx},#a78bfa)`, transition: "width .5s" }} />
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
         {students.map((s) => {
@@ -2165,7 +2132,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
                 {(GROUPS || []).map(g => {
                   const on = (nS.groups?.length > 0 ? nS.groups : [nS.group]).includes(g);
-                  const gc = GC[g] || "#ff4d6a";
+                  const gc = GC[g] || "#3b82f6";
                   return (
                     <button key={g} onClick={() => {
                       const cur = nS.groups?.length > 0 ? nS.groups : [nS.group];
@@ -2351,8 +2318,8 @@ function ReportsPanel({ students, conns }) {
     document.body.removeChild(a); URL.revokeObjectURL(url);
   };
 
-  const sharedCSS = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f6fa;color:#1a1a2e;font-size:13px}.page{max-width:1050px;margin:0 auto;padding:28px 20px}.header{background:#1a0608;color:#fff;padding:24px 28px;border-radius:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center}.header h1{font-size:26px;font-weight:800;letter-spacing:-1px}.header h1 span{color:#ff4d6a}.header .meta{text-align:right;font-size:12px;color:#9498ae;line-height:2}.section{background:#fff;border-radius:10px;padding:20px;margin-bottom:18px;box-shadow:0 1px 8px rgba(0,0,0,.07)}.section h2{font-size:15px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:7px;color:#1a1a2e}.section .sub{font-size:11px;color:#888;margin-bottom:14px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.kpi{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 8px rgba(0,0,0,.07);text-align:center}.kpi .val{font-size:28px;font-weight:800}.kpi .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #e5e7eb;padding:6px 9px;text-align:center}th{background:#f9fafb;font-weight:700;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.3px}td:first-child{text-align:left}tr:hover td{background:#fafafa}.pos{color:#2dd4bf;font-weight:700}.neg{color:#f87171;font-weight:700}.mut{color:#34d399}.badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}.alert{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;border-left:4px solid}.alert-ok{background:#d1fae5;border-color:#10b981;color:#065f46}.alert-warn{background:#fef3c7;border-color:#f59e0b;color:#92400e}.alert-info{background:#dbeafe;border-color:#3b82f6;color:#1e40af}.footer{text-align:center;font-size:10px;color:#aaa;margin-top:24px;padding:12px;border-top:1px solid #e5e7eb}@media print{body{background:#fff}.section{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}.kpis{break-inside:avoid}}`;
-  const logoSVG = `<div style="width:44px;height:44px;background:#1a0608;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="32" height="32" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="22" rx="14" ry="5" fill="#ff4d6a" opacity="0.09"/><circle cx="6" cy="7" r="1.8" fill="#ff4d6a" opacity="0.4"/><circle cx="30" cy="7" r="1.8" fill="#ff4d6a" opacity="0.4"/><line x1="6" y1="7" x2="17" y2="7" stroke="#ff4d6a" stroke-width="0.7" opacity="0.2"/><line x1="30" y1="7" x2="17" y2="7" stroke="#ff4d6a" stroke-width="0.7" opacity="0.2"/><polyline points="4,20 9,20 12,13 15,27 17,7 19,27 22,20 32,20 36,20" stroke="#ff4d6a" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="17" cy="7" r="3.5" fill="#ff4d6a" opacity="0.2"/><circle cx="17" cy="7" r="2.2" fill="#ff4d6a"/><circle cx="17" cy="7" r="1" fill="#1a0608"/></svg></div>`;
+  const sharedCSS = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f6fa;color:#1a1a2e;font-size:13px}.page{max-width:1050px;margin:0 auto;padding:28px 20px}.header{background:#050a1a;color:#fff;padding:24px 28px;border-radius:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center}.header h1{font-size:26px;font-weight:800;letter-spacing:-1px}.header h1 span{color:#3b82f6}.header .meta{text-align:right;font-size:12px;color:#9498ae;line-height:2}.section{background:#fff;border-radius:10px;padding:20px;margin-bottom:18px;box-shadow:0 1px 8px rgba(0,0,0,.07)}.section h2{font-size:15px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:7px;color:#1a1a2e}.section .sub{font-size:11px;color:#888;margin-bottom:14px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.kpi{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 8px rgba(0,0,0,.07);text-align:center}.kpi .val{font-size:28px;font-weight:800}.kpi .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #e5e7eb;padding:6px 9px;text-align:center}th{background:#f9fafb;font-weight:700;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.3px}td:first-child{text-align:left}tr:hover td{background:#fafafa}.pos{color:#2dd4bf;font-weight:700}.neg{color:#f87171;font-weight:700}.mut{color:#34d399}.badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}.alert{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;border-left:4px solid}.alert-ok{background:#d1fae5;border-color:#10b981;color:#065f46}.alert-warn{background:#fef3c7;border-color:#f59e0b;color:#92400e}.alert-info{background:#dbeafe;border-color:#3b82f6;color:#1e40af}.footer{text-align:center;font-size:10px;color:#aaa;margin-top:24px;padding:12px;border-top:1px solid #e5e7eb}@media print{body{background:#fff}.section{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}.kpis{break-inside:avoid}}`;
+  const logoSVG = `<div style="width:44px;height:44px;background:#050a1a;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="32" height="32" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="22" rx="14" ry="5" fill="#3b82f6" opacity="0.09"/><circle cx="6" cy="7" r="1.8" fill="#3b82f6" opacity="0.4"/><circle cx="30" cy="7" r="1.8" fill="#3b82f6" opacity="0.4"/><line x1="6" y1="7" x2="17" y2="7" stroke="#3b82f6" stroke-width="0.7" opacity="0.2"/><line x1="30" y1="7" x2="17" y2="7" stroke="#3b82f6" stroke-width="0.7" opacity="0.2"/><polyline points="4,20 9,20 12,13 15,27 17,7 19,27 22,20 32,20 36,20" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="17" cy="7" r="3.5" fill="#3b82f6" opacity="0.2"/><circle cx="17" cy="7" r="2.2" fill="#3b82f6"/><circle cx="17" cy="7" r="1" fill="#050a1a"/></svg></div>`;
 
   const buildReportBody = (stList, cnList) => {
     const date = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
@@ -2366,8 +2333,8 @@ function ReportsPanel({ students, conns }) {
     const aislados = stList.filter((s) => cnList.filter((c) => String(c.f) === String(s.id) || String(c.t) === String(s.id)).length === 0);
     const densidad = stList.length > 1 ? ((totalConns / (stList.length * (stList.length - 1))) * 100).toFixed(1) : 0;
     const grupos = [...new Set(stList.map((s) => s.group))];
-    const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#ff4d6a"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${gc}20;color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
-    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#ff4d6a"; return `<tr><td><span class="badge" style="background:${gc}20;color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
+    const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${gc}20;color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
+    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${gc}20;color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
     const matrizTH = `<th style="min-width:90px">De ↓ / Para →</th>` + stList.map((s) => `<th title="${s.name}" style="min-width:32px">${s.av}</th>`).join("") + `<th class="pos">Σ+</th><th class="neg">Σ−</th>`;
     const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (c?.tp === "pos") pos++; if (c?.tp === "neg") neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
     return { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows };
@@ -2375,14 +2342,14 @@ function ReportsPanel({ students, conns }) {
 
   const exportHTML = () => {
     const { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows } = buildReportBody(filteredStudents, filteredConns);
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte RedNexo — ${grupoLabel}</title><style>${sharedCSS}</style></head><body><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:14px">${logoSVG}<div><div style="font-size:10px;color:#9498ae;letter-spacing:2px;margin-bottom:3px">INTELIGENCIA SOCIOMÉTRICA</div><h1>Red<span>Nexo</span></h1><div style="font-size:12px;color:#9498ae;margin-top:3px">Reporte ${reportType === "individual" ? "Individual" : "Grupal"} · ${grupoLabel}</div></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div><div>🔗 ${totalConns} conexiones</div><div>📋 ${grupoLabel}</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#ff4d6a">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Elecciones positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Relaciones mutuas</div></div></div><div class="section"><h2>📋 Resumen ejecutivo</h2><div class="sub">Hallazgos clave — ${grupoLabel}</div>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ <b>Líderes (${lideres.length}):</b> ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ <b>Aislados (${aislados.length}):</b> ${aislados.map((s) => s.name).join(", ")}</div>` : ""}${negConns >= 5 ? `<div class="alert alert-warn">🔴 <b>Alto nivel de rechazos:</b> ${negConns} elecciones negativas.</div>` : ""}<div class="alert alert-info">📊 <b>Densidad:</b> ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div class="sub">Métricas por participante</div><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Análisis por grupo</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. internas</th><th style="color:#a78bfa">Conn. externas</th><th>Densidad</th><th>Líder del grupo</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div class="sub">+ positiva · ⬥ mutua · − rechazo · ○ neutral</div><div style="overflow-x:auto"><table style="font-size:10px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div></body></html>`;
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte RedNexo — ${grupoLabel}</title><style>${sharedCSS}</style></head><body><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:14px">${logoSVG}<div><div style="font-size:10px;color:#9498ae;letter-spacing:2px;margin-bottom:3px">INTELIGENCIA SOCIOMÉTRICA</div><h1>Red<span>Nexo</span></h1><div style="font-size:12px;color:#9498ae;margin-top:3px">Reporte ${reportType === "individual" ? "Individual" : "Grupal"} · ${grupoLabel}</div></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div><div>🔗 ${totalConns} conexiones</div><div>📋 ${grupoLabel}</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#3b82f6">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Elecciones positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Relaciones mutuas</div></div></div><div class="section"><h2>📋 Resumen ejecutivo</h2><div class="sub">Hallazgos clave — ${grupoLabel}</div>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ <b>Líderes (${lideres.length}):</b> ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ <b>Aislados (${aislados.length}):</b> ${aislados.map((s) => s.name).join(", ")}</div>` : ""}${negConns >= 5 ? `<div class="alert alert-warn">🔴 <b>Alto nivel de rechazos:</b> ${negConns} elecciones negativas.</div>` : ""}<div class="alert alert-info">📊 <b>Densidad:</b> ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div class="sub">Métricas por participante</div><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Análisis por grupo</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. internas</th><th style="color:#a78bfa">Conn. externas</th><th>Densidad</th><th>Líder del grupo</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div class="sub">+ positiva · ⬥ mutua · − rechazo · ○ neutral</div><div style="overflow-x:auto"><table style="font-size:10px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div></body></html>`;
     dl(html, `reporte_rednexo_${grupoLabel.replace(/ /g, "_")}.html`, "text/html;charset=utf-8;");
   };
 
   const exportPDF = () => {
     const { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows } = buildReportBody(filteredStudents, filteredConns);
     const win = window.open("", "_blank", "width=900,height=700");
-    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte PDF — ${grupoLabel}</title><style>${sharedCSS}@page{size:A4;margin:15mm 12mm}body{background:#fff;font-size:11px}.no-print{display:none}@media print{.no-print{display:none}}</style></head><body><div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#1a0608;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;z-index:999;font-family:'Segoe UI',Arial,sans-serif;font-size:13px"><span style="flex:1">RedNexo · Reporte ${grupoLabel}</span><button onclick="window.print()" style="background:#ff4d6a;color:#fff;border:none;padding:7px 18px;border-radius:7px;font-weight:700;cursor:pointer">🖨 Imprimir / PDF</button><button onclick="window.close()" style="background:transparent;color:#9498ae;border:1px solid #555;padding:7px 14px;border-radius:7px;cursor:pointer">Cerrar</button></div><div style="height:44px" class="no-print"></div><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:12px">${logoSVG}<div><h1>Red<span>Nexo</span></h1></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#ff4d6a">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Mutuas</div></div></div><div class="section"><h2>📋 Resumen</h2>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ Líderes: ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ Aislados: ${aislados.map((s) => s.name).join(", ")}</div>` : ""}<div class="alert alert-info">📊 Densidad: ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Grupos</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. int.</th><th style="color:#a78bfa">Conn. ext.</th><th>Densidad</th><th>Líder</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div style="overflow-x:auto"><table style="font-size:9px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div><script>setTimeout(()=>window.print(),600)</script></body></html>`);
+    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte PDF — ${grupoLabel}</title><style>${sharedCSS}@page{size:A4;margin:15mm 12mm}body{background:#fff;font-size:11px}.no-print{display:none}@media print{.no-print{display:none}}</style></head><body><div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#050a1a;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;z-index:999;font-family:'Segoe UI',Arial,sans-serif;font-size:13px"><span style="flex:1">RedNexo · Reporte ${grupoLabel}</span><button onclick="window.print()" style="background:#3b82f6;color:#fff;border:none;padding:7px 18px;border-radius:7px;font-weight:700;cursor:pointer">🖨 Imprimir / PDF</button><button onclick="window.close()" style="background:transparent;color:#9498ae;border:1px solid #555;padding:7px 14px;border-radius:7px;cursor:pointer">Cerrar</button></div><div style="height:44px" class="no-print"></div><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:12px">${logoSVG}<div><h1>Red<span>Nexo</span></h1></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#3b82f6">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Mutuas</div></div></div><div class="section"><h2>📋 Resumen</h2>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ Líderes: ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ Aislados: ${aislados.map((s) => s.name).join(", ")}</div>` : ""}<div class="alert alert-info">📊 Densidad: ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Grupos</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. int.</th><th style="color:#a78bfa">Conn. ext.</th><th>Densidad</th><th>Líder</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div style="overflow-x:auto"><table style="font-size:9px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div><script>setTimeout(()=>window.print(),600)</script></body></html>`);
     win.document.close();
   };
 
@@ -2432,7 +2399,7 @@ function ReportsPanel({ students, conns }) {
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Grupo a analizar</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#ff4d6a" : GC[g] || "#ff4d6a"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? gc + "80" : C.border}`, background: on ? gc + "18" : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "🌐 Todos" : g}</button>); })}
+              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#3b82f6" : GC[g] || "#3b82f6"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? gc + "80" : C.border}`, background: on ? gc + "18" : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "🌐 Todos" : g}</button>); })}
             </div>
           </div>
           <div>
@@ -2629,7 +2596,7 @@ function PublicSurvey({ surveyId }) {
 
   const bg = (
     <div style={{ position: "fixed", inset: 0, background: "#07070f", zIndex: 0 }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 25% 20%, #ff4d6a0a, transparent 55%), radial-gradient(ellipse at 75% 80%, #a78bfa08, transparent 55%)" }} />
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 25% 20%, #3b82f60a, transparent 55%), radial-gradient(ellipse at 75% 80%, #a78bfa08, transparent 55%)" }} />
       <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
     </div>
   );
@@ -2642,7 +2609,7 @@ function PublicSurvey({ surveyId }) {
         <Logo size="md" />
       </div>
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, color: "#9498ae", fontSize: 13 }}>
-        <div style={{ width: 16, height: 16, border: "2px solid #252637", borderTopColor: "#ff4d6a", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+        <div style={{ width: 16, height: 16, border: "2px solid #252637", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
         Cargando encuesta...
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box}`}</style>
@@ -2698,13 +2665,13 @@ function PublicSurvey({ surveyId }) {
         <div style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto" }}>
 
           {/* Header con logos */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, padding: "12px 16px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(255,77,106,0.15)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, padding: "12px 16px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(59,130,246,0.15)" }}>
             <SchoolLogo size={48} />
             <Logo size="md" />
           </div>
 
           {/* Info de la encuesta */}
-          <div style={{ background: "rgba(22,23,31,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,77,106,0.2)", borderRadius: 14, padding: 20, marginBottom: 14 }}>
+          <div style={{ background: "rgba(22,23,31,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: 20, marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: "#eaedf6" }}>{survey?.title}</div>
             <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#9498ae" }}>
               <span>📋 {survey?.questions?.length} preguntas</span>
@@ -2722,7 +2689,7 @@ function PublicSurvey({ surveyId }) {
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {allAvailGroups.map(g => {
                   const on = selectedGroups.includes(g);
-                  const gc = GC[g] || "#ff4d6a";
+                  const gc = GC[g] || "#3b82f6";
                   return (
                     <button key={g} onClick={() => toggleGroup(g)} style={{
                       padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700,
@@ -2742,7 +2709,7 @@ function PublicSurvey({ surveyId }) {
           <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "#9498ae" }}>¿Quién eres tú?</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {filtered.map(s => {
-              const gc = GC[s.group] || "#ff4d6a";
+              const gc = GC[s.group] || "#3b82f6";
               return (
                 <button key={s.id} onClick={() => selectRespondent(s)} style={{
                   background: "rgba(22,23,31,0.85)", border: "1px solid rgba(255,255,255,0.08)",
@@ -2782,7 +2749,7 @@ function PublicSurvey({ surveyId }) {
         <div style={{ position: "relative", zIndex: 1, maxWidth: 560, margin: "0 auto" }}>
 
           {/* Header mini con logos */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "8px 14px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, border: "1px solid rgba(255,77,106,0.12)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "8px 14px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, border: "1px solid rgba(59,130,246,0.12)" }}>
             <SchoolLogo size={34} />
             <Logo size="sm" />
           </div>
@@ -2790,18 +2757,18 @@ function PublicSurvey({ surveyId }) {
           {/* Barra de progreso */}
           <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
             {survey.questions.map((_, i) => (
-              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < qIdx ? "#34d399" : i === qIdx ? "#ff4d6a" : "rgba(255,255,255,0.1)", transition: "all .4s", boxShadow: i === qIdx ? "0 0 8px #ff4d6a60" : undefined }} />
+              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < qIdx ? "#34d399" : i === qIdx ? "#3b82f6" : "rgba(255,255,255,0.1)", transition: "all .4s", boxShadow: i === qIdx ? "0 0 8px #3b82f660" : undefined }} />
             ))}
           </div>
           <div style={{ fontSize: 11, color: "#eaedf6", marginBottom: 16, textAlign: "center", fontWeight: 600 }}>
-            <span style={{ color: "#ff4d6a" }}>Pregunta {qIdx + 1}</span>
+            <span style={{ color: "#3b82f6" }}>Pregunta {qIdx + 1}</span>
             <span style={{ color: "#555770" }}> de {survey.questions.length}</span>
           </div>
 
           {/* Card de pregunta */}
           <div style={{ background: "rgba(22,23,31,0.9)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 20, marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
-              <div style={{ width: 28, height: 28, borderRadius: 7, background: (GC[respondent.group] || "#ff4d6a") + "20", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: GC[respondent.group] || "#ff4d6a" }}>{respondent.av}</div>
+              <div style={{ width: 28, height: 28, borderRadius: 7, background: (GC[respondent.group] || "#3b82f6") + "20", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: GC[respondent.group] || "#3b82f6" }}>{respondent.av}</div>
               <span style={{ fontSize: 12, color: "#9498ae" }}>{respondent.name}</span>
               <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: "#555770", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
             </div>
@@ -2810,7 +2777,7 @@ function PublicSurvey({ surveyId }) {
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
                 const on = sel.includes(s.id);
-                const gc = GC[s.group] || "#ff4d6a";
+                const gc = GC[s.group] || "#3b82f6";
                 return (
                   <button key={s.id} onClick={() => toggleSel(q.id, s.id)} style={{
                     background: on ? gc + "12" : "rgba(18,19,26,0.8)", border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.08)"}`,
@@ -2839,12 +2806,12 @@ function PublicSurvey({ surveyId }) {
             )}
             {!isLast ? (
               <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: "#ff4d6a", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
                 Siguiente →
               </button>
             ) : (
               <button onClick={submitSurvey} disabled={saving}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving ? "#333" : "#ff4d6a", color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
                 {saving ? "Guardando..." : "✅ Enviar respuestas"}
               </button>
             )}
@@ -3035,11 +3002,11 @@ export default function App() {
       <header style={{ padding: "12px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14, background: `${C.bg}ee`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
         <Logo size="md" />
         <div style={{ width: 1, height: 36, background: `linear-gradient(to bottom, transparent, ${C.rx}50, transparent)`, flexShrink: 0 }} />
-        <SchoolLogo size={44} style={{ boxShadow: `0 0 16px rgba(255,77,106,0.2)` }} />
+        <SchoolLogo size={44} style={{ boxShadow: `0 0 16px rgba(59,130,246,0.2)` }} />
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 9, padding: 3, border: `1px solid ${C.border}`, overflowX: "auto" }}>
           {tabs.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "5px 12px", borderRadius: 7, border: "none", fontFamily: "inherit", background: tab === t.id ? `linear-gradient(135deg,${C.rx},#ff8a5c)` : "transparent", color: tab === t.id ? "#fff" : C.t2, fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, transition: "all .2s", whiteSpace: "nowrap" }}>
+            <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "5px 12px", borderRadius: 7, border: "none", fontFamily: "inherit", background: tab === t.id ? `linear-gradient(135deg,${C.rx},#a78bfa)` : "transparent", color: tab === t.id ? "#fff" : C.t2, fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, transition: "all .2s", whiteSpace: "nowrap" }}>
               <span style={{ fontSize: 11 }}>{t.icon}</span>{t.label}
             </button>
           ))}
@@ -3169,7 +3136,7 @@ export default function App() {
                   {sp ? (
                     <>
                       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
-                        <div style={{ width: 42, height: 42, borderRadius: 10, background: (GC[sp.group] || "#ff4d6a") + "18", border: `2px solid ${GC[sp.group]}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: GC[sp.group] }}>{sp.av}</div>
+                        <div style={{ width: 42, height: 42, borderRadius: 10, background: (GC[sp.group] || "#3b82f6") + "18", border: `2px solid ${GC[sp.group]}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: GC[sp.group] }}>{sp.av}</div>
                         <div><div style={{ fontSize: 14, fontWeight: 700 }}>{sp.name}</div><div style={{ fontSize: 11, color: GC[sp.group] }}>{sp.group}</div></div>
                       </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
