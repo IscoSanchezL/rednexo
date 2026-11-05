@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -1037,7 +1037,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
 
       const N = nodesRef.current;
       const dragging = dragRef.current;
-      const fC = conns.filter((c) => filter === "all" || c.tp === filter);
+      const fC = filterConns(conns, filter);
 
       // ── Física: spring hacia target + repulsión entre nodos
       N.forEach((n) => {
@@ -1125,7 +1125,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
         const t = N.find(n => n.id === cn.t);
         if (!f || !t) return;
         const hl = !selNode || selNode === f.id || selNode === t.id;
-        const col = cn.tp === "pos" ? cc("teal") : cn.tp === "neg" ? cc("err") : cc("t3");
+        const col = cn.tp === "pos" ? cc("teal") : cn.tp === "neg" ? cc("err") : cc("amber");
         const cpx = (f.x + t.x) / 2 + (t.y - f.y) * 0.22;
         const cpy = (f.y + t.y) / 2 - (t.x - f.x) * 0.22;
 
@@ -1509,8 +1509,8 @@ function SocioMatrix({ students, conns }) {
                     const mutual = conn && rev;
                     const isHov  = hovRow === from.id || hovCol === to.id;
                     const isSel  = selCell && selCell.f === from.id && selCell.t === to.id;
-                    if (conn?.tp === "pos") pos++;
-                    if (conn?.tp === "neg") neg++;
+                    if (hasType(conn, "pos")) pos++;
+                    if (hasType(conn, "neg")) neg++;
 
                     const col    = conn ? (conn.tp === "pos" ? (mutual ? C.ok : C.teal) : conn.tp === "neg" ? C.err : C.amber) : null;
                     const bgCell = isSel ? tint(col, "59") : isHov && conn ? tint(col, "40") : conn ? tint(col, "26") : isHov ? tint(C.t3, "14") : "transparent";
@@ -1524,7 +1524,7 @@ function SocioMatrix({ students, conns }) {
                         onClick={() => setSelCell(isSel ? null : conn ? { f: from.id, t: to.id, conn, mutual, from, to } : null)}
                         onMouseEnter={() => { setHovRow(from.id); setHovCol(to.id); }}
                         onMouseLeave={() => { setHovRow(null); setHovCol(null); }}
-                        title={conn ? `${from.name} → ${to.name}: ${conn.tp}${mutual ? " (mutuo)" : ""}` : "Sin conexión"}
+                        title={conn ? `${from.name} → ${to.name}: ${(conn.types || [conn.tp]).map((t) => TIPO_INFO[t].l.toLowerCase()).join(" + ")}${mutual ? " (mutuo)" : ""}` : "Sin conexión"}
                         style={{ padding: 0, width: cellSize, height: cellSize, background: bgCell, border: `1px solid ${isSel ? tint(col, "cc") : isHov && conn ? tint(col, "80") : C.border}`, textAlign: "center", cursor: conn ? "pointer" : "default", transition: "background .12s, border-color .12s", position: "relative", overflow: "hidden" }}>
 
                         {/* Pulso neural CSS — no usa canvas */}
@@ -1547,6 +1547,11 @@ function SocioMatrix({ students, conns }) {
                           <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${tint(col, "20")}, transparent)`, pointerEvents: "none" }} />
                         )}
 
+                        {conn && conn.types && conn.types.length > 1 && (
+                          <div style={{ position: "absolute", left: 0, right: 0, bottom: 2, display: "flex", justifyContent: "center", gap: 2, pointerEvents: "none" }}>
+                            {conn.types.map((t) => <span key={t} style={{ width: 5, height: 5, borderRadius: "50%", background: t === "pos" ? C.teal : t === "neg" ? C.err : C.amber }} />)}
+                          </div>
+                        )}
                         {conn && (
                           <span style={{ fontSize: mutual ? 14 : 12, color: ink(col), fontWeight: mutual ? 800 : 600, position: "relative", zIndex: 1, textShadow: isHov ? `0 0 8px ${col}` : "none", transition: "text-shadow .15s" }}>
                             {sym}
@@ -1565,8 +1570,8 @@ function SocioMatrix({ students, conns }) {
             <tr>
               <td style={{ padding: "6px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, fontWeight: 800, fontSize: 10, color: C.t2, position: "sticky", left: 0, zIndex: 3, letterSpacing: ".6px" }}>RECIBIDAS</td>
               {fs.map(to => {
-                const rec  = conns.filter(c => c.t === to.id && c.tp === "pos").length;
-                const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && c.tp === "pos").length), 1);
+                const rec  = conns.filter(c => c.t === to.id && hasType(c, "pos")).length;
+                const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && hasType(c, "pos")).length), 1);
                 const pct  = rec / maxR;
                 const gc   = GC[to.group] || C.teal;
                 return (
@@ -1593,7 +1598,7 @@ function SocioMatrix({ students, conns }) {
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{selCell.from.name} → {selCell.to.name}</div>
             <div style={{ fontSize: 11, color: selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber }}>
-              {selCell.conn.tp === "pos" ? "✓ Elección positiva" : selCell.conn.tp === "neg" ? "✗ Rechazo" : "○ Neutral"}
+              {(selCell.conn.types || [selCell.conn.tp]).map((t) => (t === "pos" ? "✓ Elección positiva" : t === "neg" ? "✗ Rechazo" : "○ Neutral")).join("  ·  ")}
               {selCell.mutual && <span style={{ color: C.ok, marginLeft: 8 }}>⬥ Mutua</span>}
             </div>
           </div>
@@ -2380,8 +2385,8 @@ function ReportsPanel({ students, conns }) {
     const t = stList.length - 1 || 1;
     const hechas = cnList.filter((c) => String(c.f) === String(s.id)).length;
     const recibidas = cnList.filter((c) => String(c.t) === String(s.id)).length;
-    const posR = cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length;
-    const negR = cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "neg").length;
+    const posR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length;
+    const negR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "neg")).length;
     const mutuas = cnList.filter((c) => String(c.f) === String(s.id) && cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(s.id))).length;
     return { hechas, recibidas, posR, negR, mutuas, popularidad: ((posR / t) * 100).toFixed(1), rechazo: ((negR / t) * 100).toFixed(1), expansion: ((hechas / t) * 100).toFixed(1), rol: posR >= 3 ? "⭐ Líder" : negR >= 2 ? "⚠️ Rechazado" : recibidas === 0 && hechas === 0 ? "🔴 Aislado" : mutuas >= 2 ? "🔗 Integrado" : "Regular" };
   };
@@ -2403,17 +2408,17 @@ function ReportsPanel({ students, conns }) {
     const grupoLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
     const t = stList.length - 1 || 1;
     const totalConns = cnList.length;
-    const posConns = cnList.filter((c) => c.tp === "pos").length;
-    const negConns = cnList.filter((c) => c.tp === "neg").length;
+    const posConns = cnList.filter((c) => hasType(c, "pos")).length;
+    const negConns = cnList.filter((c) => hasType(c, "neg")).length;
     const mutuasTotal = Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2);
-    const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length >= 3);
+    const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length >= 3);
     const aislados = stList.filter((s) => cnList.filter((c) => String(c.f) === String(s.id) || String(c.t) === String(s.id)).length === 0);
     const densidad = density(totalConns, stList.length);
     const grupos = [...new Set(stList.map((s) => s.group))];
     const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
-    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
+    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
     const matrizTH = `<th style="min-width:90px">De ↓ / Para →</th>` + stList.map((s) => `<th title="${s.name}" style="min-width:32px">${s.av}</th>`).join("") + `<th class="pos">Σ+</th><th class="neg">Σ−</th>`;
-    const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (c?.tp === "pos") pos++; if (c?.tp === "neg") neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
+    const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (hasType(c, "pos")) pos++; if (hasType(c, "neg")) neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
     return { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows };
   };
 
@@ -2443,7 +2448,7 @@ function ReportsPanel({ students, conns }) {
           <Btn sm v="ghost" onClick={() => setActive(null)}>✕ Cerrar</Btn>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
-          {[{ l: "Participantes", v: stList.length, c: C.rx }, { l: "Elec. positivas", v: cnList.filter((c) => c.tp === "pos").length, c: C.teal }, { l: "Rechazos", v: cnList.filter((c) => c.tp === "neg").length, c: C.err }, { l: "Mutuas", v: Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2), c: C.ok }].map((k) => (
+          {[{ l: "Participantes", v: stList.length, c: C.rx }, { l: "Elec. positivas", v: cnList.filter((c) => hasType(c, "pos")).length, c: C.teal }, { l: "Rechazos", v: cnList.filter((c) => hasType(c, "neg")).length, c: C.err }, { l: "Mutuas", v: Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2), c: C.ok }].map((k) => (
             <div key={k.l} style={{ background: C.bgSub, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: k.c }}>{k.v}</div>
               <div style={{ fontSize: 9, color: C.t3, textTransform: "uppercase", letterSpacing: ".4px", marginTop: 2 }}>{k.l}</div>
@@ -3471,7 +3476,7 @@ export default function App() {
                   </div>
                   <div style={{ display: "flex", gap: 2 }}>
                     {filters.map((f) => (
-                      <button key={f.id} onClick={() => setFilter(f.id)} style={{ padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${filter === f.id ? tint(f.c, "40") : C.border}`, background: filter === f.id ? tint(f.c, "12") : "transparent", color: filter === f.id ? f.c : C.t3, transition: "all .2s" }}>{f.l}</button>
+                      <button key={f.id} title={`${f.id === "all" ? visConns.length : visConns.filter((c) => hasType(c, f.id)).length} conexiones`} onClick={() => setFilter(f.id)} style={{ padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${filter === f.id ? tint(f.c, "40") : C.border}`, background: filter === f.id ? tint(f.c, "12") : "transparent", color: filter === f.id ? f.c : C.t3, transition: "all .2s" }}>{f.l} <span style={{ opacity: 0.7, fontWeight: 500 }}>{f.id === "all" ? visConns.length : visConns.filter((c) => hasType(c, f.id)).length}</span></button>
                     ))}
                   </div>
                 </div>
@@ -3481,6 +3486,13 @@ export default function App() {
                     students={visStudents}
                     conns={visConns}
                   />
+                  {filter !== "all" && visConns.filter((c) => hasType(c, filter)).length === 0 && (
+                    <div style={{ position: "absolute", top: 16, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+                      <span style={{ display: "inline-block", padding: "6px 12px", borderRadius: 8, fontSize: 12, color: C.t2, background: tint(C.bg, "dd"), border: `1px solid ${C.border}` }}>
+                        No hay conexiones {filters.find((f) => f.id === filter).l.toLowerCase()} en los grupos visibles
+                      </span>
+                    </div>
+                  )}
                   <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 8, background: `${tint(C.bg, "dd")}`, padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}` }}>
                     {Object.entries(GC).map(([n, c]) => (
                       <button key={n} onClick={() => toggleGroup(n)} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: visibleGroups.includes(n) ? C.text : C.t3, cursor: "pointer", background: "transparent", border: "none", fontFamily: "inherit", opacity: visibleGroups.includes(n) ? 1 : 0.45, transition: "all .2s" }}>
