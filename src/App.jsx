@@ -3,6 +3,7 @@ import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
+import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc } from "firebase/firestore";
 
@@ -111,6 +112,16 @@ const ccol = (name) => collection(db, "colegios", CID, name);
 const cdoc = (name, id) => doc(db, "colegios", CID, name, id);
 // Lo que la encuesta pública necesita (lista de nombres y marca del colegio) viaja dentro de la encuesta activa.
 const publicSurveyInfo = (sv, students) => ({ ...buildRoster(sv, students), colegioNombre: SCHOOL.nombre || "", ...(SCHOOL.logo ? { logo: SCHOOL.logo } : {}) });
+
+/** Descarga un archivo de texto desde el navegador. */
+function downloadFile(name, text, mime) {
+  const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+const blankSurvey = () => ({ title: "", group: GROUPS?.[0] || "", groups: [], maxSel: 3, anon: true, questions: [] });
+const TIPO_INFO = { pos: { l: "Positiva", s: "+", c: () => C.teal }, neu: { l: "Neutral", s: "○", c: () => C.amber }, neg: { l: "Negativa", s: "−", c: () => C.err } };
 
 // ── Operaciones de plataforma: bitácora, exportar y eliminar un colegio ──
 async function logAudit(accion, colegio, por, detalle = {}) {
@@ -2022,7 +2033,9 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const [msg, setMsg] = useState("");
   const [editing, setEditing] = useState(null), [creating, setCreating] = useState(false), [showTrash, setShowTrash] = useState(false);
   const [responses, setResponses] = useState([]);
-  const [nS, setNS] = useState({ title: "", group: GROUPS?.[0] || "5° A", groups: [], maxSel: 3, anon: true, questions: [] });
+  const [nS, setNS] = useState(blankSurvey);
+  const [importPreview, setImportPreview] = useState(null);
+  const fileInputRef = useRef(null);
   const [nQ, setNQ] = useState({ text: "", tp: "pos" });
 
   useEffect(() => {
@@ -2039,22 +2052,62 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
   const addQ = () => { if (!nQ.text.trim()) return; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...nQ }] })); setNQ({ text: "", tp: "pos" }); };
 
-  const save = async () => {
-    if (!nS.title.trim() || !nS.questions.length) return;
+  const flash = (m, ms = 4500) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
+
+  // Crea una encuesta en borrador (formulario, plantilla o archivo importado).
+  const addSurvey = async (data) => {
     const id = "sv_" + Date.now();
-    const forFirestore = { ...nS, id, status: "draft", createdAt: serverTimestamp() };
-    const forLocal = { ...nS, id, status: "draft", createdAt: new Date().toISOString() };
+    // Las respuestas se guardan por identificador de pregunta: toda pregunta nueva debe tener uno propio.
+    const questions = (data.questions || []).map((q, i) => ({ ...q, id: q.id || `q_${Date.now()}_${i}` }));
     try {
-      await setDoc(cdoc("surveys", id), forFirestore);
-      setMsg("✅ Encuesta guardada en Firebase");
+      await setDoc(cdoc("surveys", id), { ...data, questions, id, status: "draft", createdAt: serverTimestamp() });
+      return id;
     } catch (e) {
       console.error("Error guardando encuesta:", e);
-      setSurveys((s) => [...s, forLocal]);
-      setMsg("❌ Error al guardar: " + e.message);
+      flash("❌ No se pudo guardar la encuesta: " + e.message);
+      return null;
     }
+  };
+
+  const save = async () => {
+    if (!nS.title.trim() || !nS.questions.length) return;
+    const id = await addSurvey(nS);
+    if (id) flash("✅ Encuesta guardada como borrador. Actívala cuando quieras aplicarla.");
     setCreating(false);
-    setNS({ title: "", group: GROUPS?.[0] || "5° A", maxSel: 3, anon: true, questions: [] });
-    setTimeout(() => setMsg(""), 4000);
+    setNS(blankSurvey());
+  };
+
+  const openCreate = () => {
+    if ((GROUPS || []).length === 0) { flash("⚠ Primero crea un grupo en la pestaña Grupos: la encuesta se aplica a uno o más grupos."); return; }
+    setNS(blankSurvey()); setCreating(true);
+  };
+
+  const useTemplate = async () => {
+    if ((GROUPS || []).length === 0) { flash("⚠ Primero crea un grupo y agrega estudiantes en la pestaña Grupos; la encuesta de prueba se aplica a tus grupos."); return; }
+    const id = await addSurvey(buildTemplateSurvey(GROUPS));
+    if (id) flash("✅ Encuesta de prueba creada en borrador, con preguntas positivas, neutrales y negativas. Pulsa «Borrador» para activarla y «Aplicar» para abrirla.", 7000);
+  };
+
+  const onPickFile = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    if (f.size > 200000) { setImportPreview({ fileName: f.name, result: { ok: false, errors: ["El archivo es demasiado grande (máximo 200 KB)."], warnings: [], survey: null } }); return; }
+    let text = ""; try { text = await f.text(); } catch (err) { text = ""; }
+    const result = parseSurveyImport(text, f.name);
+    setImportPreview({ fileName: f.name, result, title: result.survey?.title || "" });
+  };
+
+  const confirmImport = async () => {
+    const r = importPreview?.result; if (!r?.ok) return;
+    const groups = (GROUPS || []).slice();
+    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, anon: r.survey.anon, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) });
+    if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
+    setImportPreview(null);
+  };
+
+  const exportSurvey = (sv, kind) => {
+    if (kind === "json") downloadFile(surveyFileName(sv, "json"), JSON.stringify(exportSurveyJSON(sv), null, 2), "application/json");
+    else downloadFile(surveyFileName(sv, "csv"), surveyToCSV(sv), "text/csv;charset=utf-8");
   };
 
   const deleteSurvey = async (id) => {
@@ -2168,11 +2221,52 @@ function SurveyBuilder({ role, students, GROUPS }) {
               </span>
             )}
           </Btn>
-          <Btn v="pri" onClick={() => setCreating(true)}>+ Nueva Encuesta</Btn>
+          <Btn v="ghost" onClick={useTemplate}>📋 Encuesta de prueba</Btn>
+          <Btn v="ghost" onClick={() => fileInputRef.current?.click()}>⬆ Importar</Btn>
+          <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,application/json,text/csv" onChange={onPickFile} style={{ display: "none" }} data-testid="import-file" />
+          <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
         </div>}
       </div>
       {msg && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✅") ? C.ok + "15" : C.amber + "15", color: msg.startsWith("✅") ? C.ok : C.amber, fontSize: 12 }}>{msg}</div>}
       {loadingS && <div style={{ textAlign: "center", padding: 30, color: C.t3 }}>Cargando encuestas...</div>}
+
+      {/* ── Vista previa de la importación ── */}
+      {importPreview && (() => {
+        const r = importPreview.result;
+        return (
+          <Card style={{ marginBottom: 14, border: `1px solid ${r.ok ? C.teal : C.err}50` }}>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: r.ok ? C.teal : C.err }}>{r.ok ? "⬆ Vista previa de la importación" : "❌ No se pudo importar el archivo"}</div>
+            <div style={{ fontSize: 11, color: C.t3, marginBottom: 10 }}>{importPreview.fileName}</div>
+            {r.errors.length > 0 && (
+              <div style={{ marginBottom: 10 }}>
+                {r.errors.slice(0, 8).map((e, i) => <div key={i} style={{ fontSize: 12, color: C.err, marginBottom: 3 }}>• {e}</div>)}
+                {r.errors.length > 8 && <div style={{ fontSize: 11, color: C.t3 }}>… y {r.errors.length - 8} más.</div>}
+                <div style={{ fontSize: 11, color: C.t2, marginTop: 6 }}>Corrige el archivo y vuelve a subirlo. No se creó nada.</div>
+              </div>
+            )}
+            {r.ok && (
+              <>
+                <Inp label="Título de la encuesta" value={importPreview.title} onChange={(v) => setImportPreview((p) => ({ ...p, title: v }))} />
+                <div style={{ display: "flex", flexDirection: "column", gap: 4, margin: "10px 0" }}>
+                  {r.survey.questions.map((q, i) => (
+                    <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "5px 8px", borderRadius: 7, background: C.surface, border: `1px solid ${C.border}` }}>
+                      <span style={{ minWidth: 20, color: C.t3 }}>{i + 1}.</span>
+                      <span style={{ flex: 1 }}>{q.text}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: TIPO_INFO[q.tp].c() }}>{TIPO_INFO[q.tp].s} {TIPO_INFO[q.tp].l}</span>
+                    </div>
+                  ))}
+                </div>
+                {r.warnings.map((w, i) => <div key={i} style={{ fontSize: 11, color: C.amber }}>⚠ {w}</div>)}
+                <div style={{ fontSize: 11, color: C.t2, margin: "6px 0 10px" }}>Se creará en borrador para {(GROUPS || []).length > 0 ? `todos tus grupos (${GROUPS.join(", ")})` : "…(primero crea un grupo)"}. Podrás cambiar los grupos al editarla.</div>
+              </>
+            )}
+            <div style={{ display: "flex", gap: 8 }}>
+              {r.ok && <Btn v="pri" onClick={confirmImport} disabled={(GROUPS || []).length === 0}>✓ Crear encuesta</Btn>}
+              <Btn v="ghost" onClick={() => setImportPreview(null)}>{r.ok ? "Cancelar" : "Cerrar"}</Btn>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* ── Papelera ── */}
       {showTrash && (
@@ -2204,7 +2298,13 @@ function SurveyBuilder({ role, students, GROUPS }) {
               ? "Primero crea tus grupos y agrega estudiantes en la pestaña Grupos; después podrás crear y aplicar encuestas."
               : canEdit ? "Crea una encuesta, actívala y comparte su enlace con los estudiantes. Aquí verás quién ya respondió." : "Cuando el psicólogo cree una encuesta, aparecerá aquí."}
           </div>
-          {canEdit && students.length > 0 && <Btn v="pri" onClick={() => setCreating(true)}>+ Nueva Encuesta</Btn>}
+          {canEdit && students.length > 0 && (
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
+              <Btn v="ghost" onClick={useTemplate}>📋 Crear encuesta de prueba</Btn>
+              <Btn v="ghost" onClick={() => fileInputRef.current?.click()}>⬆ Importar desde archivo</Btn>
+            </div>
+          )}
         </Card>
       )}
       <SurveyProgress surveys={surveys} students={students} responses={responses} />
@@ -2220,13 +2320,15 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
-                <span>📋 {sv.questions.length} preguntas</span>
+                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()})</span>
                 <span>👥 {sv.group}</span>
                 <span>🎯 Máx: {sv.maxSel}</span>
                 <span>{sv.anon ? "🔒 Anónima" : "👤 Identificada"}</span>
               </div>
             </div>
-            <div style={{ display: "flex", gap: 6 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
+              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "json")} title="Descargar la encuesta como JSON (para importarla en otro colegio)">⬇ JSON</Btn>
+              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)">⬇ CSV</Btn>
               <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); }}>▶ Aplicar</Btn>
               <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
