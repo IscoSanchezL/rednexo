@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster } from "./lib/sociometry";
 import {
   collection,
   doc,
@@ -1724,7 +1725,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   const addStudent = async () => {
     if (!newName.trim()) return;
     const id = Date.now() + Math.random();
-    const av = newName.trim().split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
+    const av = initials(newName);
     const s = { id, name: newName.trim(), group: addingTo, av };
     setStudents((prev) => [...prev, s]);
     await saveStudentFS(s);
@@ -1732,13 +1733,8 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   };
 
   const addBulk = async () => {
-    const lines = bulkText.split("\n").map((l) => l.trim()).filter(Boolean);
-    if (!lines.length) return;
-    const newStudents = lines.map((name, i) => {
-      const id = Date.now() + i + Math.random();
-      const av = name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2);
-      return { id, name, group: addingTo, av };
-    });
+    if (!bulkText.split("\n").some((l) => l.trim())) return;
+    const newStudents = parseBulkStudents(bulkText, addingTo);
     setStudents((s) => [...s, ...newStudents]);
     await Promise.all(newStudents.map((s) => saveStudentFS(s)));
     setBulkText("");
@@ -2090,14 +2086,6 @@ function EmptyState({ canEdit, onGo }) {
 
 // ════════ SURVEY BUILDER ════════
 
-// Lista mínima (id, nombre, grupo, iniciales) que la encuesta pública necesita para elegir el nombre.
-// Se guarda dentro de la encuesta activa para que quien responde NUNCA lea la colección de estudiantes.
-function buildRoster(sv, students) {
-  const gs = sv.groups?.length > 0 ? sv.groups : sv.group ? [sv.group] : null;
-  const list = students.filter((s) => !gs || gs.includes(s.group)).map((s) => ({ id: String(s.id), name: s.name, group: s.group, av: s.av || "" }));
-  return { roster: list, rosterIds: list.map((s) => s.id) };
-}
-
 function SurveyBuilder({ role, students, GROUPS }) {
   const canEdit = role !== "readonly";
   const [surveys, setSurveys] = useState([]);
@@ -2378,7 +2366,7 @@ function ReportsPanel({ students, conns }) {
     const mutuasTotal = Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2);
     const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length >= 3);
     const aislados = stList.filter((s) => cnList.filter((c) => String(c.f) === String(s.id) || String(c.t) === String(s.id)).length === 0);
-    const densidad = stList.length > 1 ? ((totalConns / (stList.length * (stList.length - 1))) * 100).toFixed(1) : 0;
+    const densidad = density(totalConns, stList.length);
     const grupos = [...new Set(stList.map((s) => s.group))];
     const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${gc}20;color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
     const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${gc}20;color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
@@ -2930,23 +2918,7 @@ export default function App() {
     if (!user) return;
     const unsub = onSnapshot(collection(db, "responses"), (snap) => {
       if (snap.empty) { setConns(IS_DEMO ? initConns : []); return; }
-      const acc = {};
-      snap.docs.forEach((d) => {
-        const r = d.data();
-        const sv = surveys.find((s) => s.id === r.surveyId);
-        if (!r.answers) return;
-        Object.entries(r.answers).forEach(([qId, selected]) => {
-          const q = sv?.questions?.find((x) => String(x.id) === String(qId));
-          const tp = q?.tp || "pos";
-          (selected || []).forEach((toId) => {
-            const key = `${r.respondentId}_${toId}`;
-            if (!acc[key]) acc[key] = { f: r.respondentId, t: toId, tpCounts: { pos: 0, neg: 0, neu: 0 }, count: 0 };
-            acc[key].tpCounts[tp] = (acc[key].tpCounts[tp] || 0) + 1;
-            acc[key].count++;
-          });
-        });
-      });
-      const built = Object.values(acc).map((c) => { const tp = Object.entries(c.tpCounts).sort((a, b) => b[1] - a[1])[0][0]; return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp }; });
+      const built = buildConnections(snap.docs.map((d) => d.data()), surveys);
       setConns(built.length > 0 || !IS_DEMO ? built : initConns);
     }, () => setConns(IS_DEMO ? initConns : []));
     return () => unsub();
@@ -3109,8 +3081,7 @@ export default function App() {
           const visStudents = students.filter(s => visibleGroups.includes(s.group));
           const visConns = conns.filter(c => visStudents.some(s => s.id === c.f) && visStudents.some(s => s.id === c.t));
           const n = visStudents.length;
-          const posibles = n > 1 ? n * (n - 1) : 1;
-          const densidad = ((visConns.length / posibles) * 100).toFixed(1);
+          const densidad = density(visConns.length, n);
 
           // KPIs del nodo seleccionado
           const elecciones = pC.filter(c => c.f === selNode).length;
