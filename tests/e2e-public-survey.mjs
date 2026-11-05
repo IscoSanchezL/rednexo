@@ -8,8 +8,11 @@ import { doc, setDoc, getDoc } from "firebase/firestore";
 import { spawn } from "node:child_process";
 
 const env = await initializeTestEnvironment({ projectId: "rednexo-fd35c", firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8080 } });
+await env.clearFirestore();
 await env.withSecurityRulesDisabled(async (c) => {
   const db = c.firestore();
+  await setDoc(doc(db, "colegios/colegio-a"), { nombre: "Colegio A" });
+  await setDoc(doc(db, "colegios/colegio-b"), { nombre: "Colegio B" });
   await setDoc(doc(db, "colegios/colegio-a/surveys/sv1"), { id: "sv1", status: "active", title: "Encuesta A", maxSel: 2, anon: true,
     questions: [{ id: "q1", text: "¿Con quién trabajarías?", tp: "pos" }], rosterIds: ["1", "2", "3"], colegioNombre: "Colegio A",
     roster: [{ id: "1", name: "Ana Uno", group: "5A", av: "AU" }, { id: "2", name: "Beto Dos", group: "5A", av: "BD" }, { id: "3", name: "Cami Tres", group: "5A", av: "CT" }] });

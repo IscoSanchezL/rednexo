@@ -3,7 +3,8 @@ import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { initials, parseBulkStudents, density, buildConnections, buildRoster } from "./lib/sociometry";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField } from "firebase/firestore";
+import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc } from "firebase/firestore";
 
 // ═══════════════════════════════════════
 // REDNEXO — Inteligencia Sociométrica
@@ -103,11 +104,48 @@ if (typeof document !== "undefined" && !document.getElementById("rn-theme-vars")
 // ── Colegio activo: todos los datos viven en colegios/{id}/... (ver firestore.rules) ──
 let CID = null;
 let SCHOOL = { nombre: "", logo: "" };
+let SESSION_EMAIL = "";
+const ROOT_EMAIL = "franksanlo@gmail.com";   // debe coincidir con isRoot() en firestore.rules (la validación real es la de las reglas)
 const setCurrentColegio = (id) => { CID = id; };
 const ccol = (name) => collection(db, "colegios", CID, name);
 const cdoc = (name, id) => doc(db, "colegios", CID, name, id);
 // Lo que la encuesta pública necesita (lista de nombres y marca del colegio) viaja dentro de la encuesta activa.
 const publicSurveyInfo = (sv, students) => ({ ...buildRoster(sv, students), colegioNombre: SCHOOL.nombre || "", ...(SCHOOL.logo ? { logo: SCHOOL.logo } : {}) });
+
+// ── Operaciones de plataforma: bitácora, exportar y eliminar un colegio ──
+async function logAudit(accion, colegio, por, detalle = {}) {
+  try { await addDoc(collection(db, "auditoria"), { accion, colegio, por, en: serverTimestamp(), ...detalle }); } catch (e) { console.log("auditoría no registrada", e); }
+}
+
+/** Descarga un .json con TODO lo del colegio. Devuelve los conteos para que la persona verifique. */
+async function exportColegio(colegio, por) {
+  const cols = {};
+  for (const name of COLEGIO_SUBCOLLECTIONS) {
+    try { cols[name] = (await getDocs(collection(db, "colegios", colegio.id, name))).docs.map((d) => ({ id: d.id, ...d.data() })); } catch (e) { cols[name] = []; }
+  }
+  const pack = buildExport(colegio, cols);
+  const blob = new Blob([JSON.stringify(pack, null, 2)], { type: "application/json" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = exportFileName(colegio.id); document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  await logAudit("exportar", colegio.id, por, { conteos: pack.conteos });
+  return pack.conteos;
+}
+
+/** Borra todas las subcolecciones y por último el colegio. Irreversible: la interfaz exige confirmación escrita. */
+async function eliminarColegio(id, por, onProgress = () => {}) {
+  let n = 0;
+  for (const name of COLEGIO_SUBCOLLECTIONS) {
+    const snap = await getDocs(collection(db, "colegios", id, name));
+    for (const part of chunk(snap.docs, 400)) {
+      const b = writeBatch(db); part.forEach((d) => b.delete(d.ref)); await b.commit();
+      n += part.length; onProgress(n);
+    }
+  }
+  await deleteDoc(doc(db, "colegios", id));
+  await logAudit("eliminar", id, por, { documentos: n });
+  return n;
+}
 
 const ROLES = {
   admin: { label: "Administrador", color: C.rx, icon: "🏫", desc: "Gestiona su colegio" },
@@ -2484,6 +2522,8 @@ function SettingsPanel() {
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [exporting, setExporting] = useState(false);
+  const [exportMsg, setExportMsg] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(cdoc("settings", "global"), (snap) => { if (snap.exists()) { setCfg((prev) => ({ ...prev, ...snap.data() })); } setLoading(false); }, (err) => { console.log("Settings offline:", err); setLoading(false); });
@@ -2551,6 +2591,12 @@ function SettingsPanel() {
           </div>
         </Card>
       </div>
+      <Card style={{ marginTop: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Datos del colegio</div>
+        <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Descarga una copia completa de los datos de este colegio (estudiantes, grupos, encuestas, respuestas, usuarios y ajustes) en un archivo JSON. Guárdala en un lugar seguro: contiene datos de menores.</div>
+        <Btn v="sec" disabled={exporting} onClick={async () => { setExporting(true); setExportMsg(""); try { const c = await exportColegio({ id: CID, nombre: cfg.colegio }, SESSION_EMAIL); setExportMsg(`✅ Descargado: ${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas.`); } catch (e) { setExportMsg("❌ No se pudo exportar: " + e.message); } setExporting(false); }}>{exporting ? "Exportando..." : "⬇ Exportar datos del colegio"}</Btn>
+        {exportMsg && <div style={{ fontSize: 11, marginTop: 8, color: C.t2 }}>{exportMsg}</div>}
+      </Card>
       {dirty && (<div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}><Btn v="pri" onClick={save}>💾 Guardar todos los cambios</Btn></div>)}
     </div>
   );
@@ -2897,30 +2943,59 @@ function PublicSurvey({ surveyId, colegioId }) {
 
 // ════════ SELECTOR DE COLEGIO ════════
 
-function SchoolPicker({ session, colegios, onPick, onCreate, onMigrate, onLogout, busy, msg }) {
+function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
   const [nombre, setNombre] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
+  const [deleting, setDeleting] = useState(null);
+  const [typed, setTyped] = useState("");
+  const [exported, setExported] = useState(false);
+  const [newSuper, setNewSuper] = useState("");
   const isSuper = session.isSuper;
   const hasLegacy = colegios.some((c) => c.id === LEGACY_COLEGIO_ID);
+  const suspended = (c) => c.estado === "suspendido";
   return (
-    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 560 }}>
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", display: "flex", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: "100%", maxWidth: 620, margin: "auto 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <Logo size="md" />
           <Btn sm v="ghost" onClick={onLogout}>Salir</Btn>
         </div>
         <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Elige tu colegio</div>
-        <div style={{ fontSize: 12, color: C.t2, marginBottom: 16 }}>{session.email}</div>
+        <div style={{ fontSize: 12, color: C.t2, marginBottom: 16 }}>{session.email}{isSuper ? " · Superadmin" : ""}</div>
         {msg && <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: C.surface, border: `1px solid ${C.border}` }}>{msg}</div>}
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
           {colegios.length === 0 && <div style={{ fontSize: 13, color: C.t2 }}>{isSuper ? "Todavía no hay colegios. Crea el primero o importa los datos existentes." : "Tu correo no pertenece a ningún colegio activo."}</div>}
-          {colegios.map((c) => (
-            <button key={c.id} onClick={() => onPick(c.id)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "inherit" }}>
-              <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id}</div>
-              <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
-            </button>
-          ))}
+          {colegios.map((c) => {
+            const blocked = suspended(c) && !isSuper;
+            return (
+              <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${suspended(c) ? C.amber + "80" : C.border}`, background: C.surface, overflow: "hidden" }}>
+                <button disabled={blocked} onClick={() => onPick(c.id)} style={{ width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: "transparent", color: C.text, cursor: blocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: blocked ? 0.6 : 1 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id} {suspended(c) && <span style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>· {etiquetaEstado(c.estado).toUpperCase()}</span>}</div>
+                  <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
+                  {blocked && <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>Acceso suspendido. Comunícate con el administrador de la plataforma.</div>}
+                </button>
+                {isSuper && (
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 14px 12px" }}>
+                    <Btn sm v="ghost" disabled={busy} onClick={() => onExport(c)}>⬇ Exportar</Btn>
+                    <Btn sm v="ghost" disabled={busy} onClick={() => onSuspend(c)}>{suspended(c) ? "▶ Reactivar" : "⏸ Suspender"}</Btn>
+                    <Btn sm v="dan" disabled={busy} onClick={() => { setDeleting(deleting === c.id ? null : c.id); setTyped(""); setExported(false); }}>🗑 Eliminar</Btn>
+                  </div>
+                )}
+                {isSuper && deleting === c.id && (
+                  <div style={{ padding: "10px 14px 14px", borderTop: `1px solid ${C.border}`, background: C.err + "10" }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: C.err, marginBottom: 6 }}>Eliminar «{c.nombre || c.id}» para siempre</div>
+                    <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>Borra estudiantes, grupos, encuestas, respuestas, usuarios y ajustes de este colegio. No se puede deshacer. Si el colegio terminó su contrato, entrégale antes su exportación.</div>
+                    <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: C.t2, marginBottom: 8 }}>
+                      <input type="checkbox" checked={exported} onChange={(e) => setExported(e.target.checked)} /> Ya descargué la exportación de este colegio
+                    </label>
+                    <Inp label={`Escribe «${c.id}» para confirmar`} value={typed} onChange={setTyped} placeholder={c.id} />
+                    <Btn v="dan" disabled={busy || !exported || !confirmaEliminar(c.id, typed)} onClick={async () => { const ok = await onDelete(c); if (ok) { setDeleting(null); setTyped(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 10 }}>{busy ? "Eliminando..." : "Eliminar definitivamente"}</Btn>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
         {isSuper && (
           <>
@@ -2932,6 +3007,25 @@ function SchoolPicker({ session, colegios, onPick, onCreate, onMigrate, onLogout
                 <Inp label="Correo del administrador del colegio (opcional)" value={adminEmail} onChange={setAdminEmail} placeholder="admin@colegio.edu.co" />
               </div>
               <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase() }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
+            </Card>
+            <Card style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👑 Superadmins de la plataforma</div>
+              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Cuentas de la empresa con acceso a todos los colegios. Usa correos corporativos con verificación en dos pasos activada en Google. {session.isRoot ? "Solo la cuenta raíz puede agregarlas o desactivarlas." : "Solo la cuenta raíz puede modificar esta lista."}</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
+                <div style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}><span>{ROOT_EMAIL}</span><span style={{ color: C.t3, fontSize: 11 }}>raíz</span></div>
+                {supers.map((u) => (
+                  <div key={u.email} style={{ fontSize: 12, display: "flex", justifyContent: "space-between", alignItems: "center", opacity: u.activo ? 1 : 0.5 }}>
+                    <span>{u.email}</span>
+                    {session.isRoot ? <Btn sm v="ghost" onClick={() => onToggleSuper(u)}>{u.activo ? "Desactivar" : "Activar"}</Btn> : <span style={{ color: C.t3, fontSize: 11 }}>{u.activo ? "activo" : "inactivo"}</span>}
+                  </div>
+                ))}
+              </div>
+              {session.isRoot && (
+                <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
+                  <div style={{ flex: 1 }}><Inp label="Agregar superadmin" value={newSuper} onChange={setNewSuper} placeholder="nombre@iskonex.co" /></div>
+                  <Btn v="sec" disabled={busy || !newSuper.includes("@")} onClick={async () => { if (await onAddSuper(newSuper.trim().toLowerCase())) setNewSuper(""); }}>Agregar</Btn>
+                </div>
+              )}
             </Card>
             <Card style={{ marginTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Importar datos existentes</div>
@@ -2967,6 +3061,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [colegios, setColegios] = useState([]);
   const [colegioId, setColegioId] = useState(null);
+  const [supers, setSupers] = useState([]);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [pickerMsg, setPickerMsg] = useState("");
   const [school, setSchool] = useState({ nombre: "", logo: "", loaded: false });
@@ -3034,7 +3129,7 @@ export default function App() {
       const nombre = d.colegio || current?.nombre || "";
       SCHOOL = { nombre, logo: d.logo || "" };
       setSchool({ nombre, logo: d.logo || "", loaded: true });
-    }, () => setSchool((p) => ({ ...p, loaded: true })));
+    }, (err) => setSchool((p) => ({ ...p, loaded: true, blocked: err?.code === "permission-denied" })));
     return () => unsub();
   }, [user]);
 
@@ -3057,7 +3152,6 @@ export default function App() {
   const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); } catch (e) {} };
   const deleteGroupFS = async (id) => { try { await deleteDoc(cdoc("groups", id)); } catch (e) {} };
 
-  const ADMIN_EMAIL = "franksanlo@gmail.com";
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -3067,25 +3161,30 @@ export default function App() {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
       if (!fbUser) { setSession(null); setColegios([]); setColegioId(null); setAuthLoading(false); return; }
       const email = fbUser.email.toLowerCase().trim();
-      const isSuper = email === ADMIN_EMAIL.toLowerCase();
+      const isRoot = email === ROOT_EMAIL;
+      let isSuper = isRoot;
+      if (!isSuper) { try { const sd = await getDoc(doc(db, "superadmins", email)); isSuper = sd.exists() && sd.data().activo === true; } catch (e) {} }
       const deny = async (msg) => { await logout(); setLoginError(msg); setSession(null); setColegios([]); setColegioId(null); };
       try {
         let list;
         if (isSuper) {
           const snap = await getDocs(collection(db, "colegios"));
-          list = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id }));
+          list = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo" }));
+          try { setSupers((await getDocs(collection(db, "superadmins"))).docs.map((d) => ({ email: d.id, activo: d.data().activo === true }))); } catch (e) {}
         } else {
           const snap = await getDocs(query(collectionGroup(db, "miembros"), where("email", "==", email)));
           const mine = snap.docs.map((d) => ({ id: d.ref.parent.parent.id, ...d.data() }));
           const act = mine.filter((m) => m.status === "active" && ["admin", "psychologist", "readonly"].includes(m.role));
           if (mine.length > 0 && act.length === 0) { await deny(mine.some((m) => m.status === "pending") ? "Tu cuenta está pendiente de aprobación." : "Tu acceso fue revocado."); setAuthLoading(false); return; }
-          list = await Promise.all(act.map(async (m) => { let nombre = m.id; try { const c = await getDoc(doc(db, "colegios", m.id)); if (c.exists()) nombre = c.data().nombre || m.id; } catch (e) {} return { id: m.id, nombre, role: m.role }; }));
+          list = await Promise.all(act.map(async (m) => { let nombre = m.id, estado = "activo"; try { const c = await getDoc(doc(db, "colegios", m.id)); if (c.exists()) { nombre = c.data().nombre || m.id; estado = c.data().estado || "activo"; } } catch (e) {} return { id: m.id, nombre, estado, role: m.role }; }));
           if (list.length === 0) { await deny("Tu correo no está autorizado en ningún colegio. Solicita acceso al administrador."); setAuthLoading(false); return; }
         }
         setColegios(list);
-        setSession({ email, isSuper, name: fbUser.displayName || email, photo: fbUser.photoURL });
+        SESSION_EMAIL = email;
+        setSession({ email, isSuper, isRoot, name: fbUser.displayName || email, photo: fbUser.photoURL });
         let last = null; try { last = localStorage.getItem("rn_colegio"); } catch (e) {}
-        const pick = list.length === 1 ? list[0].id : (list.find((c) => c.id === last)?.id || null);
+        const usable = list.filter((c) => isSuper || c.estado !== "suspendido");
+        const pick = list.length === 1 && usable.length === 1 ? list[0].id : (usable.find((c) => c.id === last)?.id || null);
         setColegioId(pick);
       } catch (e) { await deny("No se pudo verificar tu acceso. Intenta de nuevo."); }
       setAuthLoading(false);
@@ -3093,12 +3192,57 @@ export default function App() {
     return () => unsub();
   }, []);
 
-  const chooseColegio = (id) => { try { if (id) localStorage.setItem("rn_colegio", id); } catch (e) {} setColegioId(id); };
+  const chooseColegio = (id) => {
+    try { if (id) localStorage.setItem("rn_colegio", id); } catch (e) {}
+    // Cuando alguien de la plataforma entra a un colegio del que no es miembro, queda registrado (acceso de soporte).
+    if (id && session?.isSuper && !(colegios.find((c) => c.id === id)?.role)) logAudit("acceso_soporte", id, session.email);
+    setColegioId(id);
+  };
   const doLogout = () => { logout(); setSession(null); setColegios([]); setColegioId(null); };
 
   const reloadColegios = async () => {
     const snap = await getDocs(collection(db, "colegios"));
-    setColegios(snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id })));
+    setColegios(snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo" })));
+  };
+  const reloadSupers = async () => { try { setSupers((await getDocs(collection(db, "superadmins"))).docs.map((d) => ({ email: d.id, activo: d.data().activo === true }))); } catch (e) {} };
+
+  const suspendColegio = async (c) => {
+    const suspender = c.estado !== "suspendido";
+    if (!window.confirm(suspender ? `¿Suspender «${c.nombre}»? Sus usuarios y su encuesta pública dejarán de funcionar. Los datos se conservan.` : `¿Reactivar «${c.nombre}»?`)) return;
+    setPickerBusy(true); setPickerMsg("");
+    try {
+      await updateDoc(doc(db, "colegios", c.id), { estado: suspender ? "suspendido" : "activo", estadoCambiado: serverTimestamp(), estadoPor: session.email });
+      await logAudit(suspender ? "suspender" : "reactivar", c.id, session.email);
+      await reloadColegios();
+      setPickerMsg(suspender ? `⏸ «${c.nombre}» suspendido.` : `▶ «${c.nombre}» reactivado.`);
+    } catch (e) { setPickerMsg("❌ No se pudo cambiar el estado: " + e.message); }
+    setPickerBusy(false);
+  };
+  const exportFromPicker = async (c) => {
+    setPickerBusy(true); setPickerMsg("Exportando...");
+    try { const n = await exportColegio(c, session.email); setPickerMsg(`✅ Exportación descargada: ${n.students} estudiantes, ${n.groups} grupos, ${n.surveys} encuestas, ${n.responses} respuestas, ${n.miembros} usuarios.`); }
+    catch (e) { setPickerMsg("❌ No se pudo exportar: " + e.message); }
+    setPickerBusy(false);
+  };
+  const deleteFromPicker = async (c) => {
+    setPickerBusy(true); setPickerMsg("Eliminando...");
+    try {
+      const n = await eliminarColegio(c.id, session.email, (k) => setPickerMsg(`Eliminando... ${k} documentos`));
+      try { if (localStorage.getItem("rn_colegio") === c.id) localStorage.removeItem("rn_colegio"); } catch (e) {}
+      await reloadColegios(); setPickerMsg(`🗑 «${c.nombre}» eliminado (${n} documentos). Queda constancia en la bitácora.`);
+      setPickerBusy(false); return true;
+    } catch (e) { setPickerMsg("❌ La eliminación se detuvo: " + e.message + ". Es seguro repetirla."); setPickerBusy(false); return false; }
+  };
+  const addSuper = async (email) => {
+    setPickerBusy(true); setPickerMsg("");
+    try { await setDoc(doc(db, "superadmins", email), { email, activo: true, creadoPor: session.email, creadoEn: serverTimestamp() }); await logAudit("superadmin_agregar", "-", session.email, { objetivo: email }); await reloadSupers(); setPickerMsg(`✅ ${email} ahora es superadmin.`); setPickerBusy(false); return true; }
+    catch (e) { setPickerMsg("❌ No se pudo agregar: " + e.message); setPickerBusy(false); return false; }
+  };
+  const toggleSuper = async (u) => {
+    setPickerBusy(true); setPickerMsg("");
+    try { await updateDoc(doc(db, "superadmins", u.email), { activo: !u.activo }); await logAudit(u.activo ? "superadmin_desactivar" : "superadmin_activar", "-", session.email, { objetivo: u.email }); await reloadSupers(); }
+    catch (e) { setPickerMsg("❌ No se pudo cambiar: " + e.message); }
+    setPickerBusy(false);
   };
 
   const createColegio = async ({ nombre, ciudad, adminEmail }) => {
@@ -3112,6 +3256,7 @@ export default function App() {
       batch.set(doc(db, "colegios", id, "settings", "global"), { colegio: nombre, ciudad, periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
       if (adminEmail.includes("@")) batch.set(doc(db, "colegios", id, "miembros", adminEmail), { email: adminEmail, role: "admin", status: "active", createdAt: serverTimestamp() });
       await batch.commit();
+      await logAudit("crear", id, session.email);
       await reloadColegios();
       setPickerMsg(`✅ Colegio «${nombre}» creado.`);
       setPickerBusy(false); return true;
@@ -3163,7 +3308,18 @@ export default function App() {
   // ── Encuesta pública — no requiere login ──
   if (publicSurvey) return <PublicSurvey surveyId={publicSurvey.surveyId} colegioId={publicSurvey.colegioId} />;
 
-  if (session && !user) return <SchoolPicker session={session} colegios={colegios} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} busy={pickerBusy} msg={pickerMsg} />;
+  if (user && school.blocked && !session.isSuper) return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
+      <div style={{ maxWidth: 420, textAlign: "center" }}>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>⏸</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Acceso suspendido</div>
+        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 18 }}>El acceso de este colegio está suspendido o ya no tienes permisos. Tus datos se conservan. Comunícate con el administrador de la plataforma.</div>
+        <Btn v="sec" onClick={doLogout}>Salir</Btn>
+      </div>
+    </div>
+  );
+
+  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
     if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);

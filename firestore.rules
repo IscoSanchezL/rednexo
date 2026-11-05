@@ -12,9 +12,16 @@ service cloud.firestore {
     function myEmail() {
       return request.auth.token.email.lower();
     }
-    // Único superadmin. Para cambiarlo hay que editar y desplegar este archivo.
+    // Superadmin RAÍZ (dueño de la plataforma). Para cambiarlo hay que editar y desplegar este archivo.
+    // Es la salida de emergencia: nadie puede quitarle el acceso desde la aplicación.
+    function isRoot() {
+      return signedIn() && myEmail() in ['franksanlo@gmail.com'];
+    }
+    // Superadmin = raíz, o una cuenta activa en superadmins/{correo} (solo la raíz las administra).
     function isSuper() {
-      return signedIn() && myEmail() == 'franksanlo@gmail.com';
+      return isRoot() || (signedIn()
+        && exists(/databases/$(database)/documents/superadmins/$(myEmail()))
+        && get(/databases/$(database)/documents/superadmins/$(myEmail())).data.get('activo', false) == true);
     }
     function userPath() {
       return /databases/$(database)/documents/users/$(myEmail());
@@ -73,9 +80,14 @@ service cloud.firestore {
     function memberRole(cid) {
       return get(memberPath(cid)).data.role;
     }
-    function cRead(cid)  { return isSuper() || isMember(cid); }
-    function cWrite(cid) { return isSuper() || (isMember(cid) && memberRole(cid) in ['admin', 'psychologist']); }
-    function cAdmin(cid) { return isSuper() || (isMember(cid) && memberRole(cid) == 'admin'); }
+    // Un colegio suspendido (estado != 'activo') queda bloqueado para sus miembros y para su encuesta pública;
+    // sus datos se conservan y solo el superadmin puede entrar.
+    function colegioActivo(cid) {
+      return get(/databases/$(database)/documents/colegios/$(cid)).data.get('estado', 'activo') == 'activo';
+    }
+    function cRead(cid)  { return isSuper() || (isMember(cid) && colegioActivo(cid)); }
+    function cWrite(cid) { return isSuper() || (isMember(cid) && colegioActivo(cid) && memberRole(cid) in ['admin', 'psychologist']); }
+    function cAdmin(cid) { return isSuper() || (isMember(cid) && colegioActivo(cid) && memberRole(cid) == 'admin'); }
 
     function cSurveyPath(cid, id) {
       return /databases/$(database)/documents/colegios/$(cid)/surveys/$(id);
@@ -86,6 +98,7 @@ service cloud.firestore {
         && d.keys().hasAll(['surveyId', 'respondentId', 'respondentName', 'answers', 'submittedAt'])
         && d.surveyId is string
         && exists(cSurveyPath(cid, d.surveyId))
+        && colegioActivo(cid)
         && isOpenSurvey(get(cSurveyPath(cid, d.surveyId)).data)
         && rid == d.surveyId + '_' + string(d.respondentId)
         && string(d.respondentId) in get(cSurveyPath(cid, d.surveyId)).data.get('rosterIds', [])
@@ -98,13 +111,15 @@ service cloud.firestore {
       return d.keys().hasOnly(['surveyId', 'respondentId'])
         && d.surveyId is string
         && exists(cSurveyPath(cid, d.surveyId))
+        && colegioActivo(cid)
         && isOpenSurvey(get(cSurveyPath(cid, d.surveyId)).data)
         && rid == d.surveyId + '_' + string(d.respondentId)
         && string(d.respondentId) in get(cSurveyPath(cid, d.surveyId)).data.get('rosterIds', []);
     }
 
     match /colegios/{cid} {
-      allow get: if cRead(cid);
+      // Un miembro puede leer su colegio aunque esté suspendido (para ver el aviso); sus datos no.
+      allow get: if isSuper() || isMember(cid);
       allow list: if isSuper();
       allow create, update, delete: if isSuper();
 
@@ -130,7 +145,7 @@ service cloud.firestore {
         allow delete: if cWrite(cid);
       }
       match /surveys/{id} {
-        allow get: if isOpenSurvey(resource.data) || cRead(cid);
+        allow get: if (isOpenSurvey(resource.data) && colegioActivo(cid)) || cRead(cid);
         allow list: if cRead(cid);
         allow create, update, delete: if cWrite(cid);
       }
@@ -155,9 +170,29 @@ service cloud.firestore {
       }
       match /settings/{id} {
         allow read: if cRead(cid);
-        allow write: if cAdmin(cid)
+        allow create, update: if cAdmin(cid)
           && request.resource.data.get('logo', '').size() <= 300000;
+        allow delete: if cAdmin(cid);
       }
+    }
+
+    // Superadmins adicionales (cuentas de la empresa). Cada quien puede ver si es superadmin; solo la raíz los administra.
+    match /superadmins/{email} {
+      allow get: if isSuper() || (signedIn() && email == myEmail());
+      allow list: if isSuper();
+      allow create, update: if isRoot() && request.resource.data.email == email && request.resource.data.activo is bool;
+      allow delete: if isRoot();
+    }
+
+    // Bitácora de acciones sensibles (suspender, exportar, eliminar, acceso de soporte). No se edita ni se borra.
+    match /auditoria/{id} {
+      allow read: if isSuper();
+      allow create: if signedIn()
+        && request.resource.data.por == myEmail()
+        && request.resource.data.accion is string
+        && request.resource.data.colegio is string
+        && (isSuper() || cAdmin(request.resource.data.colegio));
+      allow update, delete: if false;
     }
 
     // Consulta "¿en qué colegios estoy?": cada persona solo ve SUS propias membresías.

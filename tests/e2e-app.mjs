@@ -9,6 +9,7 @@ import { spawn } from "node:child_process";
 
 const env = await initializeTestEnvironment({ projectId: "rednexo-fd35c", firestore: { rules: readFileSync("firestore.rules", "utf8"), host: "127.0.0.1", port: 8080 } });
 // Datos "de producción" anteriores al modelo multi-colegio: colecciones globales.
+await env.clearFirestore();
 await env.withSecurityRulesDisabled(async (c) => {
   const db = c.firestore();
   await setDoc(doc(db, "settings/global"), { colegio: "Colegio Real", ciudad: "Bogotá" });
