@@ -35,7 +35,7 @@ const surveys = [{ id: "s1", questions: [{ id: "q1", tp: "pos" }, { id: "q2", tp
 test("conexiones: una elección = una conexión del tipo de su pregunta", () => {
   const c = buildConnections([{ surveyId: "s1", respondentId: "1", answers: { q1: ["2", "3"], q2: ["4"] } }], surveys);
   assert.equal(c.length, 3);
-  assert.deepEqual(c.find((x) => x.t === "2"), { f: "1", t: "2", s: 1, tp: "pos" });
+  assert.deepEqual(c.find((x) => x.t === "2"), { f: "1", t: "2", s: 1, tp: "pos", types: ["pos"], counts: { pos: 1, neu: 0, neg: 0 } });
   assert.equal(c.find((x) => x.t === "4").tp, "neg");
 });
 test("conexiones: la misma elección repetida suma fuerza hasta 3 y el tipo dominante gana", () => {
@@ -140,4 +140,40 @@ test("avance de encuesta: sin respuestas es 0 % y sin estudiantes no divide por 
   assert.deepEqual(surveyProgress({ id: "s", group: "5A" }, [{ id: "1", name: "Ana", group: "5A" }], []).pct, 0);
   const vacio = surveyProgress({ id: "s", group: "5A" }, [], [{ surveyId: "s", respondentId: "1" }]);
   assert.deepEqual([vacio.total, vacio.completed, vacio.pending, vacio.pct], [0, 0, 0, 0]);
+});
+
+import { hasType, strengthOf, filterConns } from "../src/lib/sociometry.js";
+test("una pareja con respuestas de varios tipos conserva TODOS los tipos (no solo el dominante)", () => {
+  // Caso real: 3 estudiantes que eligen a los dos compañeros en las preguntas positiva, neutral y negativa.
+  const sv = [{ id: "s", questions: [{ id: "qp", tp: "pos" }, { id: "qn", tp: "neu" }, { id: "qg", tp: "neg" }] }];
+  const resp = ["1", "2", "3"].map((id) => ({ surveyId: "s", respondentId: id, answers: { qp: ["1", "2", "3"].filter((x) => x !== id), qn: ["1", "2", "3"].filter((x) => x !== id), qg: ["1", "2", "3"].filter((x) => x !== id) } }));
+  const c = buildConnections(resp, sv);
+  assert.equal(c.length, 6);                                              // 3·2 parejas dirigidas: densidad 100 %
+  assert.ok(c.every((x) => x.tp === "pos"));                               // empate → «positiva» domina
+  assert.ok(c.every((x) => JSON.stringify(x.types) === '["pos","neu","neg"]'));
+  assert.equal(filterConns(c, "neu").length, 6);                           // antes: 0 (las neutrales desaparecían)
+  assert.equal(filterConns(c, "neg").length, 6);
+  assert.equal(filterConns(c, "all").length, 6);
+});
+test("filtrar dibuja la conexión como del tipo pedido y con la fuerza de ese tipo", () => {
+  const sv = [{ id: "s", questions: [{ id: "a", tp: "pos" }, { id: "b", tp: "pos" }, { id: "c", tp: "pos" }, { id: "d", tp: "neu" }] }];
+  const c = buildConnections([{ surveyId: "s", respondentId: "1", answers: { a: ["2"], b: ["2"], c: ["2"], d: ["2"] } }], sv);
+  assert.deepEqual([c[0].tp, c[0].s, c[0].counts], ["pos", 3, { pos: 3, neu: 1, neg: 0 }]);
+  const n = filterConns(c, "neu")[0];
+  assert.deepEqual([n.tp, n.s], ["neu", 1]);                              // la neutral es 1 elección, no 3
+  assert.equal(strengthOf(c[0], "pos"), 3);
+  assert.equal(strengthOf(c[0], "all"), 3);
+});
+test("hasType y filtros funcionan también con conexiones antiguas sin `types`", () => {
+  const vieja = { f: "1", t: "2", s: 2, tp: "neg" };
+  assert.deepEqual([hasType(vieja, "neg"), hasType(vieja, "pos"), hasType(null, "pos")], [true, false, false]);
+  assert.deepEqual(filterConns([vieja], "neg").map((x) => x.tp), ["neg"]);
+  assert.deepEqual(filterConns([vieja], "neu"), []);
+  assert.equal(strengthOf(vieja, "neg"), 2);
+});
+test("pareja que solo tiene un tipo: el filtro de otro tipo no la muestra", () => {
+  const sv = [{ id: "s", questions: [{ id: "a", tp: "pos" }] }];
+  const c = buildConnections([{ surveyId: "s", respondentId: "1", answers: { a: ["2"] } }], sv);
+  assert.deepEqual(c[0].types, ["pos"]);
+  assert.deepEqual(filterConns(c, "neu"), []);
 });

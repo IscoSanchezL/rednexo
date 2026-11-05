@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns } from "./lib/sociometry";
+import { tint, mixOn, ink } from "./lib/color";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
@@ -239,10 +240,10 @@ const Btn = ({
     def: { bg: C.card, c: C.t2, bd: C.border },
     pri: { bg: C.rx, c: C.white, bd: "transparent" },
     ghost: { bg: "transparent", c: C.t2, bd: "transparent" },
-    dan: { bg: C.err + "15", c: C.err, bd: C.err + "30" },
-    sec: { bg: C.violet + "15", c: C.violet, bd: C.violet + "30" },
-    ok: { bg: C.ok + "15", c: C.ok, bd: C.ok + "30" },
-    teal: { bg: C.teal + "15", c: C.teal, bd: C.teal + "30" },
+    dan: { bg: tint(C.err, "15"), c: C.err, bd: tint(C.err, "30") },
+    sec: { bg: tint(C.violet, "15"), c: C.violet, bd: tint(C.violet, "30") },
+    ok: { bg: tint(C.ok, "15"), c: C.ok, bd: tint(C.ok, "30") },
+    teal: { bg: tint(C.teal, "15"), c: C.teal, bd: tint(C.teal, "30") },
   };
   const s = vars[v];
   return (
@@ -285,7 +286,7 @@ const Card = ({ children, style, glow }) => {
         borderRadius: 14,
         padding: 20,
         transition: "all .2s",
-        boxShadow: h && glow ? `0 0 30px ${glow}10` : "none",
+        boxShadow: h && glow ? `0 0 30px ${tint(glow, "10")}` : "none",
         ...style,
       }}
     >
@@ -304,9 +305,9 @@ const Badge = ({ children, color = C.rx }) => (
       borderRadius: 20,
       fontSize: 10,
       fontWeight: 700,
-      background: color + "15",
+      background: tint(color, "15"),
       color,
-      border: `1px solid ${color}25`,
+      border: `1px solid ${tint(color, "25")}`,
       letterSpacing: ".3px",
     }}
   >
@@ -782,7 +783,7 @@ function RegistrationPage({ onSubmit, onBack }) {
     return (
       <div style={{ fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center", maxWidth: 420 }}>
-          <div style={{ width: 80, height: 80, borderRadius: 20, background: C.amber + "20", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 }}>⏳</div>
+          <div style={{ width: 80, height: 80, borderRadius: 20, background: tint(C.amber, "20"), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 }}>⏳</div>
           <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: C.text }}>Solicitud enviada</div>
           <div style={{ fontSize: 13, color: C.t2, marginBottom: 24, lineHeight: 1.6 }}>
             Tu registro fue enviado para revisión. El Super Admin aprobará tu acceso en breve.
@@ -798,13 +799,13 @@ function RegistrationPage({ onSubmit, onBack }) {
 
   return (
     <div style={{ fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden", padding: 24 }}>
-      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 25% 25%,${C.rx}06 0%,transparent 60%),radial-gradient(ellipse at 75% 75%,${C.teal}04 0%,transparent 60%)` }} />
-      <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(${C.border}40 1px,transparent 1px)`, backgroundSize: "32px 32px" }} />
+      <div style={{ position: "absolute", inset: 0, background: `radial-gradient(ellipse at 25% 25%,${tint(C.rx, "06")} 0%,transparent 60%),radial-gradient(ellipse at 75% 75%,${tint(C.teal, "04")} 0%,transparent 60%)` }} />
+      <div style={{ position: "absolute", inset: 0, backgroundImage: `radial-gradient(${tint(C.border, "40")} 1px,transparent 1px)`, backgroundSize: "32px 32px" }} />
       <div style={{ position: "relative", zIndex: 2, width: "100%", maxWidth: 420 }}>
         <div style={{ textAlign: "center", marginBottom: 30, display: "flex", justifyContent: "center" }}>
           <Logo size="lg" />
         </div>
-        <Card style={{ padding: 30, background: `${C.card}ee`, backdropFilter: "blur(20px)" }}>
+        <Card style={{ padding: 30, background: `${tint(C.card, "ee")}`, backdropFilter: "blur(20px)" }}>
           <div style={{ textAlign: "center", marginBottom: 22 }}>
             <div style={{ fontSize: 18, fontWeight: 700, color: C.text }}>Crear cuenta</div>
             <div style={{ fontSize: 12, color: C.t2, marginTop: 4 }}>Solicita acceso a RedNexo</div>
@@ -871,7 +872,7 @@ function UsersPanel({ authorizeUser, revokeUser }) {
     <div>
       <PageHeader title="Gestión de Usuarios" subtitle="Autoriza acceso por correo de Google. Los cambios se sincronizan en tiempo real." />
       {msg && (
-        <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: msg.startsWith("✅") ? C.ok + "15" : C.err + "15", color: msg.startsWith("✅") ? C.ok : C.err, border: `1px solid ${msg.startsWith("✅") ? C.ok + "30" : C.err + "30"}` }}>
+        <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: msg.startsWith("✅") ? tint(C.ok, "15") : tint(C.err, "15"), color: msg.startsWith("✅") ? C.ok : C.err, border: `1px solid ${msg.startsWith("✅") ? tint(C.ok, "30") : tint(C.err, "30")}` }}>
           {msg}
         </div>
       )}
@@ -1036,7 +1037,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
 
       const N = nodesRef.current;
       const dragging = dragRef.current;
-      const fC = conns.filter((c) => filter === "all" || c.tp === filter);
+      const fC = filterConns(conns, filter);
 
       // ── Física: spring hacia target + repulsión entre nodos
       N.forEach((n) => {
@@ -1110,7 +1111,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
         const gcy = gNodes.reduce((a, n) => a + n.y, 0) / gNodes.length;
         const gcColor = GC[g] || "#3b82f6";
         const aura = ctx.createRadialGradient(gcx, gcy, 0, gcx, gcy, 90);
-        aura.addColorStop(0, gcColor + "12");
+        aura.addColorStop(0, tint(gcColor, "12"));
         aura.addColorStop(1, "transparent");
         ctx.fillStyle = aura;
         ctx.beginPath();
@@ -1124,7 +1125,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
         const t = N.find(n => n.id === cn.t);
         if (!f || !t) return;
         const hl = !selNode || selNode === f.id || selNode === t.id;
-        const col = cn.tp === "pos" ? cc("teal") : cn.tp === "neg" ? cc("err") : cc("t3");
+        const col = cn.tp === "pos" ? cc("teal") : cn.tp === "neg" ? cc("err") : cc("amber");
         const cpx = (f.x + t.x) / 2 + (t.y - f.y) * 0.22;
         const cpy = (f.y + t.y) / 2 - (t.x - f.x) * 0.22;
 
@@ -1133,14 +1134,14 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           ctx.beginPath();
           ctx.moveTo(f.x, f.y);
           ctx.quadraticCurveTo(cpx, cpy, t.x, t.y);
-          ctx.strokeStyle = col + "18";
+          ctx.strokeStyle = tint(col, "18");
           ctx.lineWidth = cn.s * 5;
           ctx.stroke();
           // Línea principal con gradiente
           const grad = ctx.createLinearGradient(f.x, f.y, t.x, t.y);
-          grad.addColorStop(0, col + "55");
-          grad.addColorStop(0.5, col + "ee");
-          grad.addColorStop(1, col + "55");
+          grad.addColorStop(0, tint(col, "55"));
+          grad.addColorStop(0.5, tint(col, "ee"));
+          grad.addColorStop(1, tint(col, "55"));
           ctx.beginPath();
           ctx.moveTo(f.x, f.y);
           ctx.quadraticCurveTo(cpx, cpy, t.x, t.y);
@@ -1152,7 +1153,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           const px = (1-tParam)*(1-tParam)*f.x + 2*(1-tParam)*tParam*cpx + tParam*tParam*t.x;
           const py = (1-tParam)*(1-tParam)*f.y + 2*(1-tParam)*tParam*cpy + tParam*tParam*t.y;
           const pGlow = ctx.createRadialGradient(px, py, 0, px, py, 5);
-          pGlow.addColorStop(0, col + "ff");
+          pGlow.addColorStop(0, tint(col, "ff"));
           pGlow.addColorStop(1, "transparent");
           ctx.fillStyle = pGlow;
           ctx.beginPath();
@@ -1171,13 +1172,13 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           ctx.moveTo(ax + Math.cos(ang)*6, ay + Math.sin(ang)*6);
           ctx.lineTo(ax + Math.cos(ang+2.4)*4, ay + Math.sin(ang+2.4)*4);
           ctx.lineTo(ax + Math.cos(ang-2.4)*4, ay + Math.sin(ang-2.4)*4);
-          ctx.fillStyle = col + "99";
+          ctx.fillStyle = tint(col, "99");
           ctx.fill();
         } else {
           ctx.beginPath();
           ctx.moveTo(f.x, f.y);
           ctx.quadraticCurveTo(cpx, cpy, t.x, t.y);
-          ctx.strokeStyle = col + "0e";
+          ctx.strokeStyle = tint(col, "0e");
           ctx.lineWidth = 0.8;
           ctx.stroke();
         }
@@ -1212,12 +1213,12 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           const pulseR = nr + 8 + Math.sin(nd.pulse) * 4;
           ctx.beginPath();
           ctx.arc(nd.x, nd.y, pulseR, 0, Math.PI * 2);
-          ctx.strokeStyle = gc + "30";
+          ctx.strokeStyle = tint(gc, "30");
           ctx.lineWidth = 1.5;
           ctx.stroke();
           ctx.beginPath();
           ctx.arc(nd.x, nd.y, pulseR + 5, 0, Math.PI * 2);
-          ctx.strokeStyle = gc + "12";
+          ctx.strokeStyle = tint(gc, "12");
           ctx.lineWidth = 1;
           ctx.stroke();
         }
@@ -1235,7 +1236,7 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
         }
 
         // Sombra
-        if (isDrag || isSel) { ctx.shadowColor = gc + "80"; ctx.shadowBlur = isDrag ? 22 : 12; }
+        if (isDrag || isSel) { ctx.shadowColor = tint(gc, "80"); ctx.shadowBlur = isDrag ? 22 : 12; }
 
         // Fondo del nodo (gradiente + borde)
         const nGrad = ctx.createRadialGradient(nd.x - nr*0.3, nd.y - nr*0.3, 0, nd.x, nd.y, nr);
@@ -1283,13 +1284,13 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           if (ctx.roundRect) ctx.roundRect(px2, py2, pw, ph, 5);
           else ctx.rect(px2, py2, pw, ph);
           ctx.fill();
-          ctx.strokeStyle = gc + "50";
+          ctx.strokeStyle = tint(gc, "50");
           ctx.lineWidth = 0.8;
           ctx.stroke();
           ctx.fillStyle = "#eaedf6";
           ctx.fillText(nd.name, nd.x, py2 + ph/2);
           // Grupo
-          ctx.fillStyle = gc + "bb";
+          ctx.fillStyle = tint(gc, "bb");
           ctx.font = `9px 'Outfit',system-ui`;
           ctx.fillText(nd.group, nd.x, py2 + ph + 10);
         }
@@ -1426,26 +1427,25 @@ function SocioMatrix({ students, conns }) {
           100% { top: 100%; opacity: 0; }
         }
         .nm-cell:hover { filter: brightness(1.3); }
-        .nm-row:hover .nm-rowhead { background: rgba(59,130,246,0.12) !important; }
       `}</style>
 
       {/* Filtros de grupo */}
       <div style={{ marginBottom: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: C.t2 }}>Grupos:</span>
         <button onClick={() => setSelGroups(allSel ? [GROUPS[0]] : GROUPS.slice())}
-          style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${allSel ? C.rx + "50" : C.border}`, background: allSel ? C.rx + "15" : "transparent", color: allSel ? C.rx : C.t3, transition: "all .2s" }}>
+          style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${allSel ? tint(C.rx, "50") : C.border}`, background: allSel ? tint(C.rx, "15") : "transparent", color: allSel ? C.rx : C.t3, transition: "all .2s" }}>
           {allSel ? "✓ Todos" : "Todos"}
         </button>
         {GROUPS.map(g => {
           const on = selGroups.includes(g);
           return (
             <button key={g} onClick={() => toggleG(g)}
-              style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? GC[g] + "80" : C.border}`, background: on ? GC[g] + "18" : "transparent", color: on ? GC[g] : C.t3, transition: "all .2s", display: "flex", alignItems: "center", gap: 4 }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: on ? GC[g] : C.t3 + "40" }} />{g}
+              style={{ padding: "4px 12px", borderRadius: 6, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(GC[g], "80") : C.border}`, background: on ? tint(GC[g], "18") : "transparent", color: on ? GC[g] : C.t3, transition: "all .2s", display: "flex", alignItems: "center", gap: 4 }}>
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: on ? GC[g] : tint(C.t3, "40") }} />{g}
             </button>
           );
         })}
-        <span style={{ marginLeft: "auto", fontSize: 10, color: C.t3 }}>{fs.length} participantes · {activeConns.length} conexiones</span>
+        <span style={{ marginLeft: "auto", fontSize: 11, fontWeight: 500, color: C.t2 }}>{fs.length} participantes · {activeConns.length} conexiones</span>
       </div>
 
       {/* Título */}
@@ -1457,12 +1457,12 @@ function SocioMatrix({ students, conns }) {
       </div>
 
       {/* Tabla */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}` }}>
-        <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, minWidth: "100%" }}>
+      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, width: "fit-content", maxWidth: "100%" }}>
+        <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, width: "max-content" }}>
           <thead>
             <tr>
-              <th style={{ width: 80, minWidth: 80, padding: "8px 10px", background: "#0a0a14", border: `1px solid ${C.border}`, position: "sticky", left: 0, zIndex: 4 }}>
-                <div style={{ fontSize: 9, color: C.t3, textAlign: "center", lineHeight: 1.5 }}>De ↓<br/>Para →</div>
+              <th style={{ width: 120, minWidth: 120, padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, position: "sticky", left: 0, zIndex: 4 }}>
+                <div style={{ fontSize: 10, fontWeight: 600, color: C.t2, textAlign: "center", lineHeight: 1.5 }}>De ↓<br/>Para →</div>
               </th>
               {fs.map(s => {
                 const isHov = hovCol === s.id;
@@ -1471,14 +1471,14 @@ function SocioMatrix({ students, conns }) {
                   <th key={s.id}
                     onMouseEnter={() => setHovCol(s.id)}
                     onMouseLeave={() => setHovCol(null)}
-                    style={{ width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? gc + "22" : "#0c0c18", border: `1px solid ${isHov ? gc + "60" : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
-                    <div style={{ width: 28, height: 28, borderRadius: 7, background: gc + "22", border: `1.5px solid ${gc}60`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 9, color: gc, margin: "0 auto" }}>{s.av}</div>
-                    <div style={{ fontSize: 7, color: gc + "99", marginTop: 2 }}>{s.group}</div>
+                    style={{ width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? mixOn(gc, 16) : C.cardAlt, border: `1px solid ${isHov ? tint(gc, "80") : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: mixOn(gc, 20, "var(--c-surface)"), border: `1.5px solid ${tint(gc, "99")}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: C.text, margin: "0 auto" }}>{s.av}</div>
+                    <div style={{ fontSize: 8, fontWeight: 600, lineHeight: 1.15, color: C.t2, marginTop: 3 }}>{s.group}</div>
                   </th>
                 );
               })}
-              <th style={{ padding: "6px 8px", background: C.teal + "18", border: `1px solid ${C.border}`, fontSize: 10, color: C.teal, fontWeight: 700, textAlign: "center" }}>Σ+</th>
-              <th style={{ padding: "6px 8px", background: C.err + "18", border: `1px solid ${C.border}`, fontSize: 10, color: C.err, fontWeight: 700, textAlign: "center" }}>Σ−</th>
+              <th style={{ width: 52, minWidth: 52, padding: "6px 8px", background: tint(C.teal, "26"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.teal), fontWeight: 800, textAlign: "center" }}>Σ+</th>
+              <th style={{ width: 52, minWidth: 52, padding: "6px 8px", background: tint(C.err, "26"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.err), fontWeight: 800, textAlign: "center" }}>Σ−</th>
             </tr>
           </thead>
           <tbody>
@@ -1490,17 +1490,17 @@ function SocioMatrix({ students, conns }) {
                 <tr key={from.id} className="nm-row"
                   onMouseEnter={() => setHovRow(from.id)}
                   onMouseLeave={() => setHovRow(null)}>
-                  <td style={{ padding: "5px 10px", background: isHovRow ? gcFrom + "18" : "#0c0c18", border: `1px solid ${isHovRow ? gcFrom + "60" : C.border}`, fontWeight: 700, color: gcFrom, position: "sticky", left: 0, zIndex: 3, fontSize: 10, whiteSpace: "nowrap", transition: "background .15s, border-color .15s" }}>
+                  <td style={{ padding: "5px 10px", background: isHovRow ? mixOn(gcFrom, 14) : C.cardAlt, border: `1px solid ${isHovRow ? tint(gcFrom, "80") : C.border}`, fontWeight: 700, color: C.text, position: "sticky", left: 0, zIndex: 3, fontSize: 11, whiteSpace: "nowrap", transition: "background .15s, border-color .15s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                      <div style={{ width: 22, height: 22, borderRadius: 5, background: gcFrom + "22", border: `1px solid ${gcFrom}50`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 8, flexShrink: 0 }}>{from.av}</div>
-                      <span style={{ fontSize: 9, color: C.t2, fontWeight: 400 }}>{from.name.split(" ")[0]}</span>
+                      <div style={{ width: 22, height: 22, borderRadius: 5, background: mixOn(gcFrom, 20, "var(--c-surface)"), border: `1px solid ${tint(gcFrom, "99")}`, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 8, flexShrink: 0 }}>{from.av}</div>
+                      <span title={from.name} style={{ fontSize: 11, color: C.text, fontWeight: 600 }}>{from.name.split(" ")[0]}</span>
                     </div>
                   </td>
                   {fs.map((to, ci) => {
                     if (from.id === to.id) {
                       return (
-                        <td key={to.id} style={{ width: cellSize, height: cellSize, background: "linear-gradient(135deg,#1a1a2a 25%,#0a0a14 75%)", border: `1px solid ${C.border}`, textAlign: "center" }}>
-                          <span style={{ fontSize: 13, color: C.t3 + "30" }}>◇</span>
+                        <td key={to.id} style={{ width: cellSize, height: cellSize, background: "repeating-linear-gradient(135deg, transparent 0 5px, color-mix(in srgb, var(--c-t3) 30%, transparent) 5px 6px), var(--c-bgSub)", border: `1px solid ${C.border}`, textAlign: "center" }}>
+                          <span style={{ fontSize: 13, color: tint(C.t3, "aa") }}>◇</span>
                         </td>
                       );
                     }
@@ -1509,11 +1509,11 @@ function SocioMatrix({ students, conns }) {
                     const mutual = conn && rev;
                     const isHov  = hovRow === from.id || hovCol === to.id;
                     const isSel  = selCell && selCell.f === from.id && selCell.t === to.id;
-                    if (conn?.tp === "pos") pos++;
-                    if (conn?.tp === "neg") neg++;
+                    if (hasType(conn, "pos")) pos++;
+                    if (hasType(conn, "neg")) neg++;
 
                     const col    = conn ? (conn.tp === "pos" ? (mutual ? C.ok : C.teal) : conn.tp === "neg" ? C.err : C.amber) : null;
-                    const bgCell = isSel ? col + "40" : isHov && conn ? col + "28" : conn ? col + "14" : isHov ? C.t3 + "08" : "transparent";
+                    const bgCell = isSel ? tint(col, "59") : isHov && conn ? tint(col, "40") : conn ? tint(col, "26") : isHov ? tint(C.t3, "14") : "transparent";
                     const sym    = conn ? (conn.tp === "pos" ? (mutual ? "⬥" : "▲") : conn.tp === "neg" ? "▼" : "◯") : "";
 
                     // Pulso CSS animado en celdas con conexión
@@ -1524,8 +1524,8 @@ function SocioMatrix({ students, conns }) {
                         onClick={() => setSelCell(isSel ? null : conn ? { f: from.id, t: to.id, conn, mutual, from, to } : null)}
                         onMouseEnter={() => { setHovRow(from.id); setHovCol(to.id); }}
                         onMouseLeave={() => { setHovRow(null); setHovCol(null); }}
-                        title={conn ? `${from.name} → ${to.name}: ${conn.tp}${mutual ? " (mutuo)" : ""}` : "Sin conexión"}
-                        style={{ padding: 0, width: cellSize, height: cellSize, background: bgCell, border: `1px solid ${isSel ? col + "80" : isHov && conn ? col + "50" : C.border + "80"}`, textAlign: "center", cursor: conn ? "pointer" : "default", transition: "background .12s, border-color .12s", position: "relative", overflow: "hidden" }}>
+                        title={conn ? `${from.name} → ${to.name}: ${(conn.types || [conn.tp]).map((t) => TIPO_INFO[t].l.toLowerCase()).join(" + ")}${mutual ? " (mutuo)" : ""}` : "Sin conexión"}
+                        style={{ padding: 0, width: cellSize, height: cellSize, background: bgCell, border: `1px solid ${isSel ? tint(col, "cc") : isHov && conn ? tint(col, "80") : C.border}`, textAlign: "center", cursor: conn ? "pointer" : "default", transition: "background .12s, border-color .12s", position: "relative", overflow: "hidden" }}>
 
                         {/* Pulso neural CSS — no usa canvas */}
                         {conn && isPulsing && (
@@ -1536,7 +1536,7 @@ function SocioMatrix({ students, conns }) {
                           }}>
                             <div style={{
                               width: 20, height: 20, borderRadius: "50%",
-                              background: col + "60",
+                              background: tint(col, "60"),
                               animation: "neuron-pulse 1.2s ease-out forwards",
                             }} />
                           </div>
@@ -1544,41 +1544,46 @@ function SocioMatrix({ students, conns }) {
 
                         {/* Glow hover */}
                         {isHov && conn && (
-                          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${col}20, transparent)`, pointerEvents: "none" }} />
+                          <div style={{ position: "absolute", inset: 0, background: `radial-gradient(circle, ${tint(col, "20")}, transparent)`, pointerEvents: "none" }} />
                         )}
 
+                        {conn && conn.types && conn.types.length > 1 && (
+                          <div style={{ position: "absolute", left: 0, right: 0, bottom: 2, display: "flex", justifyContent: "center", gap: 2, pointerEvents: "none" }}>
+                            {conn.types.map((t) => <span key={t} style={{ width: 5, height: 5, borderRadius: "50%", background: t === "pos" ? C.teal : t === "neg" ? C.err : C.amber }} />)}
+                          </div>
+                        )}
                         {conn && (
-                          <span style={{ fontSize: mutual ? 14 : 12, color: col, fontWeight: mutual ? 800 : 600, position: "relative", zIndex: 1, textShadow: isHov ? `0 0 8px ${col}` : "none", transition: "text-shadow .15s" }}>
+                          <span style={{ fontSize: mutual ? 14 : 12, color: ink(col), fontWeight: mutual ? 800 : 600, position: "relative", zIndex: 1, textShadow: isHov ? `0 0 8px ${col}` : "none", transition: "text-shadow .15s" }}>
                             {sym}
                           </span>
                         )}
                       </td>
                     );
                   })}
-                  <td style={{ padding: "4px 8px", background: C.teal + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: pos > 0 ? C.teal : C.t3, fontSize: 12 }}>{pos}</td>
-                  <td style={{ padding: "4px 8px", background: C.err  + "0a", border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: neg > 0 ? C.err  : C.t3, fontSize: 12 }}>{neg}</td>
+                  <td style={{ padding: "4px 8px", background: tint(C.teal, "14"), border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: pos > 0 ? ink(C.teal) : C.t2, fontSize: 12 }}>{pos}</td>
+                  <td style={{ padding: "4px 8px", background: tint(C.err, "14"), border: `1px solid ${C.border}`, textAlign: "center", fontWeight: 800, color: neg > 0 ? ink(C.err) : C.t2, fontSize: 12 }}>{neg}</td>
                 </tr>
               );
             })}
 
             {/* Fila de recibidas con barras */}
             <tr>
-              <td style={{ padding: "6px 10px", background: "#0c0c18", border: `1px solid ${C.border}`, fontWeight: 700, fontSize: 9, color: C.t2, position: "sticky", left: 0, zIndex: 3, letterSpacing: ".3px" }}>RECIBIDAS</td>
+              <td style={{ padding: "6px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, fontWeight: 800, fontSize: 10, color: C.t2, position: "sticky", left: 0, zIndex: 3, letterSpacing: ".6px" }}>RECIBIDAS</td>
               {fs.map(to => {
-                const rec  = conns.filter(c => c.t === to.id && c.tp === "pos").length;
-                const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && c.tp === "pos").length), 1);
+                const rec  = conns.filter(c => c.t === to.id && hasType(c, "pos")).length;
+                const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && hasType(c, "pos")).length), 1);
                 const pct  = rec / maxR;
                 const gc   = GC[to.group] || C.teal;
                 return (
                   <td key={to.id} style={{ padding: "3px 2px", background: "transparent", border: `1px solid ${C.border}`, textAlign: "center" }}>
                     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: cellSize - 6, gap: 1 }}>
-                      <div style={{ width: "65%", height: `${Math.max(pct * 100, 4)}%`, background: `linear-gradient(to top, ${gc}, ${gc}55)`, borderRadius: "2px 2px 0 0", minHeight: 3, boxShadow: pct > 0.5 ? `0 0 6px ${gc}60` : "none", transition: "height .4s" }} />
-                      <span style={{ fontSize: 9, fontWeight: 800, color: rec > 0 ? gc : C.t3 }}>{rec}</span>
+                      <div style={{ width: "65%", height: `${Math.max(pct * 100, 4)}%`, background: rec > 0 ? `linear-gradient(to top, ${gc}, ${tint(gc, "88")})` : C.borderLit, borderRadius: "2px 2px 0 0", minHeight: 3, boxShadow: pct > 0.5 ? `0 0 6px ${tint(gc, "60")}` : "none", transition: "height .4s" }} />
+                      <span style={{ fontSize: 10, fontWeight: 800, color: rec > 0 ? ink(gc) : C.t2 }}>{rec}</span>
                     </div>
                   </td>
                 );
               })}
-              <td colSpan={2} style={{ background: "#0a0a14", border: `1px solid ${C.border}` }} />
+              <td colSpan={2} style={{ background: C.cardAlt, border: `1px solid ${C.border}` }} />
             </tr>
           </tbody>
         </table>
@@ -1586,14 +1591,14 @@ function SocioMatrix({ students, conns }) {
 
       {/* Detalle de celda seleccionada */}
       {selCell && (
-        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: C.cardAlt, border: `1px solid ${selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber}40`, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: (GC[selCell.from.group] || C.rx) + "20", border: `1.5px solid ${GC[selCell.from.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.from.group] || C.rx }}>{selCell.from.av}</div>
+        <div style={{ marginTop: 14, padding: "12px 16px", borderRadius: 10, background: C.cardAlt, border: `1px solid ${tint(selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber, "40")}`, display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: tint(GC[selCell.from.group] || C.rx, "20"), border: `1.5px solid ${GC[selCell.from.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.from.group] || C.rx }}>{selCell.from.av}</div>
           <div style={{ fontSize: 20, color: selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber }}>→</div>
-          <div style={{ width: 36, height: 36, borderRadius: 9, background: (GC[selCell.to.group] || C.rx) + "20", border: `1.5px solid ${GC[selCell.to.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.to.group] || C.rx }}>{selCell.to.av}</div>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: tint(GC[selCell.to.group] || C.rx, "20"), border: `1.5px solid ${GC[selCell.to.group] || C.rx}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 12, color: GC[selCell.to.group] || C.rx }}>{selCell.to.av}</div>
           <div>
             <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>{selCell.from.name} → {selCell.to.name}</div>
             <div style={{ fontSize: 11, color: selCell.conn.tp === "pos" ? C.teal : selCell.conn.tp === "neg" ? C.err : C.amber }}>
-              {selCell.conn.tp === "pos" ? "✓ Elección positiva" : selCell.conn.tp === "neg" ? "✗ Rechazo" : "○ Neutral"}
+              {(selCell.conn.types || [selCell.conn.tp]).map((t) => (t === "pos" ? "✓ Elección positiva" : t === "neg" ? "✗ Rechazo" : "○ Neutral")).join("  ·  ")}
               {selCell.mutual && <span style={{ color: C.ok, marginLeft: 8 }}>⬥ Mutua</span>}
             </div>
           </div>
@@ -1602,7 +1607,7 @@ function SocioMatrix({ students, conns }) {
       )}
 
       {/* Leyenda */}
-      <div style={{ display: "flex", gap: 16, marginTop: 14, fontSize: 10, color: C.t2, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 18, marginTop: 14, fontSize: 11, fontWeight: 500, color: C.t2, flexWrap: "wrap" }}>
         {[
           { sym: "▲", col: C.teal,  lab: "Positiva" },
           { sym: "⬥", col: C.ok,    lab: "Mutua" },
@@ -1610,7 +1615,7 @@ function SocioMatrix({ students, conns }) {
           { sym: "◯", col: C.amber, lab: "Neutral" },
         ].map(l => (
           <span key={l.lab} style={{ display: "flex", alignItems: "center", gap: 5 }}>
-            <span style={{ fontSize: 13, color: l.col }}>{l.sym}</span>{l.lab}
+            <span style={{ fontSize: 13, color: ink(l.col) }}>{l.sym}</span>{l.lab}
           </span>
         ))}
       </div>
@@ -1683,7 +1688,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
         </div>
       </div>
       {notice && (
-        <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✅") ? C.ok + "15" : C.err + "15", color: notice.startsWith("✅") ? C.ok : C.err, border: `1px solid ${notice.startsWith("✅") ? C.ok : C.err}30` }}>{notice}</div>
+        <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✅") ? tint(C.ok, "15") : tint(C.err, "15"), color: notice.startsWith("✅") ? C.ok : C.err, border: `1px solid ${tint(notice.startsWith("✅") ? C.ok : C.err, "30")}` }}>{notice}</div>
       )}
       {addingGroup && (
         <Card style={{ marginBottom: 14, display: "flex", alignItems: "flex-end", gap: 10 }}>
@@ -1702,7 +1707,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
           value={search}
           onChange={e => setSearch(e.target.value)}
           placeholder="Buscar estudiante o grupo..."
-          style={{ width: "100%", background: C.surface, border: `1.5px solid ${search ? C.rx + "70" : C.border}`, borderRadius: 10, padding: "10px 36px 10px 36px", color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", transition: "all .2s", boxShadow: search ? `0 0 0 3px ${C.rx}15` : "none" }}
+          style={{ width: "100%", background: C.surface, border: `1.5px solid ${search ? tint(C.rx, "70") : C.border}`, borderRadius: 10, padding: "10px 36px 10px 36px", color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", transition: "all .2s", boxShadow: search ? `0 0 0 3px ${tint(C.rx, "15")}` : "none" }}
         />
         {search && (
           <button onClick={() => setSearch("")} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: C.border, border: "none", color: C.t2, cursor: "pointer", fontSize: 11, width: 20, height: 20, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700 }}>✕</button>
@@ -1724,13 +1729,13 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
           return (
             <span>
               {text.slice(0, r[0])}
-              <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px" }}>{text.slice(r[0], r[1])}</span>
+              <span style={{ background: tint(C.rx, "35"), color: C.rx, borderRadius: 2, padding: "0 1px" }}>{text.slice(r[0], r[1])}</span>
               {text.slice(r[1])}
             </span>
           );
         };
         return (
-          <Card style={{ marginBottom: 14, border: `1px solid ${C.rx}30`, background: C.cardAlt }}>
+          <Card style={{ marginBottom: 14, border: `1px solid ${tint(C.rx, "30")}`, background: C.cardAlt }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rx, display: "flex", alignItems: "center", gap: 6 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -1756,7 +1761,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                       {members.length === 0 && <div style={{ fontSize: 11, color: C.t3, padding: "4px 2px" }}>Este grupo todavía no tiene estudiantes.</div>}
                       {members.map(s => (
                         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
-                          <div style={{ width: 30, height: 30, borderRadius: 7, background: gc + "18", color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{s.av || initials(s.name)}</div>
+                          <div style={{ width: 30, height: 30, borderRadius: 7, background: tint(gc, "18"), color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{s.av || initials(s.name)}</div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{highlight(s.name)}</div>
                             <div style={{ fontSize: 10, color: gc }}>{s.group}</div>
@@ -1765,7 +1770,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                             onClick={() => { if (window.confirm(`¿Eliminar a ${s.name}?`)) { setStudents(p => p.filter(x => x.id !== s.id)); deleteStudentFS(s.id); } }}
                             title="Eliminar"
                             style={{ background: "none", border: "none", color: C.t3, cursor: "pointer", padding: "3px 5px", borderRadius: 5, display: "flex", alignItems: "center", transition: "all .15s" }}
-                            onMouseEnter={e => { e.currentTarget.style.color = C.err; e.currentTarget.style.background = C.err + "15"; }}
+                            onMouseEnter={e => { e.currentTarget.style.color = C.err; e.currentTarget.style.background = tint(C.err, "15"); }}
                             onMouseLeave={e => { e.currentTarget.style.color = C.t3; e.currentTarget.style.background = "none"; }}
                           >
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1813,7 +1818,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                 <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}` }}>
                   <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
                     {["single", "bulk"].map((m) => (
-                      <button key={m} onClick={() => setAddMode(m)} style={{ flex: 1, padding: "4px", borderRadius: 5, border: `1px solid ${addMode === m ? (m === "single" ? C.teal : C.violet) : C.border}`, background: addMode === m ? (m === "single" ? C.teal : C.violet) + "15" : "transparent", color: addMode === m ? (m === "single" ? C.teal : C.violet) : C.t3, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                      <button key={m} onClick={() => setAddMode(m)} style={{ flex: 1, padding: "4px", borderRadius: 5, border: `1px solid ${addMode === m ? (m === "single" ? C.teal : C.violet) : C.border}`, background: addMode === m ? tint(m === "single" ? C.teal : C.violet, "15") : "transparent", color: addMode === m ? (m === "single" ? C.teal : C.violet) : C.t3, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                         {m === "single" ? "Un estudiante" : "Lista (copiar/pegar)"}
                       </button>
                     ))}
@@ -1840,13 +1845,13 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                   const rng = highlightRange(name, search);
                   const idx = rng ? rng[0] : -1;
                   return (
-                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 7, background: idx >= 0 ? gc + "10" : C.surface, border: `1px solid ${idx >= 0 ? gc + "40" : C.border}`, transition: "all .15s" }}>
-                      <span style={{ width: 26, height: 26, borderRadius: 6, background: gc + "18", color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9, flexShrink: 0 }}>{s.av}</span>
+                    <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 7, background: idx >= 0 ? tint(gc, "10") : C.surface, border: `1px solid ${idx >= 0 ? tint(gc, "40") : C.border}`, transition: "all .15s" }}>
+                      <span style={{ width: 26, height: 26, borderRadius: 6, background: tint(gc, "18"), color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9, flexShrink: 0 }}>{s.av}</span>
                       <span style={{ fontSize: 12, flex: 1, color: C.text }}>
                         {idx >= 0 ? (
                           <span>
                             {name.slice(0, rng[0])}
-                            <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px", fontWeight: 700 }}>{name.slice(rng[0], rng[1])}</span>
+                            <span style={{ background: tint(C.rx, "35"), color: C.rx, borderRadius: 2, padding: "0 1px", fontWeight: 700 }}>{name.slice(rng[0], rng[1])}</span>
                             {name.slice(rng[1])}
                           </span>
                         ) : name}
@@ -1855,7 +1860,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                         onClick={() => removeStudent(s.id)}
                         title="Eliminar"
                         style={{ background: "none", border: "none", color: C.t3, cursor: "pointer", padding: "2px 4px", borderRadius: 5, display: "flex", alignItems: "center", transition: "all .15s", flexShrink: 0 }}
-                        onMouseEnter={e => { e.currentTarget.style.color = C.err; e.currentTarget.style.background = C.err + "15"; }}
+                        onMouseEnter={e => { e.currentTarget.style.color = C.err; e.currentTarget.style.background = tint(C.err, "15"); }}
                         onMouseLeave={e => { e.currentTarget.style.color = C.t3; e.currentTarget.style.background = "none"; }}
                       >
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1900,8 +1905,8 @@ function SurveyProgress({ surveys, students, responses }) {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 6 }}>
                 {p.items.map((s) => (
-                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: s.done ? C.ok + "10" : C.surface, border: `1px solid ${s.done ? C.ok + "30" : C.border}` }}>
-                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.done ? C.ok : C.t3 + "50", flexShrink: 0 }} />
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: s.done ? tint(C.ok, "10") : C.surface, border: `1px solid ${s.done ? tint(C.ok, "30") : C.border}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.done ? C.ok : tint(C.t3, "50"), flexShrink: 0 }} />
                     <span style={{ fontSize: 10, color: s.done ? C.ok : C.t3, fontWeight: s.done ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
                   </div>
                 ))}
@@ -2159,7 +2164,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                       padding: "4px 12px", borderRadius: 7, fontSize: 11, fontWeight: 700,
                       cursor: "pointer", fontFamily: "inherit", transition: "all .2s",
                       border: `1.5px solid ${on ? gc : C.border}`,
-                      background: on ? gc + "20" : "transparent",
+                      background: on ? tint(gc, "20") : "transparent",
                       color: on ? gc : C.t3,
                     }}>{g}</button>
                   );
@@ -2227,7 +2232,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
           <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
         </div>}
       </div>
-      {msg && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✅") ? C.ok + "15" : C.amber + "15", color: msg.startsWith("✅") ? C.ok : C.amber, fontSize: 12 }}>{msg}</div>}
+      {msg && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✅") ? tint(C.ok, "15") : tint(C.amber, "15"), color: msg.startsWith("✅") ? C.ok : C.amber, fontSize: 12 }}>{msg}</div>}
       {loadingS && <div style={{ textAlign: "center", padding: 30, color: C.t3 }}>Cargando encuestas...</div>}
 
       {/* ── Vista previa de la importación ── */}
@@ -2270,7 +2275,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
       {/* ── Papelera ── */}
       {showTrash && (
-        <Card style={{ marginBottom: 16, border: `1px solid ${C.err}30` }}>
+        <Card style={{ marginBottom: 16, border: `1px solid ${tint(C.err, "30")}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.err, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
             🗑 Papelera ({surveys.filter(s => s.deleted).length} encuestas)
           </div>
@@ -2314,7 +2319,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div style={{ flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 5 }}>
                 <span style={{ fontSize: 15, fontWeight: 700 }}>{sv.title}</span>
-                <button onClick={() => canEdit && updateSurveyField(sv.id, "status", sv.status === "active" ? "draft" : "active")} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 700, border: `1px solid ${sv.status === "active" ? C.ok + "40" : C.amber + "40"}`, background: sv.status === "active" ? C.ok + "15" : C.amber + "15", color: sv.status === "active" ? C.ok : C.amber, cursor: canEdit ? "pointer" : "default", fontFamily: "inherit", transition: "all .2s" }}>
+                <button onClick={() => canEdit && updateSurveyField(sv.id, "status", sv.status === "active" ? "draft" : "active")} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "3px 9px", borderRadius: 20, fontSize: 10, fontWeight: 700, border: `1px solid ${sv.status === "active" ? tint(C.ok, "40") : tint(C.amber, "40")}`, background: sv.status === "active" ? tint(C.ok, "15") : tint(C.amber, "15"), color: sv.status === "active" ? C.ok : C.amber, cursor: canEdit ? "pointer" : "default", fontFamily: "inherit", transition: "all .2s" }}>
                   {sv.status === "active" ? "● Activa" : "◌ Borrador"}
                   {canEdit && <span style={{ fontSize: 9, opacity: 0.6 }}>{sv.status === "active" ? " ▼" : " ▲"}</span>}
                 </button>
@@ -2349,7 +2354,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                   <select value={q.tp} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, tp: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
                     <option value="pos">+ Positiva</option><option value="neg">− Negativa</option><option value="neu">○ Neutral</option>
                   </select>
-                  <button onClick={() => { const newQs = sv.questions.filter((qq) => qq.id !== q.id); updateSurveyQuestions(sv.id, newQs); }} style={{ background: "none", border: "none", color: C.err + "80", cursor: "pointer", fontSize: 12, padding: "0 3px" }}>✕</button>
+                  <button onClick={() => { const newQs = sv.questions.filter((qq) => qq.id !== q.id); updateSurveyQuestions(sv.id, newQs); }} style={{ background: "none", border: "none", color: tint(C.err, "80"), cursor: "pointer", fontSize: 12, padding: "0 3px" }}>✕</button>
                 </div>
               ))}
               <AddQToSurvey onAdd={(q) => { const newQs = [...sv.questions, { id: Date.now(), ...q }]; updateSurveyQuestions(sv.id, newQs); }} />
@@ -2380,8 +2385,8 @@ function ReportsPanel({ students, conns }) {
     const t = stList.length - 1 || 1;
     const hechas = cnList.filter((c) => String(c.f) === String(s.id)).length;
     const recibidas = cnList.filter((c) => String(c.t) === String(s.id)).length;
-    const posR = cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length;
-    const negR = cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "neg").length;
+    const posR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length;
+    const negR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "neg")).length;
     const mutuas = cnList.filter((c) => String(c.f) === String(s.id) && cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(s.id))).length;
     return { hechas, recibidas, posR, negR, mutuas, popularidad: ((posR / t) * 100).toFixed(1), rechazo: ((negR / t) * 100).toFixed(1), expansion: ((hechas / t) * 100).toFixed(1), rol: posR >= 3 ? "⭐ Líder" : negR >= 2 ? "⚠️ Rechazado" : recibidas === 0 && hechas === 0 ? "🔴 Aislado" : mutuas >= 2 ? "🔗 Integrado" : "Regular" };
   };
@@ -2403,17 +2408,17 @@ function ReportsPanel({ students, conns }) {
     const grupoLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
     const t = stList.length - 1 || 1;
     const totalConns = cnList.length;
-    const posConns = cnList.filter((c) => c.tp === "pos").length;
-    const negConns = cnList.filter((c) => c.tp === "neg").length;
+    const posConns = cnList.filter((c) => hasType(c, "pos")).length;
+    const negConns = cnList.filter((c) => hasType(c, "neg")).length;
     const mutuasTotal = Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2);
-    const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length >= 3);
+    const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length >= 3);
     const aislados = stList.filter((s) => cnList.filter((c) => String(c.f) === String(s.id) || String(c.t) === String(s.id)).length === 0);
     const densidad = density(totalConns, stList.length);
     const grupos = [...new Set(stList.map((s) => s.group))];
-    const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${gc}20;color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
-    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && c.tp === "pos").length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${gc}20;color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
+    const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
+    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
     const matrizTH = `<th style="min-width:90px">De ↓ / Para →</th>` + stList.map((s) => `<th title="${s.name}" style="min-width:32px">${s.av}</th>`).join("") + `<th class="pos">Σ+</th><th class="neg">Σ−</th>`;
-    const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (c?.tp === "pos") pos++; if (c?.tp === "neg") neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
+    const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (hasType(c, "pos")) pos++; if (hasType(c, "neg")) neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
     return { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows };
   };
 
@@ -2443,7 +2448,7 @@ function ReportsPanel({ students, conns }) {
           <Btn sm v="ghost" onClick={() => setActive(null)}>✕ Cerrar</Btn>
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
-          {[{ l: "Participantes", v: stList.length, c: C.rx }, { l: "Elec. positivas", v: cnList.filter((c) => c.tp === "pos").length, c: C.teal }, { l: "Rechazos", v: cnList.filter((c) => c.tp === "neg").length, c: C.err }, { l: "Mutuas", v: Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2), c: C.ok }].map((k) => (
+          {[{ l: "Participantes", v: stList.length, c: C.rx }, { l: "Elec. positivas", v: cnList.filter((c) => hasType(c, "pos")).length, c: C.teal }, { l: "Rechazos", v: cnList.filter((c) => hasType(c, "neg")).length, c: C.err }, { l: "Mutuas", v: Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2), c: C.ok }].map((k) => (
             <div key={k.l} style={{ background: C.bgSub, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
               <div style={{ fontSize: 22, fontWeight: 800, color: k.c }}>{k.v}</div>
               <div style={{ fontSize: 9, color: C.t3, textTransform: "uppercase", letterSpacing: ".4px", marginTop: 2 }}>{k.l}</div>
@@ -2457,7 +2462,7 @@ function ReportsPanel({ students, conns }) {
               <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
                 <thead><tr>{["Nombre","Grupo","Elige","Recibe","Pos.","Neg.","Mutuas","Popular.","Rechazo","Expansión","Rol"].map((h) => (<th key={h} style={{ padding: "5px 8px", background: C.surface, border: `1px solid ${C.border}`, fontSize: 9, color: C.t2, fontWeight: 700, textAlign: "left", textTransform: "uppercase" }}>{h}</th>))}</tr></thead>
                 <tbody>
-                  {stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || C.t2; return (<tr key={s.id}><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{s.name}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}` }}><span style={{ background: gc + "18", color: gc, padding: "2px 7px", borderRadius: 6, fontSize: 9, fontWeight: 700 }}>{s.group}</span></td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.hechas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.recibidas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.posR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err, fontWeight: 700 }}>{idx.negR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.ok }}>{idx.mutuas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.popularidad}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err }}>{idx.rechazo}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.violet }}>{idx.expansion}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", fontSize: 10 }}>{idx.rol}</td></tr>); })}
+                  {stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || C.t2; return (<tr key={s.id}><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{s.name}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}` }}><span style={{ background: tint(gc, "18"), color: gc, padding: "2px 7px", borderRadius: 6, fontSize: 9, fontWeight: 700 }}>{s.group}</span></td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.hechas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.recibidas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.posR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err, fontWeight: 700 }}>{idx.negR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.ok }}>{idx.mutuas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.popularidad}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err }}>{idx.rechazo}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.violet }}>{idx.expansion}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", fontSize: 10 }}>{idx.rol}</td></tr>); })}
                 </tbody>
               </table>
             </div>
@@ -2476,13 +2481,13 @@ function ReportsPanel({ students, conns }) {
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Grupo a analizar</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#3b82f6" : GC[g] || "#3b82f6"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? gc + "80" : C.border}`, background: on ? gc + "18" : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "🌐 Todos" : g}</button>); })}
+              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#3b82f6" : GC[g] || "#3b82f6"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(gc, "80") : C.border}`, background: on ? tint(gc, "18") : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "🌐 Todos" : g}</button>); })}
             </div>
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Tipo de reporte</label>
             <div style={{ display: "flex", gap: 6 }}>
-              {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? C.violet + "80" : C.border}`, background: on ? C.violet + "18" : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
+              {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
             </div>
           </div>
         </div>
@@ -2816,7 +2821,7 @@ function PublicSurvey({ surveyId, colegioId }) {
                       padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700,
                       cursor: "pointer", fontFamily: "inherit", transition: "all .2s",
                       border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.1)"}`,
-                      background: on ? gc + "22" : "transparent",
+                      background: on ? tint(gc, "22") : "transparent",
                       color: on ? gc : "#555770",
                     }}>
                       {g} <span style={{ opacity: .6, fontSize: 10 }}>({students.filter(s => s.group === g).length})</span>
@@ -2838,10 +2843,10 @@ function PublicSurvey({ surveyId, colegioId }) {
                   display: "flex", alignItems: "center", gap: 10,
                   transition: "all .2s", fontFamily: "inherit", textAlign: "left",
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderColor = gc; e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = gc + "10"; }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = gc; e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = tint(gc, "10"); }}
                 onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.transform = "none"; e.currentTarget.style.background = "rgba(22,23,31,0.85)"; }}
                 >
-                  <div style={{ width: 38, height: 38, borderRadius: 10, background: gc + "20", border: `1.5px solid ${gc}40`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, color: gc, flexShrink: 0 }}>{s.av}</div>
+                  <div style={{ width: 38, height: 38, borderRadius: 10, background: tint(gc, "20"), border: `1.5px solid ${tint(gc, "40")}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, color: gc, flexShrink: 0 }}>{s.av}</div>
                   <div>
                     <div style={{ fontSize: 13, fontWeight: 600, color: "#eaedf6" }}>{s.name}</div>
                     <div style={{ fontSize: 10, color: gc }}>{s.group}</div>
@@ -2901,7 +2906,7 @@ function PublicSurvey({ surveyId, colegioId }) {
                 const gc = GC[s.group] || "#3b82f6";
                 return (
                   <button key={s.id} onClick={() => toggleSel(q.id, s.id)} style={{
-                    background: on ? gc + "12" : "rgba(18,19,26,0.8)", border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.08)"}`,
+                    background: on ? tint(gc, "12") : "rgba(18,19,26,0.8)", border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.08)"}`,
                     borderRadius: 10, padding: "10px 14px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 10,
                     transition: "all .2s", fontFamily: "inherit",
@@ -2909,7 +2914,7 @@ function PublicSurvey({ surveyId, colegioId }) {
                     <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${on ? gc : "rgba(255,255,255,0.15)"}`, background: on ? gc : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }}>
                       {on && <span style={{ color: "#fff", fontSize: 11, fontWeight: 800 }}>✓</span>}
                     </div>
-                    <div style={{ width: 28, height: 28, borderRadius: 7, background: gc + "18", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, color: gc }}>{s.av}</div>
+                    <div style={{ width: 28, height: 28, borderRadius: 7, background: tint(gc, "18"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, color: gc }}>{s.av}</div>
                     <span style={{ fontSize: 13, color: "#eaedf6", flex: 1, textAlign: "left" }}>{s.name}</span>
                     <span style={{ fontSize: 10, color: gc }}>{s.group}</span>
                   </button>
@@ -2975,7 +2980,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
           {colegios.map((c) => {
             const blocked = suspended(c) && !isSuper;
             return (
-              <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${suspended(c) ? C.amber + "80" : C.border}`, background: C.surface, overflow: "hidden" }}>
+              <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${suspended(c) ? tint(C.amber, "80") : C.border}`, background: C.surface, overflow: "hidden" }}>
                 <button disabled={blocked} onClick={() => onPick(c.id)} style={{ width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: "transparent", color: C.text, cursor: blocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: blocked ? 0.6 : 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id} {suspended(c) && <span style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>· {etiquetaEstado(c.estado).toUpperCase()}</span>}</div>
                   <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
@@ -2989,7 +2994,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                   </div>
                 )}
                 {isSuper && deleting === c.id && (
-                  <div style={{ padding: "10px 14px 14px", borderTop: `1px solid ${C.border}`, background: C.err + "10" }}>
+                  <div style={{ padding: "10px 14px 14px", borderTop: `1px solid ${C.border}`, background: tint(C.err, "10") }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: C.err, marginBottom: 6 }}>Eliminar «{c.nombre || c.id}» para siempre</div>
                     <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 8 }}>Borra estudiantes, grupos, encuestas, respuestas, usuarios y ajustes de este colegio. No se puede deshacer. Si el colegio terminó su contrato, entrégale antes su exportación.</div>
                     <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 11, color: C.t2, marginBottom: 8 }}>
@@ -3377,9 +3382,9 @@ export default function App() {
         select option{background:var(--c-bgSub);color:var(--c-text)}
       `}</style>
 
-      <header style={{ padding: "12px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14, background: `${C.bg}ee`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
+      <header style={{ padding: "12px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14, background: `${tint(C.bg, "ee")}`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
         <Logo size="md" />
-        <div style={{ width: 1, height: 36, background: `linear-gradient(to bottom, transparent, ${C.rx}50, transparent)`, flexShrink: 0 }} />
+        <div style={{ width: 1, height: 36, background: `linear-gradient(to bottom, transparent, ${tint(C.rx, "50")}, transparent)`, flexShrink: 0 }} />
         <SchoolLogo src={school.logo} name={school.nombre} size={44} style={{ boxShadow: `0 0 16px rgba(59,130,246,0.2)` }} />
         {school.nombre && <span style={{ fontSize: 13, fontWeight: 700, color: C.text, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{school.nombre}</span>}
         {(session.isSuper || colegios.length > 1) && <Btn sm v="ghost" onClick={() => chooseColegio(null)}>⇄ Cambiar colegio</Btn>}
@@ -3418,7 +3423,7 @@ export default function App() {
       </header>
 
       {role === "readonly" && (
-        <div style={{ background: C.skyDim, borderBottom: `1px solid ${C.sky}20`, padding: "5px 22px", fontSize: 11, color: C.sky }}>
+        <div style={{ background: C.skyDim, borderBottom: `1px solid ${tint(C.sky, "20")}`, padding: "5px 22px", fontSize: 11, color: C.sky }}>
           👁 Modo solo lectura
         </div>
       )}
@@ -3447,7 +3452,7 @@ export default function App() {
                 { i: "🎯", v: visibleGroups.length, l: "Grupos vis.", c: C.violet },
               ].map((s) => (
                 <Card key={s.l} glow={s.c} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: s.c + "12", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{s.i}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: tint(s.c, "12"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{s.i}</div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
                     <div style={{ fontSize: 9, color: C.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{s.l}</div>
@@ -3463,15 +3468,15 @@ export default function App() {
                     <span style={{ fontSize: 10, color: C.t3 }}>Click en nodo</span>
                     <div style={{ display: "flex", gap: 3, marginLeft: 4 }}>
                       {GROUPS.map((g) => (
-                        <button key={g} onClick={() => toggleGroup(g)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 5, fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${visibleGroups.includes(g) ? GC[g] + "80" : C.border}`, background: visibleGroups.includes(g) ? GC[g] + "18" : "transparent", color: visibleGroups.includes(g) ? GC[g] : C.t3, transition: "all .2s" }}>
-                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: visibleGroups.includes(g) ? GC[g] : C.t3 + "50", display: "inline-block" }} />{g}
+                        <button key={g} onClick={() => toggleGroup(g)} style={{ display: "flex", alignItems: "center", gap: 4, padding: "2px 7px", borderRadius: 5, fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${visibleGroups.includes(g) ? tint(GC[g], "80") : C.border}`, background: visibleGroups.includes(g) ? tint(GC[g], "18") : "transparent", color: visibleGroups.includes(g) ? GC[g] : C.t3, transition: "all .2s" }}>
+                          <span style={{ width: 5, height: 5, borderRadius: "50%", background: visibleGroups.includes(g) ? GC[g] : tint(C.t3, "50"), display: "inline-block" }} />{g}
                         </button>
                       ))}
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 2 }}>
                     {filters.map((f) => (
-                      <button key={f.id} onClick={() => setFilter(f.id)} style={{ padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${filter === f.id ? f.c + "40" : C.border}`, background: filter === f.id ? f.c + "12" : "transparent", color: filter === f.id ? f.c : C.t3, transition: "all .2s" }}>{f.l}</button>
+                      <button key={f.id} title={`${f.id === "all" ? visConns.length : visConns.filter((c) => hasType(c, f.id)).length} conexiones`} onClick={() => setFilter(f.id)} style={{ padding: "3px 9px", borderRadius: 6, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${filter === f.id ? tint(f.c, "40") : C.border}`, background: filter === f.id ? tint(f.c, "12") : "transparent", color: filter === f.id ? f.c : C.t3, transition: "all .2s" }}>{f.l} <span style={{ opacity: 0.7, fontWeight: 500 }}>{f.id === "all" ? visConns.length : visConns.filter((c) => hasType(c, f.id)).length}</span></button>
                     ))}
                   </div>
                 </div>
@@ -3481,7 +3486,14 @@ export default function App() {
                     students={visStudents}
                     conns={visConns}
                   />
-                  <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 8, background: `${C.bg}dd`, padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}` }}>
+                  {filter !== "all" && visConns.filter((c) => hasType(c, filter)).length === 0 && (
+                    <div style={{ position: "absolute", top: 16, left: 0, right: 0, textAlign: "center", pointerEvents: "none" }}>
+                      <span style={{ display: "inline-block", padding: "6px 12px", borderRadius: 8, fontSize: 12, color: C.t2, background: tint(C.bg, "dd"), border: `1px solid ${C.border}` }}>
+                        No hay conexiones {filters.find((f) => f.id === filter).l.toLowerCase()} en los grupos visibles
+                      </span>
+                    </div>
+                  )}
+                  <div style={{ position: "absolute", bottom: 8, left: 8, display: "flex", gap: 8, background: `${tint(C.bg, "dd")}`, padding: "4px 8px", borderRadius: 6, border: `1px solid ${C.border}` }}>
                     {Object.entries(GC).map(([n, c]) => (
                       <button key={n} onClick={() => toggleGroup(n)} style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 9, color: visibleGroups.includes(n) ? C.text : C.t3, cursor: "pointer", background: "transparent", border: "none", fontFamily: "inherit", opacity: visibleGroups.includes(n) ? 1 : 0.45, transition: "all .2s" }}>
                         <span style={{ width: 6, height: 6, borderRadius: 2, background: c, opacity: visibleGroups.includes(n) ? 1 : 0.4 }} />{n}
@@ -3504,7 +3516,7 @@ export default function App() {
                         if (found) setSelNode(found.id);
                       }}
                       style={{ width: "100%", background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 7, padding: "6px 10px 6px 28px", color: C.text, fontSize: 11, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}
-                      onFocus={e => e.target.style.borderColor = C.rx + "60"}
+                      onFocus={e => e.target.style.borderColor = tint(C.rx, "60")}
                       onBlur={e => e.target.style.borderColor = C.border}
                     />
                     <svg style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }} width="11" height="11" viewBox="0 0 24 24" fill="none" stroke={C.t3} strokeWidth="2.5" strokeLinecap="round">

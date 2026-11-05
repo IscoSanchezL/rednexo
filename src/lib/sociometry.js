@@ -44,8 +44,30 @@ export function buildConnections(responses, surveys) {
   }
   return Object.values(acc).map((c) => {
     const tp = Object.entries(c.tpCounts).sort((a, b) => b[1] - a[1])[0][0];
-    return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp };
+    // `tp` es el tipo dominante (el que se dibuja con «Todas»); `types` y `counts` conservan TODOS los tipos que
+    // esa persona marcó para ese compañero, para que ninguno desaparezca al filtrar o al contar.
+    const types = TYPE_ORDER.filter((t) => c.tpCounts[t] > 0);
+    return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp, types, counts: { pos: c.tpCounts.pos, neu: c.tpCounts.neu, neg: c.tpCounts.neg } };
   });
+}
+
+export const TYPE_ORDER = ["pos", "neu", "neg"];
+
+/** ¿Esta conexión incluye el tipo pedido? (también para conexiones antiguas que solo traen `tp`). */
+export function hasType(c, t) {
+  return !!c && (Array.isArray(c.types) ? c.types.includes(t) : c.tp === t);
+}
+
+/** Fuerza (1-3) de la conexión para un tipo: cuántas veces se marcó ese tipo. Sin tipo, la fuerza total. */
+export function strengthOf(c, t) {
+  if (!t || t === "all" || !c.counts) return c.s;
+  return Math.max(1, Math.min(c.counts[t] || 0, 3));
+}
+
+/** Conexiones para dibujar con un filtro: solo las que incluyen ese tipo, y dibujadas COMO de ese tipo. */
+export function filterConns(conns, filter) {
+  if (!filter || filter === "all") return conns;
+  return conns.filter((c) => hasType(c, filter)).map((c) => ({ ...c, tp: filter, s: strengthOf(c, filter) }));
 }
 
 /** Lista mínima de nombres que la encuesta pública necesita (ver firestore.rules). */
