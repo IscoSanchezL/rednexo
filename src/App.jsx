@@ -172,6 +172,8 @@ let GROUPS = ["5° A", "5° B", "6° A"];
 let GC = { "5° A": "#ff4d6a", "5° B": "#2dd4bf", "6° A": "#fbbf24" };
 const GROUP_COLORS = ["#ff4d6a", "#2dd4bf", "#fbbf24", "#a78bfa", "#38bdf8", "#34d399"];
 const DEFAULT_GROUPS = ["5° A", "5° B", "6° A"];
+// Los datos ficticios (initStudents/initConns) solo se muestran con ?demo en la URL, nunca por defecto.
+const IS_DEMO = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
 
 const initActivity = [
   {
@@ -2068,7 +2070,33 @@ function AddQToSurvey({ onAdd }) {
   );
 }
 
+// ════════ ESTADO VACÍO ════════
+
+function EmptyState({ canEdit, onGo }) {
+  return (
+    <div style={{ maxWidth: 520, margin: "60px auto", textAlign: "center", padding: 24 }}>
+      <div style={{ fontSize: 44, marginBottom: 12 }}>🌱</div>
+      <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Aún no hay estudiantes</div>
+      <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 20 }}>
+        {canEdit
+          ? "Crea tus grupos y agrega estudiantes uno por uno o pega una lista completa para importarlos. Cuando apliques una encuesta, aquí verás el sociograma."
+          : "Todavía no se han cargado grupos ni estudiantes. Cuando el psicólogo los cree, aparecerán aquí."}
+      </div>
+      {canEdit && <Btn v="pri" onClick={onGo}>👥 Crear grupos / importar estudiantes</Btn>}
+      <div style={{ fontSize: 11, color: C.t3, marginTop: 18 }}>¿Solo quieres explorar? Agrega <code>?demo</code> al final de la dirección para ver datos ficticios.</div>
+    </div>
+  );
+}
+
 // ════════ SURVEY BUILDER ════════
+
+// Lista mínima (id, nombre, grupo, iniciales) que la encuesta pública necesita para elegir el nombre.
+// Se guarda dentro de la encuesta activa para que quien responde NUNCA lea la colección de estudiantes.
+function buildRoster(sv, students) {
+  const gs = sv.groups?.length > 0 ? sv.groups : sv.group ? [sv.group] : null;
+  const list = students.filter((s) => !gs || gs.includes(s.group)).map((s) => ({ id: String(s.id), name: s.name, group: s.group, av: s.av || "" }));
+  return { roster: list, rosterIds: list.map((s) => s.id) };
+}
 
 function SurveyBuilder({ role, students, GROUPS }) {
   const canEdit = role !== "readonly";
@@ -2118,7 +2146,14 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const deletePermanent = async (id) => {
     try { await deleteDoc(doc(db, "surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
   };
-  const updateSurveyField = async (id, field, value) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, [field]: value } : x))); try { await updateDoc(doc(db, "surveys", id), { [field]: value }); } catch (e) { console.error(e); } };
+  const updateSurveyField = async (id, field, value) => {
+    const cur = surveys.find((x) => x.id === id);
+    const next = { ...cur, [field]: value };
+    // Al activar (o cambiar los grupos de una encuesta activa) se refresca la lista de nombres.
+    const extra = next.status === "active" && (field === "status" || field === "groups" || field === "group") ? buildRoster(next, students) : {};
+    setSurveys((s) => s.map((x) => (x.id === id ? { ...x, [field]: value, ...extra } : x)));
+    try { await updateDoc(doc(db, "surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); }
+  };
   const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(doc(db, "surveys", id), { questions }); } catch (e) { console.error(e); } };
 
   if (executing) return (
@@ -2551,15 +2586,14 @@ function PublicSurvey({ surveyId }) {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [svDoc, stSnap] = await Promise.all([
-          getDoc(doc(db, "surveys", surveyId)),
-          getDocs(collection(db, "students")),
-        ]);
+        // Solo se lee ESTA encuesta (activa); la lista de nombres viaja dentro de ella.
+        const svDoc = await getDoc(doc(db, "surveys", surveyId));
         if (!svDoc.exists()) { setStep("error"); return; }
         const svData = { id: svDoc.id, ...svDoc.data() };
         if (svData.status !== "active") { setStep("error"); return; }
         setSurvey(svData);
-        const stList = stSnap.docs.map(d => d.data());
+        const stList = Array.isArray(svData.roster) ? svData.roster : [];
+        if (stList.length === 0) { setStep("error"); return; }
         setStudents(stList);
         // Inicializar grupos disponibles según config de la encuesta
         const allGs = [...new Set(stList.map(s => s.group))];
@@ -2578,7 +2612,7 @@ function PublicSurvey({ surveyId }) {
 
   const selectRespondent = async (student) => {
     try {
-      const respDoc = await getDoc(doc(db, "responses", `${surveyId}_${student.id}`));
+      const respDoc = await getDoc(doc(db, "responseMarks", `${surveyId}_${student.id}`));
       if (respDoc.exists()) { setRespondent(student); setAlreadyDone(true); setStep("done"); return; }
     } catch (e) { console.log("Verificación omitida"); }
     setRespondent(student); setAnswers({}); setQIdx(0); setStep("answering");
@@ -2597,10 +2631,12 @@ function PublicSurvey({ surveyId }) {
   const submitSurvey = async () => {
     setSaving(true);
     try {
-      await setDoc(doc(db, "responses", `${surveyId}_${respondent.id}`), {
+      const rid = `${surveyId}_${respondent.id}`;
+      await setDoc(doc(db, "responses", rid), {
         surveyId, respondentId: respondent.id, respondentName: respondent.name,
         answers, submittedAt: serverTimestamp(),
       });
+      try { await setDoc(doc(db, "responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
     } catch (e) { alert("Error al guardar. Intenta de nuevo."); }
     setSaving(false);
@@ -2858,28 +2894,28 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [filter, setFilter] = useState("all");
   const [selNode, setSelNode] = useState(null);
-  const [students, setStudents] = useState(initStudents);
+  const [students, setStudents] = useState(IS_DEMO ? initStudents : []);
   const [groups, setGroups] = useState(
-    DEFAULT_GROUPS.map((n, i) => ({ id: "g" + (i + 1), name: n, color: GROUP_COLORS[i] }))
+    IS_DEMO ? DEFAULT_GROUPS.map((n, i) => ({ id: "g" + (i + 1), name: n, color: GROUP_COLORS[i] })) : []
   );
-  const [conns, setConns] = useState(initConns);
+  const [conns, setConns] = useState(IS_DEMO ? initConns : []);
   const [surveys, setSurveys] = useState([]);
   const dynGROUPS = groups.map((g) => g.name);
   const dynGC = Object.fromEntries(groups.map((g) => [g.name, g.color]));
   GROUPS = dynGROUPS;
   GC = dynGC;
-  const [visibleGroups, setVisibleGroups] = useState(DEFAULT_GROUPS.slice());
+  const [visibleGroups, setVisibleGroups] = useState(IS_DEMO ? DEFAULT_GROUPS.slice() : []);
   const toggleGroup = (g) => setVisibleGroups((p) => p.includes(g) ? (p.length > 1 ? p.filter((x) => x !== g) : p) : [...p, g]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } }, (err) => console.log("Grupos offline"));
+    const unsub = onSnapshot(collection(db, "groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } }, (err) => console.log("Grupos offline"));
     return () => unsub();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0) setStudents(data); }, (err) => console.log("Estudiantes offline"));
+    const unsub = onSnapshot(collection(db, "students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) setStudents(data); }, (err) => console.log("Estudiantes offline"));
     return () => unsub();
   }, [user]);
 
@@ -2893,7 +2929,7 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const unsub = onSnapshot(collection(db, "responses"), (snap) => {
-      if (snap.empty) { setConns(initConns); return; }
+      if (snap.empty) { setConns(IS_DEMO ? initConns : []); return; }
       const acc = {};
       snap.docs.forEach((d) => {
         const r = d.data();
@@ -2911,10 +2947,18 @@ export default function App() {
         });
       });
       const built = Object.values(acc).map((c) => { const tp = Object.entries(c.tpCounts).sort((a, b) => b[1] - a[1])[0][0]; return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp }; });
-      setConns(built.length > 0 ? built : initConns);
-    }, () => setConns(initConns));
+      setConns(built.length > 0 || !IS_DEMO ? built : initConns);
+    }, () => setConns(IS_DEMO ? initConns : []));
     return () => unsub();
   }, [user, surveys]);
+
+  // Migración: encuestas activas creadas antes de este cambio no tienen lista de nombres para la encuesta pública.
+  useEffect(() => {
+    if (!user || user.role === "readonly" || students.length === 0) return;
+    surveys.filter((sv) => sv.status === "active" && !sv.deleted && !Array.isArray(sv.rosterIds)).forEach((sv) => {
+      updateDoc(doc(db, "surveys", sv.id), buildRoster(sv, students)).catch(() => {});
+    });
+  }, [user, surveys, students]);
 
   const saveGroup = async (g) => { setGroups((p) => { const ex = p.find((x) => x.id === g.id); return ex ? p.map((x) => (x.id === g.id ? g : x)) : [...p, g]; }); try { await setDoc(doc(db, "groups", g.id), g); } catch (e) { console.log(e); } };
   const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(doc(db, "groups", id)); } catch (e) { console.log(e); } };
@@ -2939,13 +2983,16 @@ export default function App() {
         if (email === ADMIN_EMAIL.toLowerCase()) {
           setUser({ role: "superadmin", email, name: fbUser.displayName || "Super Admin", photo: fbUser.photoURL });
         } else {
+          // Acceso solo con usuario autorizado y activo. Las reglas de Firestore lo vuelven a exigir en el servidor.
+          const deny = async (msg) => { await logout(); setLoginError(msg); setUser(null); };
           try {
             const uDoc = await getDoc(doc(db, "users", email));
-            if (uDoc.exists()) {
-              const data = uDoc.data();
-              if (data.status === "pending") { await logout(); setLoginError("Tu cuenta está pendiente de aprobación."); setUser(null); } else { setUser({ role: data.role || "readonly", email, name: fbUser.displayName || email, photo: fbUser.photoURL }); }
-            } else { setUser({ role: "readonly", email, name: fbUser.displayName || email, photo: fbUser.photoURL }); }
-          } catch (e) { setUser({ role: "readonly", email, name: fbUser.displayName || email, photo: fbUser.photoURL }); }
+            const data = uDoc.exists() ? uDoc.data() : null;
+            if (!data) await deny("Tu correo no está autorizado. Solicita acceso al administrador.");
+            else if (data.status === "pending") await deny("Tu cuenta está pendiente de aprobación.");
+            else if (data.status !== "active") await deny("Tu acceso fue revocado.");
+            else setUser({ role: data.role === "psychologist" ? "psychologist" : "readonly", email, name: fbUser.displayName || email, photo: fbUser.photoURL });
+          } catch (e) { await deny("No se pudo verificar tu acceso. Intenta de nuevo."); }
         }
       } else { setUser(null); }
       setAuthLoading(false);
@@ -3056,7 +3103,8 @@ export default function App() {
       )}
 
       <main style={{ padding: 22, animation: "slideIn .3s ease" }}>
-        {tab === "dashboard" && (() => {
+        {students.length === 0 && ["dashboard", "matrix", "reports"].includes(tab) && <EmptyState canEdit={canEdit} onGo={() => setTab("groups")} />}
+        {students.length > 0 && tab === "dashboard" && (() => {
           // ── Cálculos dinámicos del dashboard ──
           const visStudents = students.filter(s => visibleGroups.includes(s.group));
           const visConns = conns.filter(c => visStudents.some(s => s.id === c.f) && visStudents.some(s => s.id === c.t));
@@ -3202,14 +3250,14 @@ export default function App() {
         })()}
 
         {tab === "surveys" && <SurveyBuilder role={role} students={students} GROUPS={dynGROUPS} />}
-        {tab === "matrix" && <SocioMatrix students={students} conns={conns} />}
+        {students.length > 0 && tab === "matrix" && <SocioMatrix students={students} conns={conns} />}
         {tab === "groups" && (canEdit ? (
           <GroupMgmt students={students} setStudents={setStudents} groups={groups} setGroups={setGroups} GC={dynGC} GROUPS={dynGROUPS} saveStudentFS={saveStudentFS} deleteStudentFS={deleteStudentFS} saveGroupFS={saveGroupFS} deleteGroupFS={deleteGroupFS} canEdit={canEdit} />
         ) : (
           <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
         ))}
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} />}
-        {tab === "reports" && <ReportsPanel students={students} conns={conns} />}
+        {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel />}
       </main>

@@ -1,0 +1,116 @@
+rules_version = '2';
+
+// Reglas de RedNexo. Contienen datos de menores: todo está denegado salvo lo indicado.
+// El rol se valida aquí, en el servidor; la interfaz solo refleja lo que estas reglas permiten.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Identidad y roles ──────────────────────────────────────────
+    function signedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+    function myEmail() {
+      return request.auth.token.email.lower();
+    }
+    // Único superadmin. Para cambiarlo hay que editar y desplegar este archivo.
+    function isSuper() {
+      return signedIn() && myEmail() == 'franksanlo@gmail.com';
+    }
+    function userPath() {
+      return /databases/$(database)/documents/users/$(myEmail());
+    }
+    function isActiveUser() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.status == 'active';
+    }
+    // Lectura: superadmin y cualquier usuario autorizado y activo (psicólogo o solo lectura).
+    function canRead() {
+      return isSuper() || isActiveUser();
+    }
+    // Escritura: superadmin y psicólogos activos. "readonly" nunca escribe.
+    function canWrite() {
+      return isSuper() || (isActiveUser() && get(userPath()).data.role == 'psychologist');
+    }
+
+    // ── Encuesta pública (sin sesión) ──────────────────────────────
+    function surveyPath(id) {
+      return /databases/$(database)/documents/surveys/$(id);
+    }
+    function isOpenSurvey(sv) {
+      return sv.status == 'active' && sv.get('deleted', false) != true;
+    }
+    function validSubmission(rid) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['surveyId', 'respondentId', 'respondentName', 'answers', 'submittedAt'])
+        && d.keys().hasAll(['surveyId', 'respondentId', 'respondentName', 'answers', 'submittedAt'])
+        && d.surveyId is string
+        && exists(surveyPath(d.surveyId))
+        && isOpenSurvey(get(surveyPath(d.surveyId)).data)
+        && rid == d.surveyId + '_' + string(d.respondentId)
+        && string(d.respondentId) in get(surveyPath(d.surveyId)).data.get('rosterIds', [])
+        && d.respondentName is string && d.respondentName.size() <= 120
+        && d.answers is map && d.answers.size() <= 50
+        && d.submittedAt == request.time;
+    }
+    function validMark(rid) {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['surveyId', 'respondentId'])
+        && d.surveyId is string
+        && exists(surveyPath(d.surveyId))
+        && isOpenSurvey(get(surveyPath(d.surveyId)).data)
+        && rid == d.surveyId + '_' + string(d.respondentId)
+        && string(d.respondentId) in get(surveyPath(d.surveyId)).data.get('rosterIds', []);
+    }
+
+    // ── Colecciones ────────────────────────────────────────────────
+    match /users/{email} {
+      allow get: if isSuper() || (signedIn() && email == myEmail());
+      allow list: if isSuper();
+      allow write: if isSuper();
+    }
+
+    match /students/{id} {
+      allow read: if canRead();
+      allow create, update: if canWrite()
+        && request.resource.data.name is string
+        && request.resource.data.group is string;
+      allow delete: if canWrite();
+    }
+
+    match /groups/{id} {
+      allow read: if canRead();
+      allow create, update: if canWrite() && request.resource.data.name is string;
+      allow delete: if canWrite();
+    }
+
+    match /surveys/{id} {
+      // Una persona sin sesión solo puede LEER UNA encuesta activa por su id; nunca listar.
+      allow get: if isOpenSurvey(resource.data) || canRead();
+      allow list: if canRead();
+      allow create, update, delete: if canWrite();
+    }
+
+    match /responses/{rid} {
+      allow read: if canRead();
+      allow create: if validSubmission(rid);   // sin update: una respuesta no se puede sobrescribir
+      allow delete: if isSuper();
+    }
+
+    // Marca vacía que permite a la encuesta pública saber si alguien ya respondió, sin leer respuestas.
+    match /responseMarks/{rid} {
+      allow get: if true;
+      allow list: if canRead();
+      allow create: if validMark(rid);
+      allow delete: if isSuper();
+    }
+
+    match /activity/{id} {
+      allow read, delete: if isSuper();
+      allow create: if canWrite();
+    }
+
+    match /settings/{id} {
+      allow read: if canRead();
+      allow write: if isSuper();
+    }
+  }
+}
