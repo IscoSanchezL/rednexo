@@ -1,20 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { initials, parseBulkStudents, density, buildConnections, buildRoster } from "./lib/sociometry";
-import {
-  collection,
-  doc,
-  getDoc,
-  getDocs,
-  setDoc,
-  deleteDoc,
-  onSnapshot,
-  updateDoc,
-  serverTimestamp,
-  query,
-  orderBy,
-} from "firebase/firestore";
+import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField } from "firebase/firestore";
 
 // ═══════════════════════════════════════
 // REDNEXO — Inteligencia Sociométrica
@@ -111,7 +100,17 @@ if (typeof document !== "undefined" && !document.getElementById("rn-theme-vars")
   document.head.appendChild(st);
 }
 
+// ── Colegio activo: todos los datos viven en colegios/{id}/... (ver firestore.rules) ──
+let CID = null;
+let SCHOOL = { nombre: "", logo: "" };
+const setCurrentColegio = (id) => { CID = id; };
+const ccol = (name) => collection(db, "colegios", CID, name);
+const cdoc = (name, id) => doc(db, "colegios", CID, name, id);
+// Lo que la encuesta pública necesita (lista de nombres y marca del colegio) viaja dentro de la encuesta activa.
+const publicSurveyInfo = (sv, students) => ({ ...buildRoster(sv, students), colegioNombre: SCHOOL.nombre || "", ...(SCHOOL.logo ? { logo: SCHOOL.logo } : {}) });
+
 const ROLES = {
+  admin: { label: "Administrador", color: C.rx, icon: "🏫", desc: "Gestiona su colegio" },
   superadmin: {
     label: "Super Admin",
     color: C.rx,
@@ -627,7 +626,6 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
             ))}
           </div>
           <div style={{ marginTop: 28, display: "flex", alignItems: "center", gap: 14 }}>
-            <SchoolLogo size={44} style={{ boxShadow: "0 0 24px rgba(59,130,246,0.25), 0 6px 20px rgba(0,0,0,0.4)" }} />
             <span style={{ fontSize: 11, color: "#555770", textTransform: "uppercase", letterSpacing: "1.5px" }}>Plataforma institucional</span>
           </div>
         </div>
@@ -851,7 +849,7 @@ function UsersPanel({ authorizeUser, revokeUser }) {
   const [msg, setMsg] = useState("");
 
   useEffect(() => {
-    const q = query(collection(db, "users"), orderBy("email"));
+    const q = query(ccol("miembros"), orderBy("email"));
     const unsub = onSnapshot(q, (snap) => { setUsers(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); }, (err) => console.log("Users listener error", err));
     return () => unsub();
   }, []);
@@ -874,8 +872,8 @@ function UsersPanel({ authorizeUser, revokeUser }) {
     setTimeout(() => setMsg(""), 3000);
   };
 
-  const roleColor = { superadmin: C.rx, psychologist: C.violet, readonly: C.sky };
-  const roleLabel = { superadmin: "⚡ Super Admin", psychologist: "🧠 Psicólogo", readonly: "👤 Estándar" };
+  const roleColor = { superadmin: C.rx, admin: C.rx, psychologist: C.violet, readonly: C.sky };
+  const roleLabel = { superadmin: "⚡ Super Admin", admin: "🏫 Administrador", psychologist: "🧠 Psicólogo", readonly: "👤 Solo lectura" };
   const activeUsers = users.filter((u) => u.status === "active");
   const revokedUsers = users.filter((u) => u.status === "revoked");
 
@@ -893,7 +891,7 @@ function UsersPanel({ authorizeUser, revokeUser }) {
           <div style={{ fontSize: 11, color: C.t2, marginBottom: 14 }}>Ingresa el correo Google del usuario y asigna su rol</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
             <Inp label="Correo Google" value={newEmail} onChange={setNewEmail} placeholder="correo@gmail.com" />
-            <Sel label="Rol" value={newRole} onChange={setNewRole} options={[{ v: "psychologist", l: "🧠 Psicólogo Escolar" }, { v: "readonly", l: "👤 Solo Lectura" }]} />
+            <Sel label="Rol" value={newRole} onChange={setNewRole} options={[{ v: "psychologist", l: "🧠 Psicólogo Escolar" }, { v: "readonly", l: "👤 Solo Lectura" }, { v: "admin", l: "🏫 Administrador del colegio" }]} />
           </div>
           <Btn v="sec" onClick={authorize} disabled={saving || !newEmail.trim() || !newEmail.includes("@")} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
             {saving ? "Guardando..." : "✓ Autorizar acceso"}
@@ -1988,7 +1986,7 @@ function ActivityLog() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(query(collection(db, "activity"), orderBy("createdAt", "desc")),
+    const unsub = onSnapshot(query(ccol("activity"), orderBy("createdAt", "desc")),
       (snap) => { if (snap.empty) { setLog([]); } else { setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); } setLoading(false); },
       (err) => { console.log("Activity offline:", err); setLog([]); setLoading(false); }
     );
@@ -1998,8 +1996,8 @@ function ActivityLog() {
   const clear = async () => {
     setConfirming(false);
     try {
-      const snap = await getDocs(collection(db, "activity"));
-      await Promise.all(snap.docs.map((d) => deleteDoc(doc(db, "activity", d.id))));
+      const snap = await getDocs(ccol("activity"));
+      await Promise.all(snap.docs.map((d) => deleteDoc(cdoc("activity", d.id))));
     } catch (e) { console.error("Error vaciando actividad:", e); }
     setLog([]);
   };
@@ -2096,7 +2094,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const [nQ, setNQ] = useState({ text: "", tp: "pos" });
 
   useEffect(() => {
-    const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
+    const q = query(ccol("surveys"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => { setSurveys(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoadingS(false); }, (err) => { console.log("Surveys offline:", err); setLoadingS(false); });
     return () => unsub();
   }, []);
@@ -2109,7 +2107,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const forFirestore = { ...nS, id, status: "draft", createdAt: serverTimestamp() };
     const forLocal = { ...nS, id, status: "draft", createdAt: new Date().toISOString() };
     try {
-      await setDoc(doc(db, "surveys", id), forFirestore);
+      await setDoc(cdoc("surveys", id), forFirestore);
       setMsg("✅ Encuesta guardada en Firebase");
     } catch (e) {
       console.error("Error guardando encuesta:", e);
@@ -2123,26 +2121,26 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
   const deleteSurvey = async (id) => {
     try {
-      await updateDoc(doc(db, "surveys", id), { deleted: true, deletedAt: serverTimestamp() });
+      await updateDoc(cdoc("surveys", id), { deleted: true, deletedAt: serverTimestamp() });
     } catch (e) { setSurveys((s) => s.map((x) => x.id === id ? { ...x, deleted: true } : x)); }
   };
   const restoreSurvey = async (id) => {
     try {
-      await updateDoc(doc(db, "surveys", id), { deleted: false, deletedAt: null });
+      await updateDoc(cdoc("surveys", id), { deleted: false, deletedAt: null });
     } catch (e) { setSurveys((s) => s.map((x) => x.id === id ? { ...x, deleted: false } : x)); }
   };
   const deletePermanent = async (id) => {
-    try { await deleteDoc(doc(db, "surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
+    try { await deleteDoc(cdoc("surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
   };
   const updateSurveyField = async (id, field, value) => {
     const cur = surveys.find((x) => x.id === id);
     const next = { ...cur, [field]: value };
     // Al activar (o cambiar los grupos de una encuesta activa) se refresca la lista de nombres.
-    const extra = next.status === "active" && (field === "status" || field === "groups" || field === "group") ? buildRoster(next, students) : {};
+    const extra = next.status === "active" && (field === "status" || field === "groups" || field === "group") ? publicSurveyInfo(next, students) : {};
     setSurveys((s) => s.map((x) => (x.id === id ? { ...x, [field]: value, ...extra } : x)));
-    try { await updateDoc(doc(db, "surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); }
+    try { await updateDoc(cdoc("surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); }
   };
-  const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(doc(db, "surveys", id), { questions }); } catch (e) { console.error(e); } };
+  const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(cdoc("surveys", id), { questions }); } catch (e) { console.error(e); } };
 
   if (executing) return (
     <div style={{ maxWidth: 540, margin: "0 auto", animation: "slideIn .3s ease" }}>
@@ -2288,7 +2286,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             </div>
             <div style={{ display: "flex", gap: 6 }}>
               <Btn sm v="ok" onClick={() => setExecuting(sv.id)}>▶ Ejecutar</Btn>
-              <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
+              <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
             </div>
           </div>
@@ -2482,19 +2480,26 @@ function ReportsPanel({ students, conns }) {
 // ════════ SETTINGS PANEL ════════
 
 function SettingsPanel() {
-  const [cfg, setCfg] = useState({ colegio: "Colegio Demo", ciudad: "Bogotá", periodo: "2026-1", dominio: "colegio.edu", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logoUrl: "", idioma: "es" });
+  const [cfg, setCfg] = useState({ colegio: "", ciudad: "", periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "settings", "global"), (snap) => { if (snap.exists()) { setCfg((prev) => ({ ...prev, ...snap.data() })); } setLoading(false); }, (err) => { console.log("Settings offline:", err); setLoading(false); });
+    const unsub = onSnapshot(cdoc("settings", "global"), (snap) => { if (snap.exists()) { setCfg((prev) => ({ ...prev, ...snap.data() })); } setLoading(false); }, (err) => { console.log("Settings offline:", err); setLoading(false); });
     return () => unsub();
   }, []);
 
   const upd = (k, v) => { setCfg((p) => ({ ...p, [k]: v })); setDirty(true); setSaved(false); };
   const save = async () => {
-    try { await setDoc(doc(db, "settings", "global"), { ...cfg, updatedAt: serverTimestamp() }); setSaved(true); setDirty(false); setTimeout(() => setSaved(false), 3000); } catch (e) { console.error(e); }
+    try {
+      await setDoc(cdoc("settings", "global"), { ...cfg, updatedAt: serverTimestamp() });
+      // La encuesta pública no puede leer los ajustes: se copian el nombre y el logo a las encuestas activas.
+      try {
+        const act = await getDocs(query(ccol("surveys"), where("status", "==", "active")));
+        await Promise.all(act.docs.map((d) => updateDoc(d.ref, { colegioNombre: cfg.colegio || "", logo: cfg.logo || deleteField() })));
+      } catch (e) { console.log("No se pudieron actualizar encuestas activas", e); }
+      setSaved(true); setDirty(false); setTimeout(() => setSaved(false), 3000); } catch (e) { console.error(e); }
   };
 
   return (
@@ -2513,13 +2518,13 @@ function SettingsPanel() {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Inp label="Colegio" value={cfg.colegio} onChange={(v) => upd("colegio", v)} placeholder="Nombre del colegio" />
             <Inp label="Ciudad" value={cfg.ciudad} onChange={(v) => upd("ciudad", v)} placeholder="Ciudad" />
-            <Sel label="Período" value={cfg.periodo} onChange={(v) => upd("periodo", v)} options={[{ v: "2026-1", l: "2026 — Sem. 1" }, { v: "2026-2", l: "2026 — Sem. 2" }, { v: "2025-2", l: "2025 — Sem. 2" }, { v: "2025-1", l: "2025 — Sem. 1" }]} />
+            <Sel label="Período" value={cfg.periodo} onChange={(v) => upd("periodo", v)} options={[{ v: "", l: "Sin definir" }, { v: "2026-1", l: "2026 — Sem. 1" }, { v: "2026-2", l: "2026 — Sem. 2" }, { v: "2025-2", l: "2025 — Sem. 2" }, { v: "2025-1", l: "2025 — Sem. 1" }]} />
           </div>
         </Card>
         <Card glow={C.teal}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.teal }}>🔐 Seguridad</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Sel label="Dominio Google permitido" value={cfg.dominio} onChange={(v) => upd("dominio", v)} options={[{ v: "colegio.edu", l: "@colegio.edu" }, { v: "edu.co", l: "@edu.co" }, { v: "all", l: "Cualquier correo" }]} />
+            <Sel label="Dominio Google permitido" value={cfg.dominio} onChange={(v) => upd("dominio", v)} options={[{ v: "all", l: "Cualquier correo" }, { v: "edu.co", l: "@edu.co" }]} />
             <Sel label="Registro de nuevos usuarios" value={cfg.registro} onChange={(v) => upd("registro", v)} options={[{ v: "no", l: "Solo invitación (recomendado)" }, { v: "approval", l: "Libre con aprobación admin" }, { v: "yes", l: "Completamente abierto" }]} />
           </div>
         </Card>
@@ -2533,8 +2538,15 @@ function SettingsPanel() {
         <Card glow={C.violet}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.violet }}>🎨 Marca</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Inp label="URL del logo" value={cfg.logoUrl} onChange={(v) => upd("logoUrl", v)} placeholder="https://tu-colegio.edu/logo.png" />
-            {cfg.logoUrl && (<div style={{ display: "flex", justifyContent: "center", padding: 8, background: C.surface, borderRadius: 8, border: `1px solid ${C.border}` }}><img src={cfg.logoUrl} alt="logo" style={{ maxHeight: 48, maxWidth: "100%", objectFit: "contain" }} onError={(e) => (e.target.style.display = "none")} /></div>)}
+            <div>
+              <div style={{ fontSize: 11, color: C.t2, marginBottom: 6 }}>Logo del colegio</div>
+              {cfg.logo && (<div style={{ display: "flex", justifyContent: "center", padding: 8, background: C.surface, borderRadius: 8, border: `1px solid ${C.border}`, marginBottom: 8 }}><img src={cfg.logo} alt="Logo del colegio" style={{ maxHeight: 64, maxWidth: "100%", objectFit: "contain" }} /></div>)}
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <input type="file" accept="image/png,image/jpeg,image/webp" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { upd("logo", await resizeLogo(f)); } catch (err) { alert("No se pudo leer la imagen. Prueba con otro archivo PNG o JPG."); } e.target.value = ""; }} style={{ fontSize: 11, color: C.t2, maxWidth: "100%" }} />
+                {cfg.logo && <Btn sm v="ghost" onClick={() => upd("logo", "")}>Quitar</Btn>}
+              </div>
+              <div style={{ fontSize: 10, color: C.t3, marginTop: 6 }}>Se redimensiona automáticamente. Aparece en la cabecera y en las encuestas de este colegio.</div>
+            </div>
             <Sel label="Idioma de la interfaz" value={cfg.idioma} onChange={(v) => upd("idioma", v)} options={[{ v: "es", l: "Español" }, { v: "en", l: "English" }]} />
           </div>
         </Card>
@@ -2547,19 +2559,38 @@ function SettingsPanel() {
 // ════════ PUBLIC SURVEY ════════
 
 // ════════ LOGO DEL COLEGIO ════════
-const GI_SCHOOL_LOGO = "data:image/png;base64,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";
+// El logo de cada colegio vive en sus ajustes (colegios/{id}/settings/global.logo); no hay ninguno incrustado en el código.
 
-function SchoolLogo({ size = 40, style = {} }) {
+/** Reduce la imagen a un máximo de 256 px y la devuelve como data URL (cabe en los límites de las reglas). */
+function resizeLogo(file, max = 256) {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      const k = Math.min(1, max / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * k)); c.height = Math.max(1, Math.round(img.height * k));
+      c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/webp", 0.85));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("imagen inválida")); };
+    img.src = url;
+  });
+}
+
+function SchoolLogo({ src, name = "", size = 40, style = {} }) {
+  if (!src) return null;
   return (
     <img
-      src={GI_SCHOOL_LOGO}
-      alt="GI School"
+      src={src}
+      alt={name || "Logo del colegio"}
       style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", border: "2px solid rgba(255,255,255,0.15)", flexShrink: 0, ...style }}
     />
   );
 }
 
-function PublicSurvey({ surveyId }) {
+function PublicSurvey({ surveyId, colegioId }) {
   const [survey, setSurvey] = useState(null);
   const [students, setStudents] = useState([]);
   const [step, setStep] = useState("loading");
@@ -2574,8 +2605,10 @@ function PublicSurvey({ surveyId }) {
   useEffect(() => {
     const loadData = async () => {
       try {
+        if (!colegioId || !surveyId) { setStep("error"); return; }
+        setCurrentColegio(colegioId);
         // Solo se lee ESTA encuesta (activa); la lista de nombres viaja dentro de ella.
-        const svDoc = await getDoc(doc(db, "surveys", surveyId));
+        const svDoc = await getDoc(cdoc("surveys", surveyId));
         if (!svDoc.exists()) { setStep("error"); return; }
         const svData = { id: svDoc.id, ...svDoc.data() };
         if (svData.status !== "active") { setStep("error"); return; }
@@ -2592,7 +2625,7 @@ function PublicSurvey({ surveyId }) {
       } catch (e) { setStep("error"); }
     };
     loadData();
-  }, [surveyId]);
+  }, [surveyId, colegioId]);
 
   const toggleGroup = (g) => setSelectedGroups(p =>
     p.includes(g) ? (p.length > 1 ? p.filter(x => x !== g) : p) : [...p, g]
@@ -2600,7 +2633,7 @@ function PublicSurvey({ surveyId }) {
 
   const selectRespondent = async (student) => {
     try {
-      const respDoc = await getDoc(doc(db, "responseMarks", `${surveyId}_${student.id}`));
+      const respDoc = await getDoc(cdoc("responseMarks", `${surveyId}_${student.id}`));
       if (respDoc.exists()) { setRespondent(student); setAlreadyDone(true); setStep("done"); return; }
     } catch (e) { console.log("Verificación omitida"); }
     setRespondent(student); setAnswers({}); setQIdx(0); setStep("answering");
@@ -2620,11 +2653,11 @@ function PublicSurvey({ surveyId }) {
     setSaving(true);
     try {
       const rid = `${surveyId}_${respondent.id}`;
-      await setDoc(doc(db, "responses", rid), {
+      await setDoc(cdoc("responses", rid), {
         surveyId, respondentId: respondent.id, respondentName: respondent.name,
         answers, submittedAt: serverTimestamp(),
       });
-      try { await setDoc(doc(db, "responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
+      try { await setDoc(cdoc("responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
     } catch (e) { alert("Error al guardar. Intenta de nuevo."); }
     setSaving(false);
@@ -2641,7 +2674,7 @@ function PublicSurvey({ surveyId }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       {bg}
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 14 }}>
-        <SchoolLogo size={44} />
+        <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={44} />
         <Logo size="md" />
       </div>
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, color: "#9498ae", fontSize: 13 }}>
@@ -2702,7 +2735,7 @@ function PublicSurvey({ surveyId }) {
 
           {/* Header con logos */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, padding: "12px 16px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(59,130,246,0.15)" }}>
-            <SchoolLogo size={48} />
+            <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={48} />
             <Logo size="md" />
           </div>
 
@@ -2786,7 +2819,7 @@ function PublicSurvey({ surveyId }) {
 
           {/* Header mini con logos */}
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "8px 14px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, border: "1px solid rgba(59,130,246,0.12)" }}>
-            <SchoolLogo size={34} />
+            <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={34} />
             <Logo size="sm" />
           </div>
 
@@ -2862,9 +2895,62 @@ function PublicSurvey({ surveyId }) {
 
 // ════════ MAIN APP ════════
 
+// ════════ SELECTOR DE COLEGIO ════════
+
+function SchoolPicker({ session, colegios, onPick, onCreate, onMigrate, onLogout, busy, msg }) {
+  const [nombre, setNombre] = useState("");
+  const [ciudad, setCiudad] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const isSuper = session.isSuper;
+  const hasLegacy = colegios.some((c) => c.id === LEGACY_COLEGIO_ID);
+  return (
+    <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
+      <div style={{ width: "100%", maxWidth: 560 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+          <Logo size="md" />
+          <Btn sm v="ghost" onClick={onLogout}>Salir</Btn>
+        </div>
+        <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Elige tu colegio</div>
+        <div style={{ fontSize: 12, color: C.t2, marginBottom: 16 }}>{session.email}</div>
+        {msg && <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: C.surface, border: `1px solid ${C.border}` }}>{msg}</div>}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+          {colegios.length === 0 && <div style={{ fontSize: 13, color: C.t2 }}>{isSuper ? "Todavía no hay colegios. Crea el primero o importa los datos existentes." : "Tu correo no pertenece a ningún colegio activo."}</div>}
+          {colegios.map((c) => (
+            <button key={c.id} onClick={() => onPick(c.id)} style={{ textAlign: "left", padding: "12px 14px", borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface, color: C.text, cursor: "pointer", fontFamily: "inherit" }}>
+              <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id}</div>
+              <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
+            </button>
+          ))}
+        </div>
+        {isSuper && (
+          <>
+            <Card glow={C.violet}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: C.violet }}>➕ Crear colegio</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
+                <Inp label="Nombre del colegio" value={nombre} onChange={setNombre} placeholder="Colegio San José" />
+                <Inp label="Ciudad" value={ciudad} onChange={setCiudad} placeholder="Ciudad" />
+                <Inp label="Correo del administrador del colegio (opcional)" value={adminEmail} onChange={setAdminEmail} placeholder="admin@colegio.edu.co" />
+              </div>
+              <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase() }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
+            </Card>
+            <Card style={{ marginTop: 14 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Importar datos existentes</div>
+              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>
+                Copia los estudiantes, grupos, encuestas, respuestas, actividad, ajustes y usuarios que ya tenías al colegio «{LEGACY_COLEGIO_ID}». <b>No borra nada</b> de lo anterior y se puede repetir sin duplicar datos.
+              </div>
+              <Btn v="sec" disabled={busy} onClick={() => { if (window.confirm(hasLegacy ? "Ya existe el colegio inicial. ¿Volver a copiar los datos existentes? (no duplica ni borra)" : "¿Copiar los datos existentes al colegio inicial? No se borra nada.")) onMigrate(); }} style={{ width: "100%", justifyContent: "center" }}>{busy ? "Trabajando..." : "📦 Importar datos existentes"}</Btn>
+            </Card>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   // ── Detectar encuesta pública PRIMERO con estado (no early return antes de hooks) ──
-  const [publicSurveyId] = useState(() => new URLSearchParams(window.location.search).get("survey"));
+  // ?c=COLEGIO&survey=ID (sin c → colegio inicial, para los enlaces anteriores)
+  const [publicSurvey] = useState(() => (new URLSearchParams(window.location.search).has("survey") ? (parsePublicSurveyUrl(window.location.search) || { invalid: true }) : null));
 
   // ── TEMA ──────────────────────────────────────────────────
   const [isDark, setIsDark] = useState(() => {
@@ -2877,7 +2963,17 @@ export default function App() {
     else { document.documentElement.classList.add("light"); localStorage.setItem("rednexo-theme", "light"); }
   }, [isDark]);
 
-  const [user, setUser] = useState(null);
+  // session: quién es (Google) y a qué colegios pertenece. user: sesión + colegio elegido + rol en ese colegio.
+  const [session, setSession] = useState(null);
+  const [colegios, setColegios] = useState([]);
+  const [colegioId, setColegioId] = useState(null);
+  const [pickerBusy, setPickerBusy] = useState(false);
+  const [pickerMsg, setPickerMsg] = useState("");
+  const [school, setSchool] = useState({ nombre: "", logo: "", loaded: false });
+  const current = colegios.find((c) => c.id === colegioId);
+  const userRole = session ? (session.isSuper ? "superadmin" : current?.role) : null;
+  const user = useMemo(() => (session && colegioId && userRole ? { role: userRole, email: session.email, name: session.name, photo: session.photo } : null), [session, colegioId, userRole]);
+  setCurrentColegio(colegioId);
   const [authView, setAuthView] = useState("login");
   const [tab, setTab] = useState("dashboard");
   const [filter, setFilter] = useState("all");
@@ -2897,26 +2993,26 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } }, (err) => console.log("Grupos offline"));
+    const unsub = onSnapshot(ccol("groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } }, (err) => console.log("Grupos offline"));
     return () => unsub();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) setStudents(data); }, (err) => console.log("Estudiantes offline"));
+    const unsub = onSnapshot(ccol("students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) setStudents(data); }, (err) => console.log("Estudiantes offline"));
     return () => unsub();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    const q = query(collection(db, "surveys"), orderBy("createdAt", "desc"));
+    const q = query(ccol("surveys"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => { setSurveys(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); }, () => {});
     return () => unsub();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(collection(db, "responses"), (snap) => {
+    const unsub = onSnapshot(ccol("responses"), (snap) => {
       if (snap.empty) { setConns(IS_DEMO ? initConns : []); return; }
       const built = buildConnections(snap.docs.map((d) => d.data()), surveys);
       setConns(built.length > 0 || !IS_DEMO ? built : initConns);
@@ -2924,53 +3020,129 @@ export default function App() {
     return () => unsub();
   }, [user, surveys]);
 
-  // Migración: encuestas activas creadas antes de este cambio no tienen lista de nombres para la encuesta pública.
+  // Al cambiar de colegio no deben quedar datos del anterior en pantalla.
   useEffect(() => {
-    if (!user || user.role === "readonly" || students.length === 0) return;
-    surveys.filter((sv) => sv.status === "active" && !sv.deleted && !Array.isArray(sv.rosterIds)).forEach((sv) => {
-      updateDoc(doc(db, "surveys", sv.id), buildRoster(sv, students)).catch(() => {});
-    });
-  }, [user, surveys, students]);
+    setStudents(IS_DEMO ? initStudents : []); setGroups([]); setConns(IS_DEMO ? initConns : []); setSurveys([]); setTab("dashboard");
+    setSchool({ nombre: "", logo: "", loaded: false }); SCHOOL = { nombre: "", logo: "" };
+  }, [colegioId]);
 
-  const saveGroup = async (g) => { setGroups((p) => { const ex = p.find((x) => x.id === g.id); return ex ? p.map((x) => (x.id === g.id ? g : x)) : [...p, g]; }); try { await setDoc(doc(db, "groups", g.id), g); } catch (e) { console.log(e); } };
-  const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(doc(db, "groups", id)); } catch (e) { console.log(e); } };
-  const saveStudent = async (s) => { const sid = s.id.toString(); setStudents((p) => { const ex = p.find((x) => x.id === s.id); return ex ? p.map((x) => (x.id === s.id ? s : x)) : [...p, s]; }); try { await setDoc(doc(db, "students", sid), { ...s, id: sid }); } catch (e) { console.log(e); } };
-  const deleteStudent = async (id) => { setStudents((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(doc(db, "students", id.toString())); } catch (e) { console.log(e); } };
-  const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(doc(db, "users", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); return true; } catch (e) { return false; } };
-  const revokeUser = async (email) => { try { await updateDoc(doc(db, "users", email.toLowerCase()), { status: "revoked", role: "readonly" }); return true; } catch (e) { return false; } };
-  const saveStudentFS = async (s) => { try { await setDoc(doc(db, "students", String(s.id)), s); } catch (e) {} };
-  const deleteStudentFS = async (id) => { try { await deleteDoc(doc(db, "students", String(id))); } catch (e) {} };
-  const saveGroupFS = async (g) => { try { await setDoc(doc(db, "groups", g.id), g); } catch (e) {} };
-  const deleteGroupFS = async (id) => { try { await deleteDoc(doc(db, "groups", id)); } catch (e) {} };
+  // Nombre y logo del colegio actual (para la cabecera y para copiarlos a las encuestas activas).
+  useEffect(() => {
+    if (!user) return;
+    const unsub = onSnapshot(cdoc("settings", "global"), (snap) => {
+      const d = snap.exists() ? snap.data() : {};
+      const nombre = d.colegio || current?.nombre || "";
+      SCHOOL = { nombre, logo: d.logo || "" };
+      setSchool({ nombre, logo: d.logo || "", loaded: true });
+    }, () => setSchool((p) => ({ ...p, loaded: true })));
+    return () => unsub();
+  }, [user]);
+
+  // Encuestas activas sin lista de nombres o sin marca del colegio (anteriores a este modelo): se completan una vez.
+  useEffect(() => {
+    if (!user || user.role === "readonly" || students.length === 0 || !school.loaded) return;
+    surveys.filter((sv) => sv.status === "active" && !sv.deleted && (!Array.isArray(sv.rosterIds) || sv.colegioNombre === undefined)).forEach((sv) => {
+      updateDoc(cdoc("surveys", sv.id), publicSurveyInfo(sv, students)).catch(() => {});
+    });
+  }, [user, surveys, students, school.loaded]);
+
+  const saveGroup = async (g) => { setGroups((p) => { const ex = p.find((x) => x.id === g.id); return ex ? p.map((x) => (x.id === g.id ? g : x)) : [...p, g]; }); try { await setDoc(cdoc("groups", g.id), g); } catch (e) { console.log(e); } };
+  const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("groups", id)); } catch (e) { console.log(e); } };
+  const saveStudent = async (s) => { const sid = s.id.toString(); setStudents((p) => { const ex = p.find((x) => x.id === s.id); return ex ? p.map((x) => (x.id === s.id ? s : x)) : [...p, s]; }); try { await setDoc(cdoc("students", sid), { ...s, id: sid }); } catch (e) { console.log(e); } };
+  const deleteStudent = async (id) => { setStudents((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("students", id.toString())); } catch (e) { console.log(e); } };
+  const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(cdoc("miembros", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); return true; } catch (e) { return false; } };
+  const revokeUser = async (email) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "revoked", role: "readonly" }); return true; } catch (e) { return false; } };
+  const saveStudentFS = async (s) => { try { await setDoc(cdoc("students", String(s.id)), s); } catch (e) {} };
+  const deleteStudentFS = async (id) => { try { await deleteDoc(cdoc("students", String(id))); } catch (e) {} };
+  const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); } catch (e) {} };
+  const deleteGroupFS = async (id) => { try { await deleteDoc(cdoc("groups", id)); } catch (e) {} };
 
   const ADMIN_EMAIL = "franksanlo@gmail.com";
   const [authLoading, setAuthLoading] = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError, setLoginError] = useState("");
 
+  // Quién es la persona y a qué colegios pertenece. Las reglas de Firestore validan todo esto de nuevo en el servidor.
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (fbUser) => {
-      if (fbUser) {
-        const email = fbUser.email.toLowerCase().trim();
-        if (email === ADMIN_EMAIL.toLowerCase()) {
-          setUser({ role: "superadmin", email, name: fbUser.displayName || "Super Admin", photo: fbUser.photoURL });
+      if (!fbUser) { setSession(null); setColegios([]); setColegioId(null); setAuthLoading(false); return; }
+      const email = fbUser.email.toLowerCase().trim();
+      const isSuper = email === ADMIN_EMAIL.toLowerCase();
+      const deny = async (msg) => { await logout(); setLoginError(msg); setSession(null); setColegios([]); setColegioId(null); };
+      try {
+        let list;
+        if (isSuper) {
+          const snap = await getDocs(collection(db, "colegios"));
+          list = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id }));
         } else {
-          // Acceso solo con usuario autorizado y activo. Las reglas de Firestore lo vuelven a exigir en el servidor.
-          const deny = async (msg) => { await logout(); setLoginError(msg); setUser(null); };
-          try {
-            const uDoc = await getDoc(doc(db, "users", email));
-            const data = uDoc.exists() ? uDoc.data() : null;
-            if (!data) await deny("Tu correo no está autorizado. Solicita acceso al administrador.");
-            else if (data.status === "pending") await deny("Tu cuenta está pendiente de aprobación.");
-            else if (data.status !== "active") await deny("Tu acceso fue revocado.");
-            else setUser({ role: data.role === "psychologist" ? "psychologist" : "readonly", email, name: fbUser.displayName || email, photo: fbUser.photoURL });
-          } catch (e) { await deny("No se pudo verificar tu acceso. Intenta de nuevo."); }
+          const snap = await getDocs(query(collectionGroup(db, "miembros"), where("email", "==", email)));
+          const mine = snap.docs.map((d) => ({ id: d.ref.parent.parent.id, ...d.data() }));
+          const act = mine.filter((m) => m.status === "active" && ["admin", "psychologist", "readonly"].includes(m.role));
+          if (mine.length > 0 && act.length === 0) { await deny(mine.some((m) => m.status === "pending") ? "Tu cuenta está pendiente de aprobación." : "Tu acceso fue revocado."); setAuthLoading(false); return; }
+          list = await Promise.all(act.map(async (m) => { let nombre = m.id; try { const c = await getDoc(doc(db, "colegios", m.id)); if (c.exists()) nombre = c.data().nombre || m.id; } catch (e) {} return { id: m.id, nombre, role: m.role }; }));
+          if (list.length === 0) { await deny("Tu correo no está autorizado en ningún colegio. Solicita acceso al administrador."); setAuthLoading(false); return; }
         }
-      } else { setUser(null); }
+        setColegios(list);
+        setSession({ email, isSuper, name: fbUser.displayName || email, photo: fbUser.photoURL });
+        let last = null; try { last = localStorage.getItem("rn_colegio"); } catch (e) {}
+        const pick = list.length === 1 ? list[0].id : (list.find((c) => c.id === last)?.id || null);
+        setColegioId(pick);
+      } catch (e) { await deny("No se pudo verificar tu acceso. Intenta de nuevo."); }
       setAuthLoading(false);
     });
     return () => unsub();
   }, []);
+
+  const chooseColegio = (id) => { try { if (id) localStorage.setItem("rn_colegio", id); } catch (e) {} setColegioId(id); };
+  const doLogout = () => { logout(); setSession(null); setColegios([]); setColegioId(null); };
+
+  const reloadColegios = async () => {
+    const snap = await getDocs(collection(db, "colegios"));
+    setColegios(snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id })));
+  };
+
+  const createColegio = async ({ nombre, ciudad, adminEmail }) => {
+    const id = slugify(nombre);
+    if (!id) return false;
+    setPickerBusy(true); setPickerMsg("");
+    try {
+      if ((await getDoc(doc(db, "colegios", id))).exists()) { setPickerMsg("❌ Ya existe un colegio con ese nombre."); setPickerBusy(false); return false; }
+      const batch = writeBatch(db);
+      batch.set(doc(db, "colegios", id), { nombre, ciudad, createdAt: serverTimestamp() });
+      batch.set(doc(db, "colegios", id, "settings", "global"), { colegio: nombre, ciudad, periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
+      if (adminEmail.includes("@")) batch.set(doc(db, "colegios", id, "miembros", adminEmail), { email: adminEmail, role: "admin", status: "active", createdAt: serverTimestamp() });
+      await batch.commit();
+      await reloadColegios();
+      setPickerMsg(`✅ Colegio «${nombre}» creado.`);
+      setPickerBusy(false); return true;
+    } catch (e) { setPickerMsg("❌ No se pudo crear el colegio: " + e.message); setPickerBusy(false); return false; }
+  };
+
+  // Copia (sin borrar nada) las colecciones globales anteriores al colegio inicial.
+  const migrateLegacy = async () => {
+    setPickerBusy(true); setPickerMsg("Leyendo datos existentes...");
+    try {
+      const read = async (name) => (await getDocs(collection(db, name))).docs.map((d) => ({ id: d.id, ...d.data() }));
+      const [students, groups, surveys, responses, activity, users, settingsSnap] = await Promise.all(["students", "groups", "surveys", "responses", "activity", "users"].map(read).concat([getDoc(doc(db, "settings", "global"))]));
+      const legacy = { students, groups, surveys, responses, activity, users, settings: settingsSnap.exists() ? settingsSnap.data() : null };
+      const ops = planMigration(legacy, LEGACY_COLEGIO_ID, buildRoster);
+      let done = 0; const skipped = [];
+      for (const part of chunk(ops)) {
+        try {
+          const batch = writeBatch(db);
+          part.forEach((o) => batch.set(doc(db, o.path), o.data));
+          await batch.commit();
+        } catch (e) {
+          // Un documento con formato antiguo no debe frenar a los demás: se reintenta uno por uno y se informa cuáles no se copiaron.
+          for (const o of part) { try { await setDoc(doc(db, o.path), o.data); } catch (e2) { skipped.push(o.path); } }
+        }
+        done += part.length; setPickerMsg(`Copiando... ${done}/${ops.length}`);
+      }
+      await reloadColegios();
+      setPickerMsg(`✅ Listo: ${students.length} estudiantes, ${groups.length} grupos, ${surveys.length} encuestas, ${responses.length} respuestas, ${users.length} usuarios copiados al colegio «${LEGACY_COLEGIO_ID}». Lo anterior no se tocó.` + (skipped.length ? ` ⚠ ${skipped.length} documento(s) no se pudieron copiar: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? "…" : ""}` : ""));
+    } catch (e) { setPickerMsg("❌ La importación se detuvo: " + e.message + ". Es seguro repetirla."); }
+    setPickerBusy(false);
+  };
 
   const handleGoogleLogin = async () => {
     setLoginLoading(true); setLoginError("");
@@ -2989,7 +3161,9 @@ export default function App() {
   );
 
   // ── Encuesta pública — no requiere login ──
-  if (publicSurveyId) return <PublicSurvey surveyId={publicSurveyId} />;
+  if (publicSurvey) return <PublicSurvey surveyId={publicSurvey.surveyId} colegioId={publicSurvey.colegioId} />;
+
+  if (session && !user) return <SchoolPicker session={session} colegios={colegios} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
     if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);
@@ -2998,7 +3172,7 @@ export default function App() {
 
   const { role } = user;
   const ri = ROLES[role];
-  const isAdmin = role === "superadmin";
+  const isAdmin = role === "superadmin" || role === "admin";
   const canEdit = role !== "readonly";
 
   const tabs = [
@@ -3033,7 +3207,9 @@ export default function App() {
       <header style={{ padding: "12px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14, background: `${C.bg}ee`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
         <Logo size="md" />
         <div style={{ width: 1, height: 36, background: `linear-gradient(to bottom, transparent, ${C.rx}50, transparent)`, flexShrink: 0 }} />
-        <SchoolLogo size={44} style={{ boxShadow: `0 0 16px rgba(59,130,246,0.2)` }} />
+        <SchoolLogo src={school.logo} name={school.nombre} size={44} style={{ boxShadow: `0 0 16px rgba(59,130,246,0.2)` }} />
+        {school.nombre && <span style={{ fontSize: 13, fontWeight: 700, color: C.text, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{school.nombre}</span>}
+        {(session.isSuper || colegios.length > 1) && <Btn sm v="ghost" onClick={() => chooseColegio(null)}>⇄ Cambiar colegio</Btn>}
         <div style={{ flex: 1 }} />
         <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 9, padding: 3, border: `1px solid ${C.border}`, overflowX: "auto" }}>
           {tabs.map((t) => (
@@ -3065,7 +3241,7 @@ export default function App() {
         </button>
 
         <Badge color={ri.color}>{ri.icon} {ri.label}</Badge>
-        <Btn sm v="ghost" onClick={() => { logout(); setUser(null); }}>Salir</Btn>
+        <Btn sm v="ghost" onClick={doLogout}>Salir</Btn>
       </header>
 
       {role === "readonly" && (

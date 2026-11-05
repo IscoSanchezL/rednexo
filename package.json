@@ -9,8 +9,9 @@
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist",
     "test:rules": "firebase emulators:exec --only firestore --project rednexo-test \"node --test tests/*.test.js\"",
-    "test": "node --test tests/sociometry.test.js",
-    "test:all": "npm test && npm run test:rules"
+    "test": "node --test tests/sociometry.test.js tests/colegio.test.js",
+    "test:all": "npm test && npm run test:rules",
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project rednexo-fd35c \"node tests/e2e-public-survey.mjs && node tests/e2e-app.mjs\""
   },
   "dependencies": {
     "firebase": "^10.12.0",
