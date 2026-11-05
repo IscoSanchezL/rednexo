@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc } from "firebase/firestore";
@@ -1757,6 +1757,20 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   const [newGroup, setNewGroup] = useState("");
   const [addingGroup, setAddingGroup] = useState(false);
   const [search, setSearch] = useState("");
+  const [notice, setNotice] = useState("");
+  // Grupos guardados + los que ya usan estudiantes aunque no tengan documento (así nunca quedan "invisibles").
+  const names = allGroupNames(groups, students);
+
+  const createGroup = async () => {
+    const name = newGroup.trim();
+    if (!name) return;
+    if (groupExists(names, name)) { setNotice(`❌ Ya existe un grupo llamado «${name}».`); return; }
+    const g = { id: groupIdFor(name), name, color: GROUP_COLORS[groups.length % GROUP_COLORS.length] };
+    setNewGroup(""); setAddingGroup(false);
+    const ok = await saveGroupFS(g);
+    setNotice(ok ? `✅ Grupo «${name}» creado. Agrega estudiantes con «+ Agregar».` : `❌ No se pudo guardar el grupo «${name}». Revisa tu conexión o tus permisos e inténtalo de nuevo.`);
+    if (!ok) setGroups((p) => p.filter((x) => x.id !== g.id));
+  };
 
   const addStudent = async () => {
     if (!newName.trim()) return;
@@ -1764,7 +1778,8 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     const av = initials(newName);
     const s = { id, name: newName.trim(), group: addingTo, av };
     setStudents((prev) => [...prev, s]);
-    await saveStudentFS(s);
+    const ok = await saveStudentFS(s);
+    if (!ok) { setStudents((prev) => prev.filter((x) => x.id !== id)); setNotice("❌ No se pudo guardar el estudiante. Inténtalo de nuevo."); return; }
     setNewName("");
   };
 
@@ -1772,7 +1787,10 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     if (!bulkText.split("\n").some((l) => l.trim())) return;
     const newStudents = parseBulkStudents(bulkText, addingTo);
     setStudents((s) => [...s, ...newStudents]);
-    await Promise.all(newStudents.map((s) => saveStudentFS(s)));
+    const res = await Promise.all(newStudents.map((s) => saveStudentFS(s)));
+    const bad = newStudents.filter((_, i) => !res[i]);
+    if (bad.length) { setStudents((s) => s.filter((x) => !bad.some((b) => b.id === x.id))); setNotice(`❌ No se pudieron guardar ${bad.length} de ${newStudents.length} estudiantes. Inténtalo de nuevo.`); }
+    else setNotice(`✅ ${newStudents.length} estudiantes agregados.`);
     setBulkText("");
     setAddingTo(null);
   };
@@ -1790,10 +1808,13 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
           <Btn v="sec" onClick={() => setAddingGroup(!addingGroup)}>+ Nuevo Grupo</Btn>
         </div>
       </div>
+      {notice && (
+        <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✅") ? C.ok + "15" : C.err + "15", color: notice.startsWith("✅") ? C.ok : C.err, border: `1px solid ${notice.startsWith("✅") ? C.ok : C.err}30` }}>{notice}</div>
+      )}
       {addingGroup && (
         <Card style={{ marginBottom: 14, display: "flex", alignItems: "flex-end", gap: 10 }}>
           <Inp label="Nombre del grupo" value={newGroup} onChange={setNewGroup} placeholder="Ej: 7° B" style={{ flex: 1 }} />
-          <Btn v="pri" onClick={() => { if (newGroup.trim()) { GROUPS.push(newGroup.trim()); setNewGroup(""); setAddingGroup(false); } }}>Crear</Btn>
+          <Btn v="pri" onClick={createGroup} disabled={!newGroup.trim()}>Crear</Btn>
           <Btn onClick={() => setAddingGroup(false)}>Cancelar</Btn>
         </Card>
       )}
@@ -1806,7 +1827,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
         <input
           value={search}
           onChange={e => setSearch(e.target.value)}
-          placeholder="Buscar estudiante en todos los grupos..."
+          placeholder="Buscar estudiante o grupo..."
           style={{ width: "100%", background: C.surface, border: `1.5px solid ${search ? C.rx + "70" : C.border}`, borderRadius: 10, padding: "10px 36px 10px 36px", color: C.text, fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", transition: "all .2s", boxShadow: search ? `0 0 0 3px ${C.rx}15` : "none" }}
         />
         {search && (
@@ -1814,58 +1835,54 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
         )}
         {search && (
           <div style={{ position: "absolute", right: 40, top: "50%", transform: "translateY(-50%)", fontSize: 10, color: C.rx, fontWeight: 700 }}>
-            {students.filter(s => s.name.toLowerCase().includes(search.toLowerCase())).length} encontrados
+            {searchGroups(students, names, search).reduce((n, r) => n + r.members.length, 0)} estudiantes
           </div>
         )}
       </div>
 
-      {/* ── Resultados de búsqueda ── */}
+      {/* ── Resultados de búsqueda: por nombre de estudiante o por nombre de grupo ── */}
       {search.trim() && (() => {
-        const q = search.toLowerCase();
-        const results = students.filter(s => s.name.toLowerCase().includes(q));
-        // Función para resaltar el texto buscado
+        const res = searchGroups(students, names, search);
+        const total = res.reduce((n, r) => n + r.members.length, 0);
         const highlight = (text) => {
-          const idx = text.toLowerCase().indexOf(q);
-          if (idx === -1) return text;
+          const r = highlightRange(text, search);
+          if (!r) return text;
           return (
             <span>
-              {text.slice(0, idx)}
-              <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px" }}>{text.slice(idx, idx + q.length)}</span>
-              {text.slice(idx + q.length)}
+              {text.slice(0, r[0])}
+              <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px" }}>{text.slice(r[0], r[1])}</span>
+              {text.slice(r[1])}
             </span>
           );
         };
-        // Agrupar resultados por grupo
-        const byGroup = {};
-        results.forEach(s => { if (!byGroup[s.group]) byGroup[s.group] = []; byGroup[s.group].push(s); });
         return (
           <Card style={{ marginBottom: 14, border: `1px solid ${C.rx}30`, background: C.cardAlt }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.rx, display: "flex", alignItems: "center", gap: 6 }}>
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                {results.length} resultado{results.length !== 1 ? "s" : ""} · "{search}"
+                {res.length} grupo{res.length !== 1 ? "s" : ""} · {total} estudiante{total !== 1 ? "s" : ""} · "{search}"
               </div>
-              {results.length > 0 && <span style={{ fontSize: 10, color: C.t3 }}>{Object.keys(byGroup).length} grupo{Object.keys(byGroup).length !== 1 ? "s" : ""}</span>}
             </div>
-            {results.length === 0 ? (
+            {res.length === 0 ? (
               <div style={{ textAlign: "center", padding: "16px 0", color: C.t3, fontSize: 12 }}>
                 <div style={{ fontSize: 28, opacity: .3, marginBottom: 6 }}>🔍</div>
-                No se encontró ningún estudiante con ese nombre
+                No se encontró ningún estudiante ni grupo con ese nombre
               </div>
             ) : (
-              Object.entries(byGroup).map(([grp, members]) => {
+              res.map(({ group: grp, members, groupMatched }) => {
                 const gc = GC[grp] || C.rx;
                 return (
                   <div key={grp} style={{ marginBottom: 10 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 5 }}>
                       <div style={{ width: 8, height: 8, borderRadius: 2, background: gc }} />
-                      <span style={{ fontSize: 11, fontWeight: 700, color: gc }}>{grp}</span>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: gc }}>{groupMatched ? highlight(grp) : grp}</span>
                       <span style={{ fontSize: 10, color: C.t3 }}>({members.length})</span>
                     </div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 3, paddingLeft: 14 }}>
+                      {members.length === 0 && <div style={{ fontSize: 11, color: C.t3, padding: "4px 2px" }}>Este grupo todavía no tiene estudiantes.</div>}
                       {members.map(s => (
                         <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
-                          <div style={{ width: 30, height: 30, borderRadius: 7, background: gc + "18", color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{s.av}</div>
+                          <div style={{ width: 30, height: 30, borderRadius: 7, background: gc + "18", color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, flexShrink: 0 }}>{s.av || initials(s.name)}</div>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{highlight(s.name)}</div>
                             <div style={{ fontSize: 10, color: gc }}>{s.group}</div>
@@ -1893,11 +1910,16 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       })()}
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
-        {GROUPS.map((g) => {
+        {names.length === 0 && (
+          <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "36px 12px", color: C.t2, fontSize: 13 }}>
+            <div style={{ fontSize: 34, marginBottom: 8 }}>👥</div>
+            Todavía no hay grupos. Pulsa <b>+ Nuevo Grupo</b> para crear el primero y luego agrega estudiantes.
+          </div>
+        )}
+        {names.map((g) => {
           const members = students.filter((s) => s.group === g);
-          const visibleMembers = search.trim()
-            ? members.filter(s => s.name.toLowerCase().includes(search.toLowerCase()))
-            : members;
+          const hit = search.trim() ? searchGroups(students, [g], search)[0] : null;
+          const visibleMembers = search.trim() ? (hit ? hit.members : []) : members;
           const gc = GC[g] || C.violet;
           return (
             <Card key={g} glow={gc} style={{ opacity: search.trim() && visibleMembers.length === 0 ? 0.4 : 1, transition: "opacity .2s" }}>
@@ -1940,18 +1962,18 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
               )}
               <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 {visibleMembers.map((s) => {
-                  const q = search.toLowerCase();
                   const name = s.name;
-                  const idx = q ? name.toLowerCase().indexOf(q) : -1;
+                  const rng = highlightRange(name, search);
+                  const idx = rng ? rng[0] : -1;
                   return (
                     <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 8px", borderRadius: 7, background: idx >= 0 ? gc + "10" : C.surface, border: `1px solid ${idx >= 0 ? gc + "40" : C.border}`, transition: "all .15s" }}>
                       <span style={{ width: 26, height: 26, borderRadius: 6, background: gc + "18", color: gc, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9, flexShrink: 0 }}>{s.av}</span>
                       <span style={{ fontSize: 12, flex: 1, color: C.text }}>
                         {idx >= 0 ? (
                           <span>
-                            {name.slice(0, idx)}
-                            <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px", fontWeight: 700 }}>{name.slice(idx, idx + q.length)}</span>
-                            {name.slice(idx + q.length)}
+                            {name.slice(0, rng[0])}
+                            <span style={{ background: C.rx + "35", color: C.rx, borderRadius: 2, padding: "0 1px", fontWeight: 700 }}>{name.slice(rng[0], rng[1])}</span>
+                            {name.slice(rng[1])}
                           </span>
                         ) : name}
                       </span>
@@ -3062,6 +3084,8 @@ export default function App() {
   const [colegios, setColegios] = useState([]);
   const [colegioId, setColegioId] = useState(null);
   const [supers, setSupers] = useState([]);
+  const [groupsLoaded, setGroupsLoaded] = useState(false);
+  const [studentsLoaded, setStudentsLoaded] = useState(false);
   const [pickerBusy, setPickerBusy] = useState(false);
   const [pickerMsg, setPickerMsg] = useState("");
   const [school, setSchool] = useState({ nombre: "", logo: "", loaded: false });
@@ -3088,13 +3112,13 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(ccol("groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } }, (err) => console.log("Grupos offline"));
+    const unsub = onSnapshot(ccol("groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } if (!snap.metadata.fromCache || data.length > 0) setGroupsLoaded(true); }, (err) => console.log("Grupos offline"));
     return () => unsub();
   }, [user]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(ccol("students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) setStudents(data); }, (err) => console.log("Estudiantes offline"));
+    const unsub = onSnapshot(ccol("students"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) setStudents(data); if (!snap.metadata.fromCache || data.length > 0) setStudentsLoaded(true); }, (err) => console.log("Estudiantes offline"));
     return () => unsub();
   }, [user]);
 
@@ -3117,9 +3141,18 @@ export default function App() {
 
   // Al cambiar de colegio no deben quedar datos del anterior en pantalla.
   useEffect(() => {
-    setStudents(IS_DEMO ? initStudents : []); setGroups([]); setConns(IS_DEMO ? initConns : []); setSurveys([]); setTab("dashboard");
+    setStudents(IS_DEMO ? initStudents : []); setGroups([]); setConns(IS_DEMO ? initConns : []); setSurveys([]); setTab("dashboard"); setGroupsLoaded(false); setStudentsLoaded(false);
     setSchool({ nombre: "", logo: "", loaded: false }); SCHOOL = { nombre: "", logo: "" };
   }, [colegioId]);
+
+  // Grupos que ya usan estudiantes pero no tienen documento propio (p. ej. creados con una versión anterior): se guardan una vez.
+  // Solo cuando ya cargaron grupos Y estudiantes; el id sale del nombre, así que dos sesiones a la vez no duplican.
+  useEffect(() => {
+    if (!user || user.role === "readonly" || IS_DEMO || !groupsLoaded || !studentsLoaded) return;
+    missingGroups(groups, students).forEach((name, i) => {
+      setDoc(cdoc("groups", groupIdFor(name)), { id: groupIdFor(name), name, color: GROUP_COLORS[(groups.length + i) % GROUP_COLORS.length] }).catch((e) => console.log("No se pudo guardar el grupo", name, e));
+    });
+  }, [user, groups, students, groupsLoaded, studentsLoaded]);
 
   // Nombre y logo del colegio actual (para la cabecera y para copiarlos a las encuestas activas).
   useEffect(() => {
@@ -3147,9 +3180,9 @@ export default function App() {
   const deleteStudent = async (id) => { setStudents((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("students", id.toString())); } catch (e) { console.log(e); } };
   const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(cdoc("miembros", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); return true; } catch (e) { return false; } };
   const revokeUser = async (email) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "revoked", role: "readonly" }); return true; } catch (e) { return false; } };
-  const saveStudentFS = async (s) => { try { await setDoc(cdoc("students", String(s.id)), s); } catch (e) {} };
+  const saveStudentFS = async (s) => { try { await setDoc(cdoc("students", String(s.id)), { ...s, id: String(s.id) }); return true; } catch (e) { console.error("No se guardó el estudiante", e); return false; } };
   const deleteStudentFS = async (id) => { try { await deleteDoc(cdoc("students", String(id))); } catch (e) {} };
-  const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); } catch (e) {} };
+  const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); return true; } catch (e) { console.error("No se guardó el grupo", e); return false; } };
   const deleteGroupFS = async (id) => { try { await deleteDoc(cdoc("groups", id)); } catch (e) {} };
 
   const [authLoading, setAuthLoading] = useState(true);

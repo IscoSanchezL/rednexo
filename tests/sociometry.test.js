@@ -70,3 +70,52 @@ test("lista de nombres de la encuesta pública: solo los grupos de la encuesta, 
   assert.equal(buildRoster({}, st).rosterIds.length, 3);   // sin grupos definidos: todos
   assert.ok(!("email" in r.roster[0]));                   // solo campos mínimos
 });
+
+import { normalizeText, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "../src/lib/sociometry.js";
+
+test("normalizar texto: tildes, mayúsculas y espacios", () => {
+  assert.equal(normalizeText("  Ñandú ÁÉÍ "), "nandu aei");
+  assert.equal(normalizeText(null), "");
+});
+test("grupo duplicado: sin distinguir mayúsculas ni tildes; vacío no cuenta", () => {
+  assert.equal(groupExists(["5° A", "Prueba"], "prueba"), true);
+  assert.equal(groupExists(["Séptimo"], "septimo"), true);
+  assert.equal(groupExists(["5° A"], "5° B"), false);
+  assert.equal(groupExists(["5° A"], "  "), false);
+});
+test("id de grupo estable y distinto para nombres distintos", () => {
+  assert.equal(groupIdFor("Prueba"), groupIdFor("Prueba"));
+  assert.notEqual(groupIdFor("Prueba"), groupIdFor("prueba"));
+  assert.match(groupIdFor("5° A ñ"), /^g_[0-9a-z]+$/);
+});
+const G = [{ id: "g1", name: "5° A" }, { id: "g2", name: "Séptimo" }];
+const S = [{ id: "1", name: "Ana García", group: "5° A" }, { id: "2", name: "Isco Pérez", group: "Prueba" }, { id: "3", name: "Isco Dos", group: "prueba1" }, { id: "4", name: "Beto Ruiz", group: "5° A" }];
+test("grupos a mostrar: los guardados más los que usan los estudiantes sin documento", () => {
+  assert.deepEqual(allGroupNames(G, S), ["5° A", "Séptimo", "Prueba", "prueba1"]);
+  assert.deepEqual(missingGroups(G, S), ["Prueba", "prueba1"]);
+  assert.deepEqual(missingGroups(G, []), []);
+  assert.deepEqual(allGroupNames([], [{ group: "" }, { group: undefined }, { group: "X" }]), ["X"]);
+});
+test("buscar un grupo trae a sus estudiantes; buscar un estudiante trae su grupo", () => {
+  const names = allGroupNames(G, S);
+  const porGrupo = searchGroups(S, names, "prueba");
+  assert.deepEqual(porGrupo.map((r) => r.group), ["Prueba", "prueba1"]);
+  assert.deepEqual(porGrupo[0].members.map((m) => m.name), ["Isco Pérez"]);
+  assert.ok(porGrupo.every((r) => r.groupMatched));
+  const porNombre = searchGroups(S, names, "is");
+  assert.deepEqual(porNombre.map((r) => [r.group, r.members.length, r.groupMatched]), [["Prueba", 1, false], ["prueba1", 1, false]]);
+  assert.deepEqual(searchGroups(S, names, "ANA").map((r) => r.group), ["5° A"]);
+});
+test("buscar ignora tildes y mayúsculas, muestra grupos vacíos y no devuelve nada con búsqueda vacía", () => {
+  const names = allGroupNames(G, S);
+  assert.deepEqual(searchGroups(S, names, "SEPTIMO").map((r) => [r.group, r.members.length]), [["Séptimo", 0]]);
+  assert.deepEqual(searchGroups(S, names, "garcia").map((r) => r.members[0].name), ["Ana García"]);
+  assert.deepEqual(searchGroups(S, names, "   "), []);
+  assert.deepEqual(searchGroups(S, names, "zzz"), []);
+});
+test("resaltado: posición del texto buscado con tildes y mayúsculas", () => {
+  assert.deepEqual(highlightRange("Ana García", "garcia"), [4, 10]);
+  assert.deepEqual(highlightRange("Isco", "IS"), [0, 2]);
+  assert.equal(highlightRange("Isco", "zz"), null);
+  assert.equal(highlightRange("Isco", ""), null);
+});

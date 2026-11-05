@@ -54,3 +54,66 @@ export function buildRoster(sv, students) {
   const list = students.filter((s) => !gs || gs.includes(s.group)).map((s) => ({ id: String(s.id), name: s.name, group: s.group, av: s.av || "" }));
   return { roster: list, rosterIds: list.map((s) => s.id) };
 }
+
+// ── Grupos y búsqueda ──────────────────────────────────────────
+
+/** Texto sin tildes ni mayúsculas, para comparar y buscar: "Ñandú  " → "nandu". */
+export function normalizeText(t) {
+  return String(t == null ? "" : t).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+}
+
+/** ¿Ya existe un grupo con ese nombre (sin distinguir mayúsculas ni tildes)? */
+export function groupExists(names, name) {
+  const n = normalizeText(name);
+  return !!n && names.some((g) => normalizeText(g) === n);
+}
+
+/** Identificador estable de un grupo según su nombre exacto: dos sesiones que lo creen a la vez escriben el mismo documento. */
+export function groupIdFor(name) {
+  let h = 5381;
+  for (const ch of String(name)) h = ((h * 33) ^ ch.codePointAt(0)) >>> 0;
+  return "g_" + h.toString(36);
+}
+
+/** Nombres de grupo para mostrar: los guardados y, además, los que usan los estudiantes aunque no tengan documento. */
+export function allGroupNames(groups, students) {
+  const names = groups.map((g) => g.name);
+  const seen = new Set(names);
+  [...new Set(students.map((s) => s.group).filter((g) => typeof g === "string" && g.trim()))].sort((a, b) => a.localeCompare(b, "es")).forEach((g) => { if (!seen.has(g)) { names.push(g); seen.add(g); } });
+  return names;
+}
+
+/** Grupos usados por estudiantes que no tienen documento propio (hay que guardarlos). */
+export function missingGroups(groups, students) {
+  const have = new Set(groups.map((g) => g.name));
+  return [...new Set(students.map((s) => s.group).filter((g) => typeof g === "string" && g.trim() && !have.has(g)))];
+}
+
+/**
+ * Búsqueda global: por nombre de estudiante O por nombre de grupo (sin tildes ni mayúsculas).
+ * Si el grupo coincide, trae a TODOS sus estudiantes (y el grupo aparece aunque esté vacío).
+ * Devuelve [{ group, members, groupMatched }] en el orden de `groupNames`.
+ */
+export function searchGroups(students, groupNames, query) {
+  const q = normalizeText(query);
+  if (!q) return [];
+  const out = [];
+  for (const g of groupNames) {
+    const groupMatched = normalizeText(g).includes(q);
+    const inGroup = students.filter((s) => s.group === g);
+    const members = groupMatched ? inGroup : inGroup.filter((s) => normalizeText(s.name).includes(q));
+    if (groupMatched || members.length > 0) out.push({ group: g, members, groupMatched });
+  }
+  return out;
+}
+
+/** Posición [inicio, fin) de la búsqueda dentro del texto, ignorando tildes y mayúsculas; null si no hay. */
+export function highlightRange(text, query) {
+  const q = normalizeText(query);
+  if (!q) return null;
+  const t = String(text);
+  const n = t.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  if (n.length !== t.length) { const i = t.toLowerCase().indexOf(String(query).toLowerCase().trim()); return i < 0 ? null : [i, i + String(query).trim().length]; }
+  const i = n.indexOf(q);
+  return i < 0 ? null : [i, i + q.length];
+}
