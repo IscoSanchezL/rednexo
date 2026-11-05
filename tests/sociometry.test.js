@@ -177,3 +177,34 @@ test("pareja que solo tiene un tipo: el filtro de otro tipo no la muestra", () =
   assert.deepEqual(c[0].types, ["pos"]);
   assert.deepEqual(filterConns(c, "neu"), []);
 });
+
+import { nodeStats } from "../src/lib/sociometry.js";
+test("aceptación y rechazo del nodo: tu caso, todos eligen a todos en las 3 preguntas → 1.00 y 1.00", () => {
+  const sv = [{ id: "s", questions: [{ id: "p", tp: "pos" }, { id: "n", tp: "neu" }, { id: "g", tp: "neg" }] }];
+  const o = (id) => ["1", "2", "3"].filter((x) => x !== id);
+  const conns = buildConnections(["1", "2", "3"].map((id) => ({ surveyId: "s", respondentId: id, answers: { p: o(id), n: o(id), g: o(id) } })), sv);
+  const s = nodeStats("2", conns, 3);
+  assert.deepEqual([s.elecciones, s.recibidas, s.reciprocas, s.aceptacion, s.rechazo], [2, 2, 2, "1.00", "1.00"]);
+});
+test("un estudiante solo rechazado NO tiene aceptación; uno solo querido NO tiene rechazo", () => {
+  const sv = [{ id: "s", questions: [{ id: "p", tp: "pos" }, { id: "g", tp: "neg" }] }];
+  const conns = buildConnections([
+    { surveyId: "s", respondentId: "1", answers: { g: ["4"], p: ["2"] } },
+    { surveyId: "s", respondentId: "2", answers: { g: ["4"], p: ["1"] } },
+    { surveyId: "s", respondentId: "3", answers: { g: ["4"], p: ["2"] } },
+  ], sv);
+  const rechazado = nodeStats("4", conns, 4), querido = nodeStats("2", conns, 4);
+  assert.deepEqual([rechazado.aceptacion, rechazado.rechazo], ["0.00", "1.00"]);
+  assert.deepEqual([querido.aceptacion, querido.rechazo, querido.recibidas], ["0.67", "0.00", 2]);
+});
+test("nodo: grupo de un solo participante no divide por cero, y los ids numéricos y de texto cuentan igual", () => {
+  assert.deepEqual([nodeStats("1", [], 1).aceptacion, nodeStats("1", [], 0).rechazo], ["0.00", "0.00"]);
+  const conns = [{ f: 1, t: "2", s: 1, tp: "pos" }, { f: "2", t: 1, s: 1, tp: "pos" }];
+  const s = nodeStats(1, conns, 2);
+  assert.deepEqual([s.elecciones, s.recibidas, s.reciprocas, s.aceptacion], [1, 1, 1, "1.00"]);
+});
+test("nodo: solo cuenta las conexiones que se le pasan (los grupos ocultos no inflan el índice)", () => {
+  const todas = [{ f: "2", t: "1", s: 1, tp: "pos" }, { f: "9", t: "1", s: 1, tp: "pos" }];   // «9» está en un grupo oculto
+  assert.equal(nodeStats("1", todas, 2).aceptacion, "2.00");                                   // mezcla mal: 2 recibidas ÷ 1
+  assert.equal(nodeStats("1", todas.filter((c) => c.f !== "9"), 2).aceptacion, "1.00");        // solo lo visible
+});

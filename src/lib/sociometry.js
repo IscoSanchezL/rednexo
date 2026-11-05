@@ -152,3 +152,21 @@ export function surveyProgress(sv, students, responses) {
   const total = items.length, completed = items.filter((i) => i.done).length;
   return { total, completed, pending: total - completed, pct: total ? Math.round((completed / total) * 100) : 0, items };
 }
+
+/**
+ * Cifras de un nodo del sociograma. `conns` debe ser solo lo VISIBLE y `n` los participantes visibles,
+ * para que el divisor y lo que se cuenta hablen del mismo grupo.
+ *  Aceptación = positivas recibidas ÷ (n − 1)      Rechazo = negativas recibidas ÷ (n − 1)
+ * (antes un único «Índice» contaba también los rechazos como si fueran aceptación).
+ */
+export function nodeStats(id, conns, n) {
+  const sid = String(id);
+  const hechas = conns.filter((c) => String(c.f) === sid);
+  const recibidas = conns.filter((c) => String(c.t) === sid);
+  const pos = recibidas.filter((c) => hasType(c, "pos")).length;
+  const neg = recibidas.filter((c) => hasType(c, "neg")).length;
+  const reciprocas = hechas.filter((c) => conns.some((r) => String(r.f) === String(c.t) && String(r.t) === sid)).length;
+  const d = n > 1 ? n - 1 : 0;
+  const ratio = (k) => (d ? (k / d).toFixed(2) : "0.00");
+  return { elecciones: hechas.length, recibidas: recibidas.length, reciprocas, positivasRecibidas: pos, negativasRecibidas: neg, aceptacion: ratio(pos), rechazo: ratio(neg) };
+}
