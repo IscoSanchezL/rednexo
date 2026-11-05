@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && gh-pages -d dist"
+    "deploy": "npm run build && gh-pages -d dist",
+    "test:rules": "firebase emulators:exec --only firestore --project rednexo-test \"node --test tests/*.test.js\"",
+    "test": "node --test tests/sociometry.test.js",
+    "test:all": "npm test && npm run test:rules"
   },
   "dependencies": {
     "firebase": "^10.12.0",
@@ -16,6 +19,7 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^3.0.4",
     "@vitejs/plugin-react": "^4.3.1",
     "gh-pages": "^6.1.1",
     "vite": "^5.3.1"
