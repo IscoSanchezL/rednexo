@@ -119,3 +119,25 @@ test("resaltado: posición del texto buscado con tildes y mayúsculas", () => {
   assert.equal(highlightRange("Isco", "zz"), null);
   assert.equal(highlightRange("Isco", ""), null);
 });
+
+import { surveyProgress } from "../src/lib/sociometry.js";
+test("avance de encuesta: cuenta solo a quienes de su lista respondieron, una vez cada uno", () => {
+  const st = [{ id: "1", name: "Ana", group: "5A" }, { id: 2, name: "Beto", group: "5A" }, { id: "3", name: "Cami", group: "5A" }, { id: "4", name: "Dani", group: "6A" }];
+  const sv = { id: "s1", group: "5A" };
+  const res = [
+    { surveyId: "s1", respondentId: "1" }, { surveyId: "s1", respondentId: "1" },      // repetida
+    { surveyId: "s1", respondentId: 2 },                                               // id numérico vs texto
+    { surveyId: "otra", respondentId: "3" },                                           // otra encuesta
+    { surveyId: "s1", respondentId: "99" },                                            // ya no está en la lista
+    { surveyId: "s1", respondentId: "4" },                                             // de otro grupo
+    null,
+  ];
+  const p = surveyProgress(sv, st, res);
+  assert.deepEqual([p.total, p.completed, p.pending, p.pct], [3, 2, 1, 67]);
+  assert.deepEqual(p.items.filter((i) => i.done).map((i) => i.name), ["Ana", "Beto"]);
+});
+test("avance de encuesta: sin respuestas es 0 % y sin estudiantes no divide por cero ni da pendientes negativos", () => {
+  assert.deepEqual(surveyProgress({ id: "s", group: "5A" }, [{ id: "1", name: "Ana", group: "5A" }], []).pct, 0);
+  const vacio = surveyProgress({ id: "s", group: "5A" }, [], [{ surveyId: "s", respondentId: "1" }]);
+  assert.deepEqual([vacio.total, vacio.completed, vacio.pending, vacio.pct], [0, 0, 0, 0]);
+});

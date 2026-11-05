@@ -117,3 +117,16 @@ export function highlightRange(text, query) {
   const i = n.indexOf(q);
   return i < 0 ? null : [i, i + q.length];
 }
+
+/**
+ * Avance REAL de una encuesta: quiénes de su lista ya respondieron.
+ * Cuenta una sola vez a cada estudiante (aunque haya respuestas repetidas), ignora respuestas de otras encuestas
+ * y de personas que ya no están en la lista, y compara los ids como texto (hay ids numéricos y de texto).
+ */
+export function surveyProgress(sv, students, responses) {
+  const roster = buildRoster(sv, students).roster;
+  const done = new Set(responses.filter((r) => r && r.surveyId === sv.id).map((r) => String(r.respondentId)));
+  const items = roster.map((s) => ({ id: s.id, name: s.name, group: s.group, done: done.has(s.id) }));
+  const total = items.length, completed = items.filter((i) => i.done).length;
+  return { total, completed, pending: total - completed, pct: total ? Math.round((completed / total) * 100) : 0, items };
+}

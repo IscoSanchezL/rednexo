@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange } from "./lib/sociometry";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
 import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc } from "firebase/firestore";
@@ -212,65 +212,6 @@ const GROUP_COLORS = ["#ff4d6a", "#2dd4bf", "#fbbf24", "#a78bfa", "#38bdf8", "#3
 const DEFAULT_GROUPS = ["5° A", "5° B", "6° A"];
 // Los datos ficticios (initStudents/initConns) solo se muestran con ?demo en la URL, nunca por defecto.
 const IS_DEMO = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("demo");
-
-const initActivity = [
-  {
-    id: 1,
-    time: "Hoy 09:12",
-    user: "Dr. Martínez",
-    action: "Creó encuesta",
-    detail: "Sociograma 5°A Q2",
-    type: "create",
-  },
-  {
-    id: 2,
-    time: "Hoy 08:45",
-    user: "Lic. Rodríguez",
-    action: "Completó análisis",
-    detail: "Subgrupos 5°B",
-    type: "report",
-  },
-  {
-    id: 3,
-    time: "Ayer 16:30",
-    user: "Sistema",
-    action: "Encuesta finalizada",
-    detail: "7/10 respuestas recibidas",
-    type: "system",
-  },
-  {
-    id: 4,
-    time: "Ayer 14:10",
-    user: "Ana García",
-    action: "Respondió encuesta",
-    detail: "Sociograma 5°A",
-    type: "survey",
-  },
-  {
-    id: 5,
-    time: "Ayer 14:05",
-    user: "Carlos Ruiz",
-    action: "Respondió encuesta",
-    detail: "Sociograma 5°A",
-    type: "survey",
-  },
-  {
-    id: 6,
-    time: "Hace 2 días",
-    user: "Dr. Martínez",
-    action: "Invitó usuario",
-    detail: "prof.gomez@colegio.edu",
-    type: "user",
-  },
-  {
-    id: 7,
-    time: "Hace 3 días",
-    user: "Lic. Rodríguez",
-    action: "Exportó PDF",
-    detail: "Reporte completo 5°A",
-    type: "export",
-  },
-];
 
 // ════════ PRIMITIVES ════════
 
@@ -1669,84 +1610,6 @@ function SocioMatrix({ students, conns }) {
 
 // ════════ SURVEY EXECUTION ════════
 
-function SurveyExec({ students, onComplete }) {
-  const [respondent, setRespondent] = useState(null);
-  const [qIdx, setQIdx] = useState(0);
-  const [sel, setSel] = useState([]);
-  const [done, setDone] = useState(false);
-  const questions = [
-    "¿Con quién prefieres trabajar en equipo?",
-    "¿A quién acudes cuando necesitas ayuda?",
-    "¿Con quién pasas más tiempo en el recreo?",
-    "¿A quién consideras un líder?",
-    "¿Con quién NO te sientes cómodo(a)?",
-  ];
-
-  if (done) return (
-    <div style={{ textAlign: "center", padding: 40 }}>
-      <div style={{ width: 64, height: 64, borderRadius: 16, background: C.ok + "20", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 28, marginBottom: 14 }}>✓</div>
-      <div style={{ fontSize: 18, fontWeight: 700, color: C.ok, marginBottom: 6 }}>¡Encuesta completada!</div>
-      <div style={{ fontSize: 13, color: C.t2, marginBottom: 20 }}>Respuestas registradas exitosamente</div>
-      <Btn v="pri" onClick={() => { setDone(false); setRespondent(null); setQIdx(0); }}>Nueva encuesta</Btn>
-    </div>
-  );
-
-  if (!respondent) return (
-    <div>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>¿Quién responde?</div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
-        {students.map((p) => (
-          <button key={p.id} onClick={() => setRespondent(p)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", cursor: "pointer", display: "flex", alignItems: "center", gap: 8, transition: "all .2s", fontFamily: "inherit" }}
-            onMouseEnter={(e) => (e.currentTarget.style.borderColor = GC[p.group] || "#3b82f6")}
-            onMouseLeave={(e) => (e.currentTarget.style.borderColor = "")}>
-            <span style={{ width: 30, height: 30, borderRadius: 7, background: (GC[p.group] || "#3b82f6") + "18", color: GC[p.group] || "#3b82f6", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10 }}>{p.av}</span>
-            <div style={{ textAlign: "left" }}>
-              <div style={{ fontSize: 12, fontWeight: 600, color: C.text }}>{p.name}</div>
-              <div style={{ fontSize: 10, color: C.t3 }}>{p.group}</div>
-            </div>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-
-  const q = questions[qIdx];
-  const isLast = qIdx === questions.length - 1;
-  const toggle = (id) => setSel((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : prev.length < 3 ? [...prev, id] : prev);
-  const next = () => { setSel([]); if (isLast) { setDone(true); onComplete?.(); } else setQIdx((i) => i + 1); };
-
-  return (
-    <div>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-        <span style={{ width: 26, height: 26, borderRadius: 6, background: (GC[respondent.group] || "#3b82f6") + "18", color: GC[respondent.group], display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 9 }}>{respondent.av}</span>
-        <span style={{ fontSize: 12, color: C.t2 }}>Respondiendo: <b style={{ color: C.text }}>{respondent.name}</b></span>
-        <Btn sm v="ghost" onClick={() => { setRespondent(null); setQIdx(0); setSel([]); }}>Cambiar</Btn>
-      </div>
-      <div style={{ display: "flex", gap: 3, marginBottom: 14 }}>
-        {questions.map((_, i) => (<div key={i} style={{ flex: 1, height: 3, borderRadius: 2, background: i <= qIdx ? C.rx : C.border, transition: "all .3s" }} />))}
-      </div>
-      <div style={{ fontSize: 10, color: C.t3, marginBottom: 3 }}>Pregunta {qIdx + 1} de {questions.length}</div>
-      <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: qIdx === 4 ? C.err : C.text }}>{q}</div>
-      <div style={{ fontSize: 10, color: C.t2, marginBottom: 8 }}>Selecciona hasta 3 personas</div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        {students.filter((p) => p.id !== respondent.id).map((p) => {
-          const s = sel.includes(p.id);
-          return (
-            <button key={p.id} onClick={() => toggle(p.id)} style={{ background: s ? (GC[p.group] || "#3b82f6") + "12" : C.surface, border: `1px solid ${s ? GC[p.group] || "#3b82f6" : C.border}`, borderRadius: 8, padding: "8px 10px", cursor: "pointer", display: "flex", alignItems: "center", gap: 7, fontSize: 12, color: C.text, transition: "all .2s", fontFamily: "inherit" }}>
-              <span style={{ width: 18, height: 18, borderRadius: 5, border: `2px solid ${s ? GC[p.group] || "#3b82f6" : C.border}`, background: s ? GC[p.group] || "#3b82f6" : "transparent", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", transition: "all .2s" }}>{s && "✓"}</span>
-              {p.name}
-              <span style={{ marginLeft: "auto", fontSize: 10, color: C.t3 }}>{p.group}</span>
-            </button>
-          );
-        })}
-      </div>
-      <Btn v="pri" onClick={next} disabled={!sel.length} style={{ width: "100%", marginTop: 12, justifyContent: "center" }}>
-        {isLast ? "Finalizar ✓" : "Siguiente →"}
-      </Btn>
-    </div>
-  );
-}
-
 // ════════ GROUP MANAGEMENT ════════
 
 function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveStudentFS, deleteStudentFS, saveGroupFS, deleteGroupFS, canEdit }) {
@@ -2002,37 +1865,45 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   );
 }
 
-// ════════ PROGRESS TRACKER ════════
+// ════════ AVANCE DE ENCUESTAS ════════
+// Sale de las respuestas reales guardadas; no hay datos de ejemplo.
 
-function ProgressTracker({ students }) {
-  const completed = [1, 2, 5, 9, 3, 8, 4];
-  const total = students.length;
-  const pct = Math.round((completed.length / total) * 100);
+function SurveyProgress({ surveys, students, responses }) {
+  const active = surveys.filter((sv) => sv.status === "active" && !sv.deleted);
+  if (active.length === 0) return null;
   return (
-    <Card glow={C.rx}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>📊 Progreso de Encuesta Activa</div>
-        <Badge color={pct === 100 ? C.ok : C.amber}>{pct}% completado</Badge>
-      </div>
-      <div style={{ height: 8, borderRadius: 4, background: C.border, marginBottom: 14, overflow: "hidden" }}>
-        <div style={{ height: "100%", width: `${pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${C.rx},#a78bfa)`, transition: "width .5s" }} />
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 6 }}>
-        {students.map((s) => {
-          const done = completed.includes(s.id);
-          return (
-            <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: done ? C.ok + "10" : C.surface, border: `1px solid ${done ? C.ok + "30" : C.border}` }}>
-              <span style={{ width: 8, height: 8, borderRadius: "50%", background: done ? C.ok : C.t3 + "50" }} />
-              <span style={{ fontSize: 10, color: done ? C.ok : C.t3, fontWeight: done ? 600 : 400 }}>{s.name.split(" ")[0]}</span>
+    <div style={{ marginBottom: 14 }}>
+      {active.map((sv) => {
+        const p = surveyProgress(sv, students, responses);
+        return (
+          <Card key={sv.id} glow={C.rx} style={{ marginBottom: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+              <div style={{ fontSize: 13, fontWeight: 700 }}>📊 Avance: {sv.title}</div>
+              <Badge color={p.total > 0 && p.pct === 100 ? C.ok : C.amber}>{p.pct}% completado</Badge>
             </div>
-          );
-        })}
-      </div>
-      <div style={{ display: "flex", gap: 12, marginTop: 12, fontSize: 11, color: C.t2 }}>
-        <span>✅ {completed.length} completadas</span>
-        <span>⏳ {total - completed.length} pendientes</span>
-      </div>
-    </Card>
+            <div style={{ height: 8, borderRadius: 4, background: C.border, marginBottom: 12, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${p.pct}%`, borderRadius: 4, background: `linear-gradient(90deg,${C.rx},#a78bfa)`, transition: "width .5s" }} />
+            </div>
+            {p.total === 0 ? (
+              <div style={{ fontSize: 11, color: C.t3 }}>Esta encuesta no tiene estudiantes en sus grupos todavía.</div>
+            ) : (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 6 }}>
+                {p.items.map((s) => (
+                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: s.done ? C.ok + "10" : C.surface, border: `1px solid ${s.done ? C.ok + "30" : C.border}` }}>
+                    <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.done ? C.ok : C.t3 + "50", flexShrink: 0 }} />
+                    <span style={{ fontSize: 10, color: s.done ? C.ok : C.t3, fontWeight: s.done ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 12, marginTop: 12, fontSize: 11, color: C.t2 }}>
+              <span>✅ {p.completed} de {p.total} completadas</span>
+              <span>⏳ {p.pending} pendientes</span>
+            </div>
+          </Card>
+        );
+      })}
+    </div>
   );
 }
 
@@ -2149,13 +2020,20 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const [surveys, setSurveys] = useState([]);
   const [loadingS, setLoadingS] = useState(true);
   const [msg, setMsg] = useState("");
-  const [editing, setEditing] = useState(null), [creating, setCreating] = useState(false), [executing, setExecuting] = useState(null), [showTrash, setShowTrash] = useState(false);
+  const [editing, setEditing] = useState(null), [creating, setCreating] = useState(false), [showTrash, setShowTrash] = useState(false);
+  const [responses, setResponses] = useState([]);
   const [nS, setNS] = useState({ title: "", group: GROUPS?.[0] || "5° A", groups: [], maxSel: 3, anon: true, questions: [] });
   const [nQ, setNQ] = useState({ text: "", tp: "pos" });
 
   useEffect(() => {
     const q = query(ccol("surveys"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => { setSurveys(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setLoadingS(false); }, (err) => { console.log("Surveys offline:", err); setLoadingS(false); });
+    return () => unsub();
+  }, []);
+
+  // Respuestas reales del colegio, para mostrar el avance de cada encuesta activa.
+  useEffect(() => {
+    const unsub = onSnapshot(ccol("responses"), (snap) => setResponses(snap.docs.map((d) => d.data())), () => {});
     return () => unsub();
   }, []);
 
@@ -2201,13 +2079,6 @@ function SurveyBuilder({ role, students, GROUPS }) {
     try { await updateDoc(cdoc("surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); }
   };
   const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(cdoc("surveys", id), { questions }); } catch (e) { console.error(e); } };
-
-  if (executing) return (
-    <div style={{ maxWidth: 540, margin: "0 auto", animation: "slideIn .3s ease" }}>
-      <Btn v="ghost" onClick={() => setExecuting(null)} style={{ marginBottom: 14 }}>← Volver a encuestas</Btn>
-      <Card><SurveyExec students={students} onComplete={() => {}} /></Card>
-    </div>
-  );
 
   if (creating) return (
     <div style={{ animation: "slideIn .3s ease" }}>
@@ -2324,8 +2195,19 @@ function SurveyBuilder({ role, students, GROUPS }) {
         </Card>
       )}
 
-      <ProgressTracker students={students} />
-      <div style={{ marginTop: 14 }} />
+      {!loadingS && surveys.filter((sv) => !sv.deleted).length === 0 && (
+        <Card style={{ marginBottom: 14, textAlign: "center", padding: "28px 16px" }}>
+          <div style={{ fontSize: 34, marginBottom: 8 }}>📝</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Todavía no hay encuestas</div>
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6, marginBottom: 14 }}>
+            {students.length === 0
+              ? "Primero crea tus grupos y agrega estudiantes en la pestaña Grupos; después podrás crear y aplicar encuestas."
+              : canEdit ? "Crea una encuesta, actívala y comparte su enlace con los estudiantes. Aquí verás quién ya respondió." : "Cuando el psicólogo cree una encuesta, aparecerá aquí."}
+          </div>
+          {canEdit && students.length > 0 && <Btn v="pri" onClick={() => setCreating(true)}>+ Nueva Encuesta</Btn>}
+        </Card>
+      )}
+      <SurveyProgress surveys={surveys} students={students} responses={responses} />
       {surveys.filter(sv => !sv.deleted).map((sv) => (
         <Card key={sv.id} style={{ marginBottom: 12 }} glow={C.rx}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 14 }}>
@@ -2345,7 +2227,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
               </div>
             </div>
             <div style={{ display: "flex", gap: 6 }}>
-              <Btn sm v="ok" onClick={() => setExecuting(sv.id)}>▶ Ejecutar</Btn>
+              <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); }}>▶ Aplicar</Btn>
               <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
             </div>
