@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -3438,10 +3438,8 @@ export default function App() {
           const densidad = density(visConns.length, n);
 
           // KPIs del nodo seleccionado
-          const elecciones = pC.filter(c => c.f === selNode).length;
-          const recibidas  = pC.filter(c => c.t === selNode).length;
-          const reciprocas = pC.filter(c => c.f === selNode && conns.some(r => r.f === c.t && r.t === selNode)).length;
-          const indice     = n > 1 ? (recibidas / (n - 1)).toFixed(2) : "0.00";
+          // Solo lo visible: el divisor (n − 1) y lo que se cuenta deben referirse al mismo grupo.
+          const ns = nodeStats(selNode, visConns, n);
 
           return (<>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
@@ -3531,16 +3529,26 @@ export default function App() {
                         <div style={{ width: 42, height: 42, borderRadius: 10, background: (GC[sp.group] || "#3b82f6") + "18", border: `2px solid ${GC[sp.group]}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 14, color: GC[sp.group] }}>{sp.av}</div>
                         <div><div style={{ fontSize: 14, fontWeight: 700 }}>{sp.name}</div><div style={{ fontSize: 11, color: GC[sp.group] }}>{sp.group}</div></div>
                       </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 5, marginBottom: 5 }}>
+                        {[
+                          { l: "Elecciones", v: ns.elecciones, c: C.rx, t: "A cuántos compañeros marcó esta persona" },
+                          { l: "Recibidas",  v: ns.recibidas,  c: C.teal, t: "Cuántos compañeros la marcaron (en cualquier pregunta)" },
+                          { l: "Recíprocas", v: ns.reciprocas, c: C.amber, t: "Compañeros que ella marcó y que también la marcaron" },
+                        ].map((m) => (
+                          <div key={m.l} title={m.t} style={{ background: C.bgSub, borderRadius: 8, padding: "7px 4px", textAlign: "center" }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: ink(m.c) }}>{m.v}</div>
+                            <div style={{ fontSize: 8, fontWeight: 600, color: C.t2, textTransform: "uppercase" }}>{m.l}</div>
+                          </div>
+                        ))}
+                      </div>
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, marginBottom: 12 }}>
                         {[
-                          { l: "Elecciones", v: elecciones, c: C.rx },
-                          { l: "Recibidas",  v: recibidas,  c: C.teal },
-                          { l: "Recíprocas", v: reciprocas, c: C.amber },
-                          { l: "Índice",     v: indice,     c: C.violet },
+                          { l: "Aceptación", v: ns.aceptacion, c: C.teal, t: `Elecciones positivas recibidas (${ns.positivasRecibidas}) ÷ (participantes − 1)` },
+                          { l: "Rechazo",    v: ns.rechazo,    c: C.err,  t: `Rechazos recibidos (${ns.negativasRecibidas}) ÷ (participantes − 1)` },
                         ].map((m) => (
-                          <div key={m.l} style={{ background: C.bgSub, borderRadius: 8, padding: "7px 8px", textAlign: "center" }}>
-                            <div style={{ fontSize: 16, fontWeight: 800, color: m.c }}>{m.v}</div>
-                            <div style={{ fontSize: 8, color: C.t3, textTransform: "uppercase" }}>{m.l}</div>
+                          <div key={m.l} title={m.t} style={{ background: tint(m.c, "14"), border: `1px solid ${tint(m.c, "40")}`, borderRadius: 8, padding: "7px 8px", textAlign: "center" }}>
+                            <div style={{ fontSize: 16, fontWeight: 800, color: ink(m.c) }}>{m.v}</div>
+                            <div style={{ fontSize: 8, fontWeight: 700, color: C.t2, textTransform: "uppercase" }}>{m.l}</div>
                           </div>
                         ))}
                       </div>
@@ -3551,7 +3559,7 @@ export default function App() {
                           <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 7px", borderRadius: 6, background: C.bgSub, fontSize: 11, marginBottom: 2 }}>
                             <span style={{ color: C.rx, fontFamily: "monospace" }}>{c.f === selNode ? "→" : "←"}</span>
                             <span style={{ flex: 1 }}>{o?.name}</span>
-                            {[...Array(c.s)].map((_, j) => (<span key={j} style={{ color: c.tp === "pos" ? C.teal : c.tp === "neg" ? C.err : C.amber, fontSize: 7 }}>●</span>))}
+                            {(c.counts ? ["pos", "neu", "neg"].flatMap((t) => Array(Math.min(c.counts[t] || 0, 3)).fill(t)) : Array(c.s).fill(c.tp)).map((t, j) => (<span key={j} style={{ color: t === "pos" ? C.teal : t === "neg" ? C.err : C.amber, fontSize: 7 }}>●</span>))}
                           </div>
                         );
                       })}

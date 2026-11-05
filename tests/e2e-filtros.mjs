@@ -52,6 +52,14 @@ try {
   const p = await login("a@f.co");
   let t = await body(p);
   check(/Todas 6/.test(t) && /Positivas 6/.test(t) && /Neutrales 6/.test(t) && /Negativas 6/.test(t), "los botones del filtro indican cuántas conexiones hay de cada tipo (6 · 6 · 6 · 6)");
+  // Panel del nodo seleccionado: «Aceptación» y «Rechazo» en lugar del «Índice» único
+  await p.locator("input[placeholder='Nombre del estudiante...']").fill("Isco1"); await p.waitForTimeout(600);
+  const nodo = async (q, etiqueta) => (await q.locator(`div[title]:has-text('${etiqueta}')`).first().innerText()).replace(/\s+/g, " ");
+  const tn = await body(p);
+  check(!/índice/i.test(tn), "el panel ya no muestra el «Índice» ambiguo");
+  check((await nodo(p, "Aceptación")).includes("1.00") && (await nodo(p, "Rechazo")).includes("1.00"), "con todos eligiendo a todos en positiva y negativa: Aceptación 1.00 y Rechazo 1.00");
+  check((await nodo(p, "Elecciones")).includes("2") && (await nodo(p, "Recibidas")).includes("2") && (await nodo(p, "Recíprocas")).includes("2"), "Elecciones 2 · Recibidas 2 · Recíprocas 2");
+  check(((await p.locator("div[title*='Elecciones positivas recibidas']").first().getAttribute("title")) || "").includes("(2) ÷ (participantes − 1)"), "la ayuda de «Aceptación» explica la fórmula con los números reales");
   await clic(p, "Neutrales"); let n = await pixeles(p);
   check(n.amber > 40 && n.teal < 20 && n.red < 20, `con «Neutrales» se dibujan las conexiones neutrales en ámbar (${n.amber} px ámbar, ${n.teal} turquesa, ${n.red} rojo)`);
   check(!(await body(p)).includes("No hay conexiones"), "con «Neutrales» no aparece el aviso de vacío");
@@ -73,6 +81,8 @@ try {
   const q = await login("b@f.co");
   t = await body(q);
   check(/Positivas 6/.test(t) && /Neutrales 0/.test(t) && /Negativas 0/.test(t), "con solo positivas, los botones indican 6 · 0 · 0");
+  await q.locator("input[placeholder='Nombre del estudiante...']").fill("Isco2"); await q.waitForTimeout(600);
+  check((await nodo(q, "Aceptación")).includes("1.00") && (await nodo(q, "Rechazo")).includes("0.00"), "si solo respondieron la positiva: Aceptación 1.00 y Rechazo 0.00 (antes el índice no distinguía)");
   await clic(q, "Neutrales"); n = await pixeles(q);
   check((await body(q)).includes("No hay conexiones neutrales en los grupos visibles") && n.amber < 20, "sin neutrales, el sociograma lo explica en vez de quedar vacío sin motivo");
 } catch (e) { console.log("FALLÓ  excepción:", e.message.split("\n")[0]); failed++; }
