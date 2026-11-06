@@ -79,3 +79,19 @@ test("plataforma/planes: cualquier sesión lee, solo el superadmin escribe", asy
   await assertFails(getDoc(doc(anon(), "plataforma/planes")));
   await assertFails(setDoc(doc(as("admin@vigente.co"), "plataforma/planes"), { basico: { maxEstudiantes: 1, precio: 1 } }));
 });
+test("gestión comercial (legal, pagos, historial, contratos) y datos de la empresa: solo superadmin", async () => {
+  for (const sub of ["legal", "pagos", "historial", "contratos"]) {
+    await assertSucceeds(setDoc(doc(as(ROOT), `colegios/vigente/${sub}/x`), { a: 1 }));
+    await assertSucceeds(getDoc(doc(as(ROOT), `colegios/vigente/${sub}/x`)));
+    for (const quien of ["admin@vigente.co", "psi@vigente.co"]) {
+      await assertFails(getDoc(doc(as(quien), `colegios/vigente/${sub}/x`)));
+      await assertFails(setDoc(doc(as(quien), `colegios/vigente/${sub}/y`), { a: 1 }));
+    }
+    await assertFails(getDoc(doc(anon(), `colegios/vigente/${sub}/x`)));
+    await assertFails(getDoc(doc(as("admin@gracia.co"), `colegios/vigente/${sub}/x`)));
+  }
+  await assertSucceeds(setDoc(doc(as(ROOT), "plataforma/empresa"), { nit: "1" }));
+  await assertSucceeds(getDoc(doc(as(ROOT), "plataforma/empresa")));
+  await assertFails(getDoc(doc(as("admin@vigente.co"), "plataforma/empresa")));
+  await assertFails(setDoc(doc(as("admin@vigente.co"), "plataforma/empresa"), { nit: "2" }));
+});

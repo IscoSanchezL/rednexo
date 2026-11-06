@@ -87,4 +87,16 @@
 <h2>7. Decisiones tomadas</h2>
 <p>Se adoptaron las recomendaciones: gracia 15 días en solo lectura, retención 90 días, cobro manual y límite que solo avisa.</p><ol style="display:none"><li><b>Política de bloqueo:</b> ¿días de gracia (sugerido 15)? ¿en gracia solo lectura, o bloqueo total?</li><li><b>Retención de datos tras el bloqueo:</b> ¿90 días?</li><li><b>Cobro:</b> ¿manual (A), link de pago (B) o automático (C, requiere Blaze)?</li><li><b>Plan de precios:</b> ¿usamos la tabla propuesta (rangos) u otro modelo?</li><li><b>Límite de estudiantes:</b> ¿bloquea o solo avisa?</li></ol>
 
+<h2>8. Gestión de colegios, contratos y pagos (panel del Super Admin)</h2>
+<p>En la pantalla «Elige tu colegio» (solo Super Admin) hay un panel <b>⚙ Plataforma</b> y, en cada colegio, el botón <b>📋 Gestión</b>.</p>
+<table><tr><th>Dónde</th><th>Qué hace</th></tr>
+<tr><td>🏢 Datos de Iskonex</td><td>Razón social, NIT, representante legal, cédula, ciudad, dirección y correo de Iskonex. <b>Se llenan una sola vez, cuando la empresa esté constituida.</b> Hasta entonces los contratos salen como borrador con marcas «[PENDIENTE]» y no se pueden marcar como firmados.</td></tr>
+<tr><td>Crear colegio</td><td>El formulario pide los datos legales del colegio (se pueden completar después en Gestión → Datos legales).</td></tr>
+<tr><td>Gestión → Contratos</td><td>Se elige el plan, el descuento y la fecha de inicio; el valor se calcula solo. «Generar e imprimir» crea el contrato con número consecutivo (RN-AAAA-001) y abre la impresión (se puede guardar como PDF). Estados: Emitido → Firmado → Activo.</td></tr>
+<tr><td>Gestión → Pagos</td><td>Se registra cada pago (valor, fecha, medio, referencia, factura, contrato al que corresponde).</td></tr>
+<tr><td>«Activar licencia»</td><td>Con el contrato firmado, fija plan, tope, precio y vencimiento (12 meses) en el colegio y lo anota en el historial. Si el pago es menor al valor del contrato, pide confirmación.</td></tr>
+<tr><td>Gestión → Historial</td><td>Cada renovación, cambio de plan y contrato activado, con su fecha y quién lo hizo.</td></tr>
+<tr><td>💼 Cartera</td><td>Total recibido, por año y por colegio, con plan, vencimiento y último pago.</td></tr></table>
+<p><b>Renovación expresa:</b> cada año se genera un contrato nuevo (o se confirma por escrito) y se activa; la licencia no se renueva sola. Los datos comerciales (pagos, contratos, datos legales) solo los ve el Super Admin: los colegios no los ven ni salen en su exportación.</p>
+<div class="alerta"><b>El texto del contrato es un borrador.</b> Antes de firmar con el primer colegio, un abogado debe revisarlo (datos de menores, responsable/encargado, transferencia internacional a Google, RNBD, limitación de responsabilidad). Las cláusulas están en <code>src/lib/contrato.js</code>; al cambiarlas se sube la versión del texto, que queda guardada en cada contrato.</div>
 </body></html>

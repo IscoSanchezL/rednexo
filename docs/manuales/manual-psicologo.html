@@ -28,6 +28,10 @@
 <p>En <b>Grupos</b> cree los cursos (5° A, 5° B…) y agregue a los estudiantes uno a uno o pegando una lista de nombres.</p>
 <figure><img src="img/04-grupos.jpg"><figcaption>Sección Grupos.</figcaption></figure>
 <figure><img src="img/05-lista.jpg"><figcaption>Lista de estudiantes de un grupo.</figcaption></figure>
+<h3>Importar grupos y estudiantes desde Excel (plantilla)</h3>
+<ol><li>En <b>Grupos</b> pulse <b>⬇ Plantilla</b>. Se descarga el archivo <code>plantilla-grupos-y-estudiantes.csv</code>.</li><li>Ábralo en Excel. Tiene dos columnas: <b>Grupo</b> y <b>Estudiante</b>. Escriba <b>una fila por estudiante</b>, repitiendo el grupo en cada fila. Borre las 3 filas de ejemplo (si las deja, el sistema las ignora).</li><li>Guarde como <b>CSV</b> (si Excel pregunta el formato, elija «CSV UTF-8» o «CSV (delimitado por comas)»).</li><li>Pulse <b>⬆ Importar estudiantes</b> y elija el archivo. Verá una <b>vista previa</b>: grupos nuevos, estudiantes que se agregarán, repetidos que se omiten y líneas con errores.</li><li>Si todo está bien, pulse <b>✓ Confirmar importación</b>. Nada se guarda antes de confirmar.</li></ol>
+<table><tr><th>Grupo</th><th>Estudiante</th></tr><tr><td>5° A</td><td>Ana María Pérez</td></tr><tr><td>5° A</td><td>Juan Carlos Gómez</td></tr><tr><td>5° B</td><td>Laura Sofía Ruiz</td></tr></table>
+<p>Si un grupo no existe, se crea. Si un estudiante ya está en ese grupo, no se duplica. Un mismo nombre en grupos distintos sí se importa.</p>
 <div class="ojo"><b>Importante:</b> escriba los nombres completos y sin repetir, porque los estudiantes se buscan por nombre al responder. Un estudiante que cambia de curso se agrega como estudiante nuevo en su nuevo grupo.</div>
 
 <h2>5. Crear una encuesta</h2>
@@ -35,7 +39,7 @@
 <figure><img src="img/06-encuestas.jpg"><figcaption><span class="num">1</span>Nueva encuesta · <span class="num">2</span>Encuesta existente (con avance) · <span class="num">3</span>Importar · <span class="num">4</span>Aplicar (abre la encuesta).</figcaption></figure>
 <figure><img src="img/07-crear.jpg"><figcaption>Creación: nombre, grupos participantes y plantilla de preguntas.</figcaption></figure>
 <ol><li>Escriba el <b>nombre</b> de la encuesta.</li><li>Elija los <b>grupos</b> que la responderán.</li><li>Elija una <b>plantilla</b> de preguntas o escriba las suyas.</li><li>Defina para cada pregunta su tipo (positiva, neutra o negativa) y cuántos compañeros puede elegir.</li></ol>
-<p>También puede <b>Importar</b> preguntas desde un archivo y <b>Exportar</b> las que ya tiene para reutilizarlas.</p>
+<p>También puede <b>Importar</b> preguntas desde un archivo. Pulse <b>⬇ Plantilla</b> para descargar el formato (columnas <code>pregunta</code> y <code>tipo</code>, donde tipo es positiva, neutral o negativa), diligéncielo en Excel y súbalo con <b>⬆ Importar</b>. También puede <b>Exportar</b> las que ya tiene para reutilizarlas.</p>
 <figure><img src="img/08-editar.jpg"><figcaption>Editar preguntas.</figcaption></figure>
 <div class="nota"><b>Recomendación:</b> entre 5 y 8 preguntas, incluya al menos 2 positivas. Use preguntas de rechazo solo si cuenta con consentimiento informado y un plan de seguimiento.</div>
 

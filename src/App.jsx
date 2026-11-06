@@ -9,9 +9,12 @@ import { buildXlsx, XLSX_MIME } from "./lib/xlsx";
 import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
-import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
-import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
-import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
+import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
+import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
+import { sumarMeses, aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
+import { CAMPOS_EMPRESA, CAMPOS_COLEGIO, faltantes, precioConDescuento, numeroContrato, generarContratoHTML, CONTRATO_VERSION } from "./lib/contrato";
+import { MEDIOS_PAGO, validarPago, resumenPagos, carteraGeneral, entradaHistorial } from "./lib/gestion";
+import { COLEGIO_GESTION, COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
 import { Timestamp, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc, limit } from "firebase/firestore";
 
 // ═══════════════════════════════════════
@@ -172,7 +175,7 @@ async function exportColegio(colegio, por) {
 /** Borra todas las subcolecciones y por último el colegio. Irreversible: la interfaz exige confirmación escrita. */
 async function eliminarColegio(id, por, onProgress = () => {}) {
   let n = 0;
-  for (const name of COLEGIO_SUBCOLLECTIONS) {
+  for (const name of [...COLEGIO_SUBCOLLECTIONS, ...COLEGIO_GESTION]) {
     const snap = await getDocs(collection(db, "colegios", id, name));
     for (const part of chunk(snap.docs, 400)) {
       const b = writeBatch(db); part.forEach((d) => b.delete(d.ref)); await b.commit();
@@ -1693,6 +1696,32 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   const [notice, setNotice] = useState("");
   // Grupos guardados + los que ya usan estudiantes aunque no tengan documento (así nunca quedan "invisibles").
   const names = allGroupNames(groups, students);
+  // Importación masiva desde la plantilla CSV (grupos con sus estudiantes).
+  const [imp, setImp] = useState(null);   // { plan, errores, ignoradas, nombreArchivo }
+  const [importing, setImporting] = useState(false);
+  const impRef = useRef(null);
+  const onPickImport = async (e) => {
+    const f = e.target.files?.[0]; e.target.value = "";
+    if (!f) return;
+    const r = parsearImportacion(await f.text());
+    setImp({ plan: planImportacion(r.filas, names, students), errores: r.errores, ignoradas: r.ignoradas, nombreArchivo: f.name });
+  };
+  const confirmImport = async () => {
+    if (!imp || importing) return;
+    setImporting(true);
+    const { gruposNuevos, estudiantesNuevos } = imp.plan;
+    const gs = gruposNuevos.map((name, i) => ({ id: groupIdFor(name), name, color: GROUP_COLORS[(groups.length + i) % GROUP_COLORS.length] }));
+    const ss = estudiantesNuevos.map((x, i) => ({ id: Date.now() + i + Math.random(), name: x.nombre, group: x.grupo, av: initials(x.nombre) }));
+    setGroups((p) => [...p, ...gs]); setStudents((p) => [...p, ...ss]);
+    const rg = await Promise.all(gs.map((g) => saveGroupFS(g)));
+    const rs = await Promise.all(ss.map((x) => saveStudentFS(x)));
+    const malG = gs.filter((_, i) => !rg[i]), malS = ss.filter((_, i) => !rs[i]);
+    if (malG.length) setGroups((p) => p.filter((x) => !malG.some((b) => b.id === x.id)));
+    if (malS.length) setStudents((p) => p.filter((x) => !malS.some((b) => b.id === x.id)));
+    setNotice(malG.length || malS.length ? `❌ Se importaron ${ss.length - malS.length} de ${ss.length} estudiantes; ${malS.length + malG.length} no se pudieron guardar. Revisa tu conexión e inténtalo de nuevo.` : `✅ Importación lista: ${gs.length} grupo(s) y ${ss.length} estudiante(s).`);
+    if (ss.length - malS.length > 0) logActivity("group", `importó ${ss.length - malS.length} estudiante(s) y ${gs.length} grupo(s) desde archivo`, imp.nombreArchivo);
+    setImp(null); setImporting(false);
+  };
 
   const createGroup = async () => {
     const name = newGroup.trim();
@@ -1742,11 +1771,29 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
         <div><PageHeader title="Gestión de Grupos" subtitle="Administra grupos y participantes" /></div>
         <div style={{ display: "flex", gap: 8 }}>
+          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_NOMBRE, plantillaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por estudiante con su grupo">⬇ Plantilla</Btn>
+          {canEdit && <Btn v="ghost" onClick={() => impRef.current?.click()} title="Sube la plantilla diligenciada (CSV)">⬆ Importar estudiantes</Btn>}
+          {canEdit && <input ref={impRef} type="file" accept=".csv,.txt,text/csv" onChange={onPickImport} style={{ display: "none" }} data-testid="import-grupos" />}
           <Btn v="sec" onClick={() => setAddingGroup(!addingGroup)}>+ Nuevo Grupo</Btn>
         </div>
       </div>
       {notice && (
         <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✅") ? tint(C.ok, "15") : tint(C.err, "15"), color: notice.startsWith("✅") ? C.ok : C.err, border: `1px solid ${tint(notice.startsWith("✅") ? C.ok : C.err, "30")}` }}>{notice}</div>
+      )}
+      {imp && (
+        <Card style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📥 Vista previa de la importación · {imp.nombreArchivo}</div>
+          <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.7 }}>
+            Se crearán <b>{imp.plan.gruposNuevos.length}</b> grupo(s) nuevo(s){imp.plan.gruposNuevos.length ? `: ${imp.plan.gruposNuevos.join(", ")}` : ""} y se agregarán <b>{imp.plan.estudiantesNuevos.length}</b> estudiante(s).
+            {imp.plan.repetidos > 0 && <> Se omiten <b>{imp.plan.repetidos}</b> que ya existen o están repetidos.</>}
+            {imp.ignoradas > 0 && <> Se ignoraron {imp.ignoradas} fila(s) de ejemplo.</>}
+          </div>
+          {imp.errores.length > 0 && <div style={{ fontSize: 11, color: C.err, marginTop: 6 }}>{imp.errores.slice(0, 6).map((x) => <div key={x}>⚠ {x}</div>)}{imp.errores.length > 6 && <div>…y {imp.errores.length - 6} más.</div>}<div style={{ color: C.t3 }}>Esas filas no se importarán.</div></div>}
+          <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <Btn v="pri" disabled={importing || !imp.plan.estudiantesNuevos.length} onClick={confirmImport}>{importing ? "Importando..." : "✓ Confirmar importación"}</Btn>
+            <Btn v="ghost" disabled={importing} onClick={() => setImp(null)}>Cancelar</Btn>
+          </div>
+        </Card>
       )}
       {addingGroup && (
         <Card style={{ marginBottom: 14, display: "flex", alignItems: "flex-end", gap: 10 }}>
@@ -2318,6 +2365,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             )}
           </Btn>
           <Btn v="ghost" onClick={useTemplate}>📋 Encuesta de prueba</Btn>
+          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_ENCUESTA_NOMBRE, plantillaEncuestaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por pregunta (pregunta; tipo)">⬇ Plantilla</Btn>
           <Btn v="ghost" onClick={() => fileInputRef.current?.click()}>⬆ Importar</Btn>
           <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,application/json,text/csv" onChange={onPickFile} style={{ display: "none" }} data-testid="import-file" />
           <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
@@ -3046,6 +3094,216 @@ function PublicSurvey({ surveyId, colegioId }) {
 
 // ════════ SELECTOR DE COLEGIO ════════
 
+// Abre una ventana con el HTML y lanza la impresión (el navegador permite «Guardar como PDF»).
+function imprimirHTML(html) {
+  const w = window.open("", "_blank");
+  if (!w) { alert("El navegador bloqueó la ventana. Permite las ventanas emergentes para imprimir."); return; }
+  w.document.write(html); w.document.close(); w.focus();
+  setTimeout(() => { try { w.print(); } catch (e) {} }, 400);
+}
+const fechaCorta = (ms) => ms ? new Date(ms).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "—";
+const copTxt = (n) => "$" + Number(n || 0).toLocaleString("es-CO");
+const hoyISO = () => new Date().toISOString().slice(0, 10);
+
+function CamposForm({ campos, valores, onChange }) {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 8 }}>
+      {campos.map(([k, label, req]) => <Inp key={k} label={label + (req ? " *" : "")} value={valores[k] || ""} onChange={(v) => onChange({ ...valores, [k]: v })} />)}
+    </div>
+  );
+}
+
+// Datos legales de Iskonex (para el contrato). Se llenan cuando la empresa esté constituida.
+function EmpresaForm({ onGuardado }) {
+  const [v, setV] = useState({});
+  const [msg, setMsg] = useState("");
+  // Lo ya escrito no se pisa si la carga tarda.
+  useEffect(() => { getDoc(doc(db, "plataforma", "empresa")).then((d) => setV((cur) => ({ ...(d.exists() ? d.data() : {}), ...cur }))).catch(() => {}); }, []);
+  const faltan = faltantes(CAMPOS_EMPRESA, v);
+  const guardar = async () => {
+    try { await setDoc(doc(db, "plataforma", "empresa"), v); setMsg("✅ Datos guardados."); onGuardado && onGuardado(v); } catch (e) { setMsg("❌ No se pudo guardar: " + e.message); }
+  };
+  return (
+    <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${C.border}` }}>
+      <div style={{ fontSize: 11, color: C.t2, margin: "10px 0" }}>Estos datos aparecen en el contrato como «EL PROVEEDOR». Mientras falten, el contrato sale como borrador con marcas «[PENDIENTE]» y no se puede marcar como firmado.</div>
+      <CamposForm campos={CAMPOS_EMPRESA} valores={v} onChange={setV} />
+      {faltan.length > 0 && <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>Pendiente: {faltan.join(", ")}.</div>}
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}><Btn v="pri" sm onClick={guardar}>💾 Guardar datos de Iskonex</Btn>{msg && <span style={{ fontSize: 11 }}>{msg}</span>}</div>
+    </div>
+  );
+}
+
+// Cartera: lo pagado por cada colegio y por año.
+function CarteraPanel({ colegios }) {
+  const [datos, setDatos] = useState(null);
+  useEffect(() => {
+    (async () => {
+      const out = await Promise.all(colegios.map(async (c) => {
+        const leer = async (n) => { try { return (await getDocs(collection(db, "colegios", c.id, n))).docs.map((d) => d.data()); } catch (e) { return []; } };
+        return { colegio: c, pagos: await leer("pagos"), historial: await leer("historial") };
+      }));
+      setDatos(carteraGeneral(out));
+    })();
+  }, [colegios]);
+  if (!datos) return <div style={{ padding: "0 12px 12px", fontSize: 12, color: C.t2 }}>Cargando…</div>;
+  const anios = Object.keys(datos.porAnio).sort();
+  return (
+    <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${C.border}`, fontSize: 12 }}>
+      <div style={{ margin: "10px 0 6px", fontWeight: 700 }}>Total recibido: {copTxt(datos.total)}{anios.length ? " · " + anios.map((y) => `${y}: ${copTxt(datos.porAnio[y])}`).join(" · ") : ""}</div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
+          <thead><tr style={{ textAlign: "left", color: C.t3 }}>{["Colegio", "Plan", "Vence", "Valor del plan", "Pagado", "Último pago"].map((h) => <th key={h} style={{ padding: "4px 6px" }}>{h}</th>)}</tr></thead>
+          <tbody>{datos.filas.map((f) => (
+            <tr key={f.id} style={{ borderTop: `1px solid ${C.border}` }}>
+              <td style={{ padding: "5px 6px" }}>{f.nombre}</td><td style={{ padding: "5px 6px" }}>{PLANES[f.plan]?.label || "—"}</td><td style={{ padding: "5px 6px" }}>{fechaCorta(f.vence)}</td>
+              <td style={{ padding: "5px 6px" }}>{f.precio ? copTxt(f.precio) : "—"}</td><td style={{ padding: "5px 6px" }}>{copTxt(f.pagado)}</td><td style={{ padding: "5px 6px" }}>{fechaCorta(f.ultimoPago)}</td>
+            </tr>))}</tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// Gestión comercial de UN colegio (solo superadmin): datos legales, contratos, pagos e historial.
+function GestionColegio({ colegio, session, onCerrar, onCambio }) {
+  const [tab, setTab] = useState("contratos");
+  const [legal, setLegal] = useState({});
+  const [empresa, setEmpresa] = useState({});
+  const [pagos, setPagos] = useState([]);
+  const [contratos, setContratos] = useState([]);
+  const [historial, setHistorial] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [fc, setFc] = useState({ plan: colegio.licencia?.plan && colegio.licencia.plan !== "piloto" ? colegio.licencia.plan : "basico", descuento: "0", inicio: hoyISO() });
+  const [fp, setFp] = useState({ valor: "", fecha: hoyISO(), medio: "transferencia", referencia: "", factura: "", contratoId: "", nota: "" });
+  const cdocRef = (sub, id) => doc(db, "colegios", colegio.id, sub, id);
+  const cargar = async () => {
+    const leer = async (n) => { try { return (await getDocs(collection(db, "colegios", colegio.id, n))).docs.map((d) => ({ id: d.id, ...d.data() })); } catch (e) { return []; } };
+    const [l, e, cd] = await Promise.all([getDoc(cdocRef("legal", "datos")).catch(() => null), getDoc(doc(db, "plataforma", "empresa")).catch(() => null), getDoc(doc(db, "colegios", colegio.id)).catch(() => null)]);
+    setLegal({ ciudad: (cd && cd.exists() && cd.data().ciudad) || "", ...(l && l.exists() ? l.data() : {}) }); setEmpresa(e && e.exists() ? e.data() : {});
+    setPagos((await leer("pagos")).sort((a, b) => (aMs(b.fecha) || 0) - (aMs(a.fecha) || 0)));
+    setContratos((await leer("contratos")).sort((a, b) => (b.numero || "").localeCompare(a.numero || "")));
+    setHistorial((await leer("historial")).sort((a, b) => (aMs(b.creadoEn) || 0) - (aMs(a.creadoEn) || 0)));
+  };
+  useEffect(() => { cargar(); }, [colegio.id]);  // eslint-disable-line
+  const ok = (t) => setMsg("✅ " + t), mal = (e) => setMsg("❌ " + (e?.message || e));
+
+  const guardarLegal = async () => { try { await setDoc(cdocRef("legal", "datos"), legal); ok("Datos legales guardados."); } catch (e) { mal(e); } };
+
+  const vigenciaInicio = () => Date.parse(fc.inicio + "T12:00:00Z");
+  const precioLista = PLANES[fc.plan]?.precio || 0;
+  const precioFinal = precioConDescuento(precioLista, fc.descuento);
+  const generar = async () => {
+    const ms = vigenciaInicio();
+    if (!Number.isFinite(ms)) { mal("La fecha de inicio no es válida."); return; }
+    try {
+      // Datos de Iskonex al día (pudieron guardarse después de abrir esta ventana).
+      const empSnap = await getDoc(doc(db, "plataforma", "empresa")).catch(() => null);
+      const empresaAct = empSnap && empSnap.exists() ? empSnap.data() : {};
+      setEmpresa(empresaAct);
+      const numero = numeroContrato(new Date(ms).getUTCFullYear(), contratos.map((c) => c.numero));
+      const base = { numero, plan: fc.plan, precio: precioLista, descuentoPct: Number(fc.descuento) || 0, inicio: ms, meses: 12 };
+      const r = generarContratoHTML({ empresa: empresaAct, colegio: legal, contrato: base });
+      const ref = await addDoc(collection(db, "colegios", colegio.id, "contratos"), {
+        numero, version: CONTRATO_VERSION, plan: fc.plan, maxEstudiantes: PLANES[fc.plan]?.maxEstudiantes || 0, precioLista, descuentoPct: base.descuentoPct, precioFinal: r.precioFinal,
+        inicio: Timestamp.fromMillis(ms), fin: Timestamp.fromMillis(r.fin), meses: 12, estado: "emitido", datosColegio: legal, datosEmpresa: empresaAct, creadoPor: session.email, creadoEn: serverTimestamp(),
+      });
+      await logAudit("generar_contrato", colegio.id, session.email, { numero });
+      imprimirHTML(r.html); ok(`Contrato ${numero} generado.`); await cargar(); return ref;
+    } catch (e) { mal(e); }
+  };
+  const reimprimir = (c) => imprimirHTML(generarContratoHTML({ empresa: c.datosEmpresa || {}, colegio: c.datosColegio || {}, contrato: { numero: c.numero, plan: c.plan, precio: c.precioLista, descuentoPct: c.descuentoPct, inicio: aMs(c.inicio), meses: c.meses } }).html);
+  const pagadoDe = (c) => resumenPagos(pagos.filter((p) => p.contratoId === c.id)).total;
+  const firmar = async (c) => {
+    const falta = [...faltantes(CAMPOS_EMPRESA, c.datosEmpresa || {}).map((x) => "Iskonex: " + x), ...faltantes(CAMPOS_COLEGIO, c.datosColegio || {}).map((x) => "Colegio: " + x)];
+    if (falta.length) { mal("No se puede marcar como firmado: faltan datos (" + falta.join(", ") + "). Complétalos y genera el contrato de nuevo."); return; }
+    if (!window.confirm(`¿Confirmas que el contrato ${c.numero} ya fue firmado por ambas partes?`)) return;
+    try { await updateDoc(cdocRef("contratos", c.id), { estado: "firmado", firmadoEn: serverTimestamp(), firmadoPor: session.email }); await logAudit("firmar_contrato", colegio.id, session.email, { numero: c.numero }); ok("Contrato marcado como firmado."); await cargar(); } catch (e) { mal(e); }
+  };
+  const activar = async (c) => {
+    const pagado = pagadoDe(c);
+    if (pagado < c.precioFinal && !window.confirm(`El pago registrado para este contrato (${copTxt(pagado)}) es menor al valor (${copTxt(c.precioFinal)}). ¿Activar la licencia de todos modos?`)) return;
+    try {
+      const lic = { plan: c.plan, vence: aMs(c.fin), graciaDias: colegio.licencia?.graciaDias ?? 15, maxEstudiantes: c.maxEstudiantes, precio: c.precioFinal };
+      await updateDoc(doc(db, "colegios", colegio.id), { licencia: { ...lic, vence: Timestamp.fromMillis(lic.vence) } });
+      await addDoc(collection(db, "colegios", colegio.id, "historial"), { ...entradaHistorial({ accion: "contrato", licencia: lic, por: session.email, contratoId: c.id, descuentoPct: c.descuentoPct }), creadoEn: serverTimestamp() });
+      await updateDoc(cdocRef("contratos", c.id), { estado: "activo", activadoEn: serverTimestamp() });
+      await logAudit("activar_licencia", colegio.id, session.email, { numero: c.numero });
+      ok(`Licencia activada hasta el ${fechaCorta(lic.vence)}.`); await cargar(); onCambio && onCambio();
+    } catch (e) { mal(e); }
+  };
+  const registrarPago = async () => {
+    const v = validarPago(fp);
+    if (!v.ok) { setMsg("❌ " + v.errores[0]); return; }
+    try {
+      await addDoc(collection(db, "colegios", colegio.id, "pagos"), { valor: v.pago.valor, fecha: Timestamp.fromMillis(v.pago.fechaMs), medio: v.pago.medio, referencia: v.pago.referencia, factura: v.pago.factura, contratoId: v.pago.contratoId, nota: v.pago.nota, registradoPor: session.email, creadoEn: serverTimestamp() });
+      await logAudit("registrar_pago", colegio.id, session.email, { valor: v.pago.valor });
+      setFp({ ...fp, valor: "", referencia: "", factura: "", nota: "" }); ok("Pago registrado."); await cargar();
+    } catch (e) { mal(e); }
+  };
+
+  const faltanLegal = faltantes(CAMPOS_COLEGIO, legal), faltanEmp = faltantes(CAMPOS_EMPRESA, empresa);
+  const estadoTxt = { emitido: "Emitido", firmado: "Firmado", activo: "Activo" };
+  const tabs = [["contratos", "📄 Contratos"], ["pagos", "💵 Pagos"], ["historial", "🕘 Historial"], ["legal", "🏫 Datos legales"]];
+  return (
+    <div style={{ borderTop: `1px solid ${C.border}`, padding: 14, background: tint(C.rx, "08") }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>📋 Gestión · {colegio.nombre || colegio.id}</div>
+        {tabs.map(([k, l]) => <Btn key={k} sm v={tab === k ? "pri" : "ghost"} onClick={() => { setTab(k); setMsg(""); }}>{l}</Btn>)}
+        <Btn sm v="ghost" onClick={onCerrar}>✕</Btn>
+      </div>
+      {msg && <div style={{ fontSize: 12, marginBottom: 8 }}>{msg}</div>}
+      {tab === "legal" && (<div>
+        <div style={{ fontSize: 11, color: C.t2, marginBottom: 8 }}>Datos del colegio que aparecen en el contrato como «EL COLEGIO». Solo los ve el equipo de la plataforma.</div>
+        <CamposForm campos={CAMPOS_COLEGIO} valores={legal} onChange={setLegal} />
+        {faltanLegal.length > 0 && <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>Pendiente: {faltanLegal.join(", ")}.</div>}
+        <div style={{ marginTop: 10 }}><Btn v="pri" sm onClick={guardarLegal}>💾 Guardar datos legales</Btn></div>
+      </div>)}
+      {tab === "contratos" && (<div>
+        {(faltanLegal.length > 0 || faltanEmp.length > 0) && <div style={{ fontSize: 11, color: C.amber, marginBottom: 8 }}>⚠ Faltan datos: {[...faltanEmp.map((x) => "Iskonex: " + x), ...faltanLegal.map((x) => "Colegio: " + x)].join("; ")}. El contrato sale como borrador y no se puede marcar como firmado.</div>}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8, alignItems: "end" }}>
+          <Sel label="Plan" value={fc.plan} onChange={(v) => setFc({ ...fc, plan: v })} options={Object.keys(PLANES).map((k) => ({ v: k, l: etiquetaPlan(k) }))} />
+          <Inp label="Descuento %" value={fc.descuento} onChange={(v) => setFc({ ...fc, descuento: v })} />
+          <Inp label="Inicio de vigencia" type="date" value={fc.inicio} onChange={(v) => setFc({ ...fc, inicio: v })} />
+        </div>
+        <div style={{ fontSize: 12, margin: "8px 0" }}>Valor del contrato (12 meses): <b>{precioFinal ? copTxt(precioFinal) : "a convenir"}</b>{Number(fc.descuento) > 0 ? ` (lista ${copTxt(precioLista)})` : ""} + IVA</div>
+        <Btn v="pri" sm onClick={generar}>📄 Generar e imprimir contrato</Btn>
+        <div style={{ marginTop: 12 }}>
+          {contratos.length === 0 && <div style={{ fontSize: 12, color: C.t3 }}>Todavía no hay contratos para este colegio.</div>}
+          {contratos.map((c) => (
+            <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "8px 0", borderTop: `1px solid ${C.border}`, fontSize: 12 }}>
+              <div style={{ flex: 1, minWidth: 220 }}><b>{c.numero}</b> · {PLANES[c.plan]?.label || c.plan} · {copTxt(c.precioFinal)} <span style={{ color: C.t3 }}>· {fechaCorta(aMs(c.inicio))} → {fechaCorta(aMs(c.fin))}</span>
+                <div style={{ fontSize: 11, color: C.t3 }}>Pagado: {copTxt(pagadoDe(c))} de {copTxt(c.precioFinal)} · texto v{c.version}</div></div>
+              <Badge color={c.estado === "activo" ? C.ok : c.estado === "firmado" ? C.teal : C.amber}>{estadoTxt[c.estado] || c.estado}</Badge>
+              <Btn sm v="ghost" onClick={() => reimprimir(c)}>🖨 Imprimir</Btn>
+              {c.estado === "emitido" && <Btn sm v="teal" onClick={() => firmar(c)}>✍ Marcar firmado</Btn>}
+              {c.estado === "firmado" && <Btn sm v="ok" onClick={() => activar(c)}>🔑 Activar licencia</Btn>}
+            </div>))}
+        </div>
+      </div>)}
+      {tab === "pagos" && (<div>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8, alignItems: "end" }}>
+          <Inp label="Valor (COP) *" value={fp.valor} onChange={(v) => setFp({ ...fp, valor: v })} placeholder="1200000" />
+          <Inp label="Fecha *" type="date" value={fp.fecha} onChange={(v) => setFp({ ...fp, fecha: v })} />
+          <Sel label="Medio *" value={fp.medio} onChange={(v) => setFp({ ...fp, medio: v })} options={Object.entries(MEDIOS_PAGO).map(([v, l]) => ({ v, l }))} />
+          <Inp label="Referencia / comprobante" value={fp.referencia} onChange={(v) => setFp({ ...fp, referencia: v })} />
+          <Inp label="N.° de factura" value={fp.factura} onChange={(v) => setFp({ ...fp, factura: v })} />
+          <Sel label="Contrato" value={fp.contratoId} onChange={(v) => setFp({ ...fp, contratoId: v })} options={[{ v: "", l: "— sin contrato —" }, ...contratos.map((c) => ({ v: c.id, l: c.numero }))]} />
+        </div>
+        <div style={{ marginTop: 8 }}><Btn v="pri" sm onClick={registrarPago}>＋ Registrar pago</Btn></div>
+        <div style={{ marginTop: 12, fontSize: 12 }}>
+          <div style={{ fontWeight: 700, marginBottom: 4 }}>Total pagado: {copTxt(resumenPagos(pagos).total)}</div>
+          {pagos.length === 0 && <div style={{ color: C.t3 }}>Sin pagos registrados.</div>}
+          {pagos.map((p) => <div key={p.id} style={{ padding: "6px 0", borderTop: `1px solid ${C.border}` }}><b>{copTxt(p.valor)}</b> · {fechaCorta(aMs(p.fecha))} · {MEDIOS_PAGO[p.medio] || p.medio}{p.factura ? ` · factura ${p.factura}` : ""}{p.referencia ? ` · ${p.referencia}` : ""}{p.contratoId ? ` · ${contratos.find((c) => c.id === p.contratoId)?.numero || ""}` : ""}<span style={{ color: C.t3 }}> · {p.registradoPor}</span></div>)}
+        </div>
+      </div>)}
+      {tab === "historial" && (<div style={{ fontSize: 12 }}>
+        {historial.length === 0 && <div style={{ color: C.t3 }}>Sin movimientos todavía. Cada renovación, cambio de plan o contrato activado queda aquí.</div>}
+        {historial.map((h) => <div key={h.id} style={{ padding: "6px 0", borderTop: `1px solid ${C.border}` }}><b>{({ renovar_licencia: "Renovación", cambiar_plan: "Cambio de plan", contrato: "Contrato activado" })[h.accion] || h.accion}</b> · plan {PLANES[h.plan]?.label || h.plan || "—"} · {h.maxEstudiantes ? `hasta ${h.maxEstudiantes} est.` : "sin tope"} · {h.precio ? copTxt(h.precio) : "—"}{h.descuentoPct ? ` (−${h.descuentoPct}%)` : ""} · vence {fechaCorta(h.vence)}<span style={{ color: C.t3 }}> · {fechaCorta(aMs(h.creadoEn))} · {h.por}</span></div>)}
+      </div>)}
+    </div>
+  );
+}
+
 // Panel del superadmin: vencimientos por avisar y precios de los planes.
 function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
   const [abierto, setAbierto] = useState(null);
@@ -3062,7 +3320,11 @@ function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
         <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>⚙ Plataforma</div>
         <Btn sm v="ghost" onClick={() => setAbierto(abierto === "venc" ? null : "venc")}>⏰ Vencimientos{avisar.length ? ` (${avisar.length})` : ""}</Btn>
         <Btn sm v="ghost" onClick={abrirPlanes}>💲 Planes y precios</Btn>
+        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "cartera" ? null : "cartera")}>💼 Cartera</Btn>
+        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "empresa" ? null : "empresa")}>🏢 Datos de Iskonex</Btn>
       </div>
+      {abierto === "cartera" && <CarteraPanel colegios={colegios} />}
+      {abierto === "empresa" && <EmpresaForm />}
       {abierto === "venc" && (
         <div style={{ padding: "0 12px 12px" }}>
           {avisar.length === 0 && <div style={{ fontSize: 12, color: C.t2 }}>Ningún colegio está por vencer. 🎉</div>}
@@ -3093,11 +3355,13 @@ function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
   );
 }
 
-function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onRenew, onPlan, onGuardarPlanes, onRecordar, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
+function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onRenew, onPlan, onGuardarPlanes, onRecordar, onRefrescar, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
   const [nombre, setNombre] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [planNuevo, setPlanNuevo] = useState("piloto");
+  const [legalNuevo, setLegalNuevo] = useState({});
+  const [gestionando, setGestionando] = useState(null);
   const [deleting, setDeleting] = useState(null);
   const [typed, setTyped] = useState("");
   const [exported, setExported] = useState(false);
@@ -3134,6 +3398,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                 {isSuper && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 14px 12px" }}>
                     <Btn sm v="ghost" disabled={busy} onClick={() => onExport(c)}>⬇ Exportar</Btn>
+                    <Btn sm v="ghost" onClick={() => setGestionando(gestionando === c.id ? null : c.id)}>📋 Gestión</Btn>
                     <Btn sm v="teal" disabled={busy} onClick={() => onRenew(c)} title="Suma 12 meses a la licencia (si ya venció, cuenta desde hoy)">🔑 Renovar 12 meses</Btn>
                     <select disabled={busy} value={c.licencia?.plan || ""} onChange={(e) => e.target.value && onPlan(c, e.target.value)} title="Al elegir un plan se ajustan solos el máximo de estudiantes y el costo" style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 12, fontFamily: "inherit" }}>
                       <option value="">Elegir plan…</option>
@@ -3143,6 +3408,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                     <Btn sm v="dan" disabled={busy} onClick={() => { setDeleting(deleting === c.id ? null : c.id); setTyped(""); setExported(false); }}>🗑 Eliminar</Btn>
                   </div>
                 )}
+                {isSuper && gestionando === c.id && <GestionColegio colegio={c} session={session} onCerrar={() => setGestionando(null)} onCambio={onRefrescar} />}
                 {isSuper && deleting === c.id && (
                   <div style={{ padding: "10px 14px 14px", borderTop: `1px solid ${C.border}`, background: tint(C.err, "10") }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: C.err, marginBottom: 6 }}>Eliminar «{c.nombre || c.id}» para siempre</div>
@@ -3166,9 +3432,13 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                 <Inp label="Nombre del colegio" value={nombre} onChange={setNombre} placeholder="Colegio San José" />
                 <Inp label="Ciudad" value={ciudad} onChange={setCiudad} placeholder="Ciudad" />
                 <Inp label="Correo del administrador del colegio (opcional)" value={adminEmail} onChange={setAdminEmail} placeholder="admin@colegio.edu.co" />
+                <details style={{ fontSize: 12 }}>
+                  <summary style={{ cursor: "pointer", color: C.t2 }}>Datos legales para el contrato (se pueden completar después)</summary>
+                  <div style={{ marginTop: 8 }}><CamposForm campos={CAMPOS_COLEGIO.filter(([k]) => k !== "ciudad")} valores={legalNuevo} onChange={setLegalNuevo} /></div>
+                </details>
                 <Sel label="Plan (define el máximo de estudiantes y el costo)" value={planNuevo} onChange={setPlanNuevo} options={Object.keys(PLANES).map((k) => ({ v: k, l: etiquetaPlan(k) }))} />
               </div>
-              <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase(), plan: planNuevo }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
+              <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase(), plan: planNuevo, legal: { ...legalNuevo, ciudad: ciudad.trim() } }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); setLegalNuevo({}); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
             </Card>
             <Card style={{ marginTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👑 Superadmins de la plataforma</div>
@@ -3433,6 +3703,7 @@ export default function App() {
     setPickerBusy(true); setPickerMsg("");
     try {
       await updateDoc(doc(db, "colegios", c.id), { licencia: { ...lic, vence: Timestamp.fromMillis(aMs(lic.vence)) } });  // las reglas comparan con request.time: debe ser Timestamp
+      await addDoc(collection(db, "colegios", c.id, "historial"), { ...entradaHistorial({ accion, licencia: lic, por: session.email }), creadoEn: serverTimestamp() });
       await logAudit(accion, c.id, session.email);
       await reloadColegios();
       setPickerMsg(texto);
@@ -3496,7 +3767,7 @@ export default function App() {
     setPickerBusy(false);
   };
 
-  const createColegio = async ({ nombre, ciudad, adminEmail, plan = "piloto" }) => {
+  const createColegio = async ({ nombre, ciudad, adminEmail, plan = "piloto", legal = {} }) => {
     const id = slugify(nombre);
     if (!id) return false;
     setPickerBusy(true); setPickerMsg("");
@@ -3506,6 +3777,7 @@ export default function App() {
       const lic0 = licenciaNueva(plan);
       batch.set(doc(db, "colegios", id), { nombre, ciudad, createdAt: serverTimestamp(), licencia: { ...lic0, vence: Timestamp.fromMillis(lic0.vence) } });
       batch.set(doc(db, "colegios", id, "settings", "global"), { colegio: nombre, ciudad, periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
+      if (Object.values(legal).some((x) => String(x || "").trim())) batch.set(doc(db, "colegios", id, "legal", "datos"), legal);
       if (adminEmail.includes("@")) batch.set(doc(db, "colegios", id, "miembros", adminEmail), { email: adminEmail, role: "admin", status: "active", createdAt: serverTimestamp() });
       await batch.commit();
       await logAudit("crear", id, session.email);
@@ -3573,7 +3845,7 @@ export default function App() {
     </div>
   );
 
-  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onGuardarPlanes={guardarPlanes} onRecordar={recordarColegio} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
+  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onGuardarPlanes={guardarPlanes} onRecordar={recordarColegio} onRefrescar={reloadColegios} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
     if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);
