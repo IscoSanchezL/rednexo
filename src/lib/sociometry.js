@@ -170,3 +170,26 @@ export function nodeStats(id, conns, n) {
   const ratio = (k) => (d ? (k / d).toFixed(2) : "0.00");
   return { elecciones: hechas.length, recibidas: recibidas.length, reciprocas, positivasRecibidas: pos, negativasRecibidas: neg, aceptacion: ratio(pos), rechazo: ratio(neg) };
 }
+
+/**
+ * Ranking de estudiantes por elecciones positivas recibidas («más aceptados») o por rechazos recibidos («más rechazados»).
+ * Solo cuenta a quienes tienen al menos una (un ranking con ceros no dice nada), ordena de mayor a menor y, ante
+ * un empate, conserva el mismo puesto (1, 1, 3) y ordena por nombre. `conns` y `students` deben ser lo VISIBLE.
+ * Devuelve { rows: [{ student, count, ratio, rank }], total } con `rows` limitado a `limit` (`total` = cuántos hay en todo el ranking).
+ */
+export function rankStudents(students, conns, type, limit = 4) {
+  const d = students.length > 1 ? students.length - 1 : 0;
+  const ids = new Set(students.map((s) => String(s.id)));
+  const count = new Map();
+  for (const c of conns) {
+    if (!hasType(c, type) || !ids.has(String(c.f)) || !ids.has(String(c.t))) continue;
+    count.set(String(c.t), (count.get(String(c.t)) || 0) + 1);
+  }
+  const all = students
+    .map((s) => ({ student: s, count: count.get(String(s.id)) || 0 }))
+    .filter((r) => r.count > 0)
+    .sort((a, b) => b.count - a.count || String(a.student.name).localeCompare(String(b.student.name), "es"));
+  let prev = null, rank = 0;
+  all.forEach((r, i) => { if (r.count !== prev) { rank = i + 1; prev = r.count; } r.rank = rank; r.ratio = d ? (r.count / d).toFixed(2) : "0.00"; });
+  return { rows: all.slice(0, limit), total: all.length };
+}
