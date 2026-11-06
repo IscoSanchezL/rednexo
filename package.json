@@ -9,9 +9,9 @@
     "preview": "vite preview",
     "deploy": "npm run build && gh-pages -d dist",
     "test:rules": "firebase emulators:exec --only firestore --project rednexo-test \"node --test tests/*.test.js\"",
-    "test": "node --test tests/sociometry.test.js tests/colegio.test.js tests/export.test.js tests/surveys.test.js tests/color.test.js",
+    "test": "node --test tests/sociometry.test.js tests/colegio.test.js tests/export.test.js tests/surveys.test.js tests/color.test.js tests/reports.test.js",
     "test:all": "npm test && npm run test:rules",
-    "test:e2e": "firebase emulators:exec --only auth,firestore --project rednexo-fd35c \"node tests/e2e-public-survey.mjs && node tests/e2e-app.mjs && node tests/e2e-plataforma.mjs && node tests/e2e-grupos.mjs && node tests/e2e-encuestas.mjs && node tests/e2e-encuestas-io.mjs && node tests/e2e-matriz.mjs && node tests/e2e-filtros.mjs && node tests/e2e-ranking.mjs\""
+    "test:e2e": "firebase emulators:exec --only auth,firestore --project rednexo-fd35c \"node tests/e2e-public-survey.mjs && node tests/e2e-app.mjs && node tests/e2e-plataforma.mjs && node tests/e2e-grupos.mjs && node tests/e2e-encuestas.mjs && node tests/e2e-encuestas-io.mjs && node tests/e2e-matriz.mjs && node tests/e2e-filtros.mjs && node tests/e2e-ranking.mjs && node tests/e2e-reportes.mjs\""
   },
   "dependencies": {
     "firebase": "^10.12.0",
