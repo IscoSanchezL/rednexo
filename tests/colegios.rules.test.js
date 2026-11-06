@@ -196,3 +196,23 @@ test("actividad: no se escribe en otro colegio; solo el administrador la lee y n
   await assertFails(updateDoc(doc(as("admin@a.co"), "colegios/A/activity/l1"), { action: "otra" }));
   await assertFails(updateDoc(doc(as("psi@a.co"), "colegios/A/activity/l1"), { action: "otra" }));
 });
+
+// ── Eliminar usuarios ──
+test("eliminar un miembro: solo el administrador de ese colegio (o el superadmin); y quien se elimina pierde todo acceso", async () => {
+  await assertFails(deleteDoc(doc(as("psi@a.co"), "colegios/A/miembros/ro@a.co")));        // un psicólogo no administra usuarios
+  await assertFails(deleteDoc(doc(as("ro@a.co"), "colegios/A/miembros/psi@a.co")));
+  await assertFails(deleteDoc(doc(as("admin@b.co"), "colegios/A/miembros/ro@a.co")));      // el administrador de otro colegio, tampoco
+  await assertSucceeds(students(as("ro@a.co"), "A"));
+  await assertSucceeds(deleteDoc(doc(as("admin@a.co"), "colegios/A/miembros/ro@a.co")));
+  await assertFails(students(as("ro@a.co"), "A"));                                          // ya no lee nada
+  await assertFails(getDoc(doc(as("ro@a.co"), "colegios/A")));
+  await assertSucceeds(students(as("psi@b.co"), "B"));                                      // el otro colegio no se afecta
+});
+test("revocar guarda el rol anterior y reactivar lo restaura (campo rolAnterior permitido); el rol sigue validándose", async () => {
+  const adm = as("admin@a.co");
+  await assertSucceeds(updateDoc(doc(adm, "colegios/A/miembros/psi@a.co"), { status: "revoked", role: "readonly", rolAnterior: "psychologist" }));
+  await assertFails(students(as("psi@a.co"), "A"));                                         // revocado: sin acceso
+  await assertSucceeds(updateDoc(doc(adm, "colegios/A/miembros/psi@a.co"), { status: "active", role: "psychologist" }));
+  await assertSucceeds(students(as("psi@a.co"), "A"));
+  await assertFails(updateDoc(doc(adm, "colegios/A/miembros/psi@a.co"), { role: "superadmin" }));   // roles inventados, no
+});
