@@ -242,3 +242,35 @@ test("ranking: conexiones antiguas sin `types` y ids numéricos también cuentan
   const st = [{ id: 1, name: "A" }, { id: 2, name: "B" }];
   assert.deepEqual(rankStudents(st, [{ f: "1", t: 2, s: 1, tp: "neg" }], "neg").rows.map((r) => [r.student.name, r.count]), [["B", 1]]);
 });
+
+import { surveyGroups, needsGroupFix, rosterIsStale } from "../src/lib/sociometry.js";
+const EST = [
+  { id: "1", name: "Isco", group: "Grupo Prueba" }, { id: "2", name: "Milena", group: "Grupo Prueba" },
+  { id: "3", name: "pacho", group: "Grupo Prueba 1" }, { id: "4", name: "pacho1", group: "Grupo Prueba 1" },
+];
+test("tu caso: la encuesta se aplica a «Grupo Prueba 1» pero conservaba groups = [«Grupo Prueba»]: debe valer lo que se eligió", () => {
+  const sv = { group: "Grupo Prueba 1", groups: ["Grupo Prueba"] };           // se cambió «Grupo» en el panel de edición
+  assert.deepEqual(surveyGroups(sv), ["Grupo Prueba 1"]);
+  assert.equal(needsGroupFix(sv), true);
+  assert.deepEqual(buildRoster(sv, EST).rosterIds, ["3", "4"]);                // antes: ["1", "2"] (los del otro grupo)
+});
+test("grupos de la encuesta: lista, un solo grupo antiguo, varios grupos y sin grupos", () => {
+  assert.deepEqual(surveyGroups({ group: "A", groups: ["A", "B"] }), ["A", "B"]);   // consistente: manda la lista
+  assert.deepEqual(surveyGroups({ group: "A" }), ["A"]);                             // encuestas antiguas
+  assert.deepEqual(surveyGroups({ groups: ["B", "C"] }), ["B", "C"]);
+  assert.deepEqual(surveyGroups({ group: "", groups: [] }), []);
+  assert.deepEqual(surveyGroups({}), []);
+  assert.deepEqual([needsGroupFix({ group: "A", groups: ["A", "B"] }), needsGroupFix({ group: "A" }), needsGroupFix({})], [false, false, false]);
+  assert.equal(buildRoster({}, EST).rosterIds.length, 4);                            // sin grupos definidos: todos
+});
+test("lista de nombres desactualizada: estudiante nuevo, renombrado, cambiado de grupo o eliminado", () => {
+  const sv = { group: "Grupo Prueba 1", groups: ["Grupo Prueba 1"] };
+  const al_dia = { ...sv, roster: buildRoster(sv, EST).roster };
+  assert.equal(rosterIsStale(al_dia, EST), false);
+  assert.equal(rosterIsStale(al_dia, [...EST].reverse()), false);                    // el orden no importa
+  assert.equal(rosterIsStale(al_dia, [...EST, { id: "5", name: "pacho2", group: "Grupo Prueba 1" }]), true);      // se agregó uno
+  assert.equal(rosterIsStale(al_dia, [...EST, { id: "5", name: "otro", group: "Grupo Prueba" }]), false);          // uno de otro grupo: no afecta
+  assert.equal(rosterIsStale(al_dia, EST.map((s) => (s.id === "3" ? { ...s, name: "Pacho" } : s))), true);        // renombrado
+  assert.equal(rosterIsStale(al_dia, EST.filter((s) => s.id !== "4")), true);                                      // eliminado
+  assert.equal(rosterIsStale({ ...sv }, EST), true);                                                               // sin lista guardada
+});
