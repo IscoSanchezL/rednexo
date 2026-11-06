@@ -10,3 +10,7 @@ firebase-debug.log
 .firebase/
 firestore-debug.log
 ui-debug.log
+
+# Documentos generados
+docs/manuales/img/
+*.pdf
