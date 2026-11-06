@@ -82,12 +82,37 @@ service cloud.firestore {
     }
     // Un colegio suspendido (estado != 'activo') queda bloqueado para sus miembros y para su encuesta pública;
     // sus datos se conservan y solo el superadmin puede entrar.
+    // Licencia (campo opcional colegios/{cid}.licencia = { vence, graciaDias }): sin ella no hay restricción.
+    //   hasta `vence`                     → lectura y escritura
+    //   hasta `vence` + graciaDias (15)   → solo lectura
+    //   después                           → bloqueado (los datos se conservan; renovar lo reabre al instante)
+    function colegioDoc(cid) {
+      return get(/databases/$(database)/documents/colegios/$(cid)).data;
+    }
+    function licVence(cid) {
+      return colegioDoc(cid).get('licencia', {}).get('vence', null);
+    }
+    function licGracia(cid) {
+      return duration.value(colegioDoc(cid).get('licencia', {}).get('graciaDias', 15), 'd');
+    }
+    function licLectura(cid) {
+      return licVence(cid) == null || request.time <= licVence(cid) + licGracia(cid);
+    }
+    function licEscritura(cid) {
+      return licVence(cid) == null || request.time <= licVence(cid);
+    }
+    // Lectura: no suspendido y licencia dentro de la gracia.
     function colegioActivo(cid) {
-      return get(/databases/$(database)/documents/colegios/$(cid)).data.get('estado', 'activo') == 'activo';
+      return colegioDoc(cid).get('estado', 'activo') == 'activo' && licLectura(cid);
+    }
+    // Escritura (y encuesta pública): no suspendido y licencia vigente (no en gracia).
+    function colegioEscribible(cid) {
+      return colegioDoc(cid).get('estado', 'activo') == 'activo' && licEscritura(cid);
     }
     function cRead(cid)  { return isSuper() || (isMember(cid) && colegioActivo(cid)); }
-    function cWrite(cid) { return isSuper() || (isMember(cid) && colegioActivo(cid) && memberRole(cid) in ['admin', 'psychologist']); }
+    function cWrite(cid) { return isSuper() || (isMember(cid) && colegioEscribible(cid) && memberRole(cid) in ['admin', 'psychologist']); }
     function cAdmin(cid) { return isSuper() || (isMember(cid) && colegioActivo(cid) && memberRole(cid) == 'admin'); }
+    function cAdminW(cid) { return isSuper() || (isMember(cid) && colegioEscribible(cid) && memberRole(cid) == 'admin'); }
 
     function cSurveyPath(cid, id) {
       return /databases/$(database)/documents/colegios/$(cid)/surveys/$(id);
@@ -98,7 +123,7 @@ service cloud.firestore {
         && d.keys().hasAll(['surveyId', 'respondentId', 'respondentName', 'answers', 'submittedAt'])
         && d.surveyId is string
         && exists(cSurveyPath(cid, d.surveyId))
-        && colegioActivo(cid)
+        && colegioEscribible(cid)
         && isOpenSurvey(get(cSurveyPath(cid, d.surveyId)).data)
         && rid == d.surveyId + '_' + string(d.respondentId)
         && string(d.respondentId) in get(cSurveyPath(cid, d.surveyId)).data.get('rosterIds', [])
@@ -111,7 +136,7 @@ service cloud.firestore {
       return d.keys().hasOnly(['surveyId', 'respondentId'])
         && d.surveyId is string
         && exists(cSurveyPath(cid, d.surveyId))
-        && colegioActivo(cid)
+        && colegioEscribible(cid)
         && isOpenSurvey(get(cSurveyPath(cid, d.surveyId)).data)
         && rid == d.surveyId + '_' + string(d.respondentId)
         && string(d.respondentId) in get(cSurveyPath(cid, d.surveyId)).data.get('rosterIds', []);
@@ -126,11 +151,11 @@ service cloud.firestore {
       match /miembros/{email} {
         allow get: if cAdmin(cid) || (signedIn() && email == myEmail());
         allow list: if cAdmin(cid);
-        allow create, update: if cAdmin(cid)
+        allow create, update: if cAdminW(cid)
           && request.resource.data.email == email
           && request.resource.data.role in ['admin', 'psychologist', 'readonly']
           && request.resource.data.status in ['active', 'revoked', 'pending'];
-        allow delete: if cAdmin(cid);
+        allow delete: if cAdminW(cid);
       }
       match /students/{id} {
         allow read: if cRead(cid);
@@ -145,7 +170,7 @@ service cloud.firestore {
         allow delete: if cWrite(cid);
       }
       match /surveys/{id} {
-        allow get: if (isOpenSurvey(resource.data) && colegioActivo(cid)) || cRead(cid);
+        allow get: if (isOpenSurvey(resource.data) && colegioEscribible(cid)) || cRead(cid);
         allow list: if cRead(cid);
         allow create, update, delete: if cWrite(cid);
       }
@@ -154,14 +179,14 @@ service cloud.firestore {
         // El superadmin también puede crear (copia de respuestas históricas al migrar); nadie más sin cumplir el formato.
         allow create: if cValidSubmission(cid, rid) || isSuper();
         allow update: if isSuper();   // solo para repetir la migración; el público nunca actualiza
-        allow delete: if cAdmin(cid);
+        allow delete: if cAdminW(cid);
       }
       match /responseMarks/{rid} {
         allow get: if true;
         allow list: if cRead(cid);
         allow create: if cValidMark(cid, rid) || isSuper();
         allow update: if isSuper();
-        allow delete: if cAdmin(cid);
+        allow delete: if cAdminW(cid);
       }
       match /activity/{id} {
         allow read, delete: if cAdmin(cid);
@@ -180,9 +205,9 @@ service cloud.firestore {
       }
       match /settings/{id} {
         allow read: if cRead(cid);
-        allow create, update: if cAdmin(cid)
+        allow create, update: if cAdminW(cid)
           && request.resource.data.get('logo', '').size() <= 300000;
-        allow delete: if cAdmin(cid);
+        allow delete: if cAdminW(cid);
       }
     }
 
