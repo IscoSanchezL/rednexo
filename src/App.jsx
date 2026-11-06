@@ -5,6 +5,7 @@ import { initials, parseBulkStudents, density, buildConnections, buildRoster, su
 import { tint, mixOn, ink } from "./lib/color";
 import { REPORT_TYPES, computeReport, renderReportHTML, reportFileName } from "./lib/reports";
 import { buildActivity, formatWhen } from "./lib/activity";
+import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
@@ -846,12 +847,13 @@ function RegistrationPage({ onSubmit, onBack }) {
 
 // ════════ USERS PANEL (Firestore) ════════
 
-function UsersPanel({ authorizeUser, revokeUser }) {
+function UsersPanel({ authorizeUser, revokeUser, reactivateUser, deleteUser, me }) {
   const [users, setUsers] = useState([]);
   const [newEmail, setNewEmail] = useState("");
   const [newRole, setNewRole] = useState("psychologist");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [restore, setRestore] = useState({});   // rol elegido al reactivar a cada persona (correo → rol)
 
   useEffect(() => {
     const q = query(ccol("miembros"), orderBy("email"));
@@ -861,6 +863,12 @@ function UsersPanel({ authorizeUser, revokeUser }) {
 
   const authorize = async () => {
     if (!newEmail.trim() || !newEmail.includes("@")) return;
+    // Autorizar de nuevo a alguien que ya existe cambia su rol: no se permite a uno mismo ni al único administrador (el colegio se quedaría sin acceso).
+    const ya = users.find((u) => String(u.email).toLowerCase() === newEmail.trim().toLowerCase());
+    if (ya) {
+      const ac = userActions(users, ya, me);
+      if ((ac.esYo || ac.ultimoAdmin) && newRole !== "admin") { flash(`❌ ${ac.esYo ? "Ese correo eres tú: no puedes cambiar tu propio rol." : ac.motivo}`); return; }
+    }
     setSaving(true);
     setMsg("");
     const ok = await authorizeUser(newEmail.trim().toLowerCase(), newRole);
@@ -870,11 +878,18 @@ function UsersPanel({ authorizeUser, revokeUser }) {
     setTimeout(() => setMsg(""), 3500);
   };
 
-  const revoke = async (email) => {
-    if (!window.confirm("¿Revocar acceso de " + email + "?")) return;
-    await revokeUser(email);
-    setMsg("✅ Acceso revocado");
-    setTimeout(() => setMsg(""), 3000);
+  const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3500); };
+  const revoke = async (u) => {
+    if (!window.confirm(`¿Revocar el acceso de ${u.email}? Perderá el acceso al instante; podrás reactivarlo después con el mismo rol.`)) return;
+    flash((await revokeUser(u)) ? "✅ Acceso revocado" : "❌ No se pudo revocar");
+  };
+  const reactivate = async (u) => {
+    const role = reactivateRole(u, restore[u.email]);
+    flash((await reactivateUser(u.email, role)) ? `✅ Acceso reactivado como ${ROLE_NAMES[role]}` : "❌ No se pudo reactivar");
+  };
+  const remove = async (u) => {
+    if (!window.confirm(`¿Eliminar a ${u.email}? Desaparece de esta lista y no podrá entrar. Si más adelante lo necesitas, puedes volver a autorizarlo.`)) return;
+    flash((await deleteUser(u.email)) ? "✅ Usuario eliminado" : "❌ No se pudo eliminar");
   };
 
   const roleColor = { superadmin: C.rx, admin: C.rx, psychologist: C.violet, readonly: C.sky };
@@ -934,20 +949,35 @@ function UsersPanel({ authorizeUser, revokeUser }) {
                 </tr>
               </thead>
               <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                    <td style={{ padding: "8px 10px", color: C.text }}>{u.email}</td>
-                    <td style={{ padding: "8px 10px" }}><Badge color={roleColor[u.role] || C.sky}>{roleLabel[u.role] || u.role}</Badge></td>
-                    <td style={{ padding: "8px 10px" }}><Badge color={u.status === "active" ? C.ok : C.err}>{u.status === "active" ? "● Activo" : "○ Revocado"}</Badge></td>
-                    <td style={{ padding: "8px 10px" }}>
-                      {u.status === "active" ? (
-                        <Btn sm v="dan" onClick={() => revoke(u.email)}>Revocar</Btn>
-                      ) : (
-                        <Btn sm v="ok" onClick={() => authorizeUser(u.email, u.role || "readonly")}>Reactivar</Btn>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {users.map((u) => {
+                  const ac = userActions(users, u, me);
+                  const activo = u.status === "active";
+                  return (
+                    <tr key={u.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                      <td style={{ padding: "8px 10px", color: C.text }}>{u.email}{ac.esYo && <span style={{ marginLeft: 6, fontSize: 10, color: C.t2 }}>(tú)</span>}</td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <Badge color={roleColor[u.role] || C.sky}>{roleLabel[u.role] || u.role}</Badge>
+                        {!activo && ROLE_NAMES[u.rolAnterior] && u.rolAnterior !== u.role && <div style={{ fontSize: 10, color: C.t2, marginTop: 3 }}>Antes: {ROLE_NAMES[u.rolAnterior]}</div>}
+                      </td>
+                      <td style={{ padding: "8px 10px" }}><Badge color={activo ? C.ok : u.status === "pending" ? C.amber : C.err}>{activo ? "● " : "○ "}{statusLabel(u.status)}</Badge></td>
+                      <td style={{ padding: "8px 10px" }}>
+                        <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
+                          {activo ? (
+                            <Btn sm v="dan" disabled={!ac.puedeRevocar} title={ac.motivo || "Quita el acceso; se puede reactivar"} onClick={() => revoke(u)}>Revocar</Btn>
+                          ) : (
+                            <>
+                              <select aria-label={`Rol al reactivar a ${u.email}`} value={restore[u.email] || reactivateRole(u)} onChange={(e) => setRestore((r) => ({ ...r, [u.email]: e.target.value }))} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px 6px", color: C.text, fontSize: 11, fontFamily: "inherit" }}>
+                                <option value="psychologist">Psicólogo</option><option value="readonly">Solo lectura</option><option value="admin">Administrador</option>
+                              </select>
+                              <Btn sm v="ok" disabled={!ac.puedeReactivar} onClick={() => reactivate(u)}>Reactivar</Btn>
+                              <Btn sm v="dan" disabled={!ac.puedeEliminar} title="Elimina a la persona de la lista (primero hay que revocarla)" onClick={() => remove(u)}>Eliminar</Btn>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -3156,8 +3186,19 @@ export default function App() {
   const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("groups", id)); } catch (e) { console.log(e); } };
   const saveStudent = async (s) => { const sid = s.id.toString(); setStudents((p) => { const ex = p.find((x) => x.id === s.id); return ex ? p.map((x) => (x.id === s.id ? s : x)) : [...p, s]; }); try { await setDoc(cdoc("students", sid), { ...s, id: sid }); } catch (e) { console.log(e); } };
   const deleteStudent = async (id) => { setStudents((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("students", id.toString())); } catch (e) { console.log(e); } };
-  const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(cdoc("miembros", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); logActivity("user", `autorizó el acceso (${ROLES[role]?.label || role})`, email.toLowerCase()); return true; } catch (e) { return false; } };
-  const revokeUser = async (email) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "revoked", role: "readonly" }); logActivity("user", "revocó el acceso", email.toLowerCase()); return true; } catch (e) { return false; } };
+  const authorizeUser = async (email, role = "psychologist") => {
+    try {
+      const ref = cdoc("miembros", email.toLowerCase());
+      const existe = (await getDoc(ref)).exists();
+      // Si ya existe se conserva su fecha de alta; el rol anterior (de una revocación) deja de tener sentido.
+      await setDoc(ref, { email: email.toLowerCase(), role, status: "active", rolAnterior: deleteField(), ...(existe ? {} : { createdAt: serverTimestamp() }) }, { merge: true });
+      logActivity("user", `autorizó el acceso (${ROLES[role]?.label || role})`, email.toLowerCase());
+      return true;
+    } catch (e) { return false; }
+  };
+  const revokeUser = async (u) => { try { await updateDoc(cdoc("miembros", u.email.toLowerCase()), revokePatch(u)); logActivity("user", "revocó el acceso", u.email.toLowerCase()); return true; } catch (e) { return false; } };
+  const reactivateUser = async (email, role) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "active", role, rolAnterior: deleteField() }); logActivity("user", `reactivó el acceso (${ROLE_NAMES[role]})`, email.toLowerCase()); return true; } catch (e) { return false; } };
+  const deleteUser = async (email) => { try { await deleteDoc(cdoc("miembros", email.toLowerCase())); logActivity("user", "eliminó al usuario", email.toLowerCase()); return true; } catch (e) { return false; } };
   const saveStudentFS = async (s) => { try { await setDoc(cdoc("students", String(s.id)), { ...s, id: String(s.id) }); return true; } catch (e) { console.error("No se guardó el estudiante", e); return false; } };
   const deleteStudentFS = async (id) => { try { await deleteDoc(cdoc("students", String(id))); } catch (e) {} };
   const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); return true; } catch (e) { console.error("No se guardó el grupo", e); return false; } };
@@ -3611,7 +3652,7 @@ export default function App() {
         ) : (
           <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
         ))}
-        {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} />}
+        {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
         {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel />}
