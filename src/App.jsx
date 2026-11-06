@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats, rankStudents } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats, rankStudents, surveyGroups, needsGroupFix, rosterIsStale } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
 import { REPORT_TYPES, computeReport, renderReportHTML, reportFileName } from "./lib/reports";
 import { buildActivity, formatWhen } from "./lib/activity";
@@ -2182,6 +2182,16 @@ function SurveyBuilder({ role, students, GROUPS }) {
     logActivity("survey", "eliminó definitivamente la encuesta", tituloDe(id));
     try { await deleteDoc(cdoc("surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
   };
+  // Cambia los grupos de una encuesta: guarda la lista y el primero JUNTOS y, si está activa, renueva la lista de nombres de la encuesta pública.
+  const updateSurveyGroups = async (id, groups) => {
+    const cur = surveys.find((x) => x.id === id);
+    if (!cur || groups.length === 0) return;
+    const next = { ...cur, groups, group: groups[0] };
+    const extra = next.status === "active" ? publicSurveyInfo(next, students) : {};
+    setSurveys((s) => s.map((x) => (x.id === id ? { ...x, groups, group: groups[0], ...extra } : x)));
+    try { await updateDoc(cdoc("surveys", id), { groups, group: groups[0], ...extra }); } catch (e) { console.error(e); return; }
+    logActivity("survey", "cambió los grupos de la encuesta", `${cur.title} → ${groups.join(", ")}`);
+  };
   const updateSurveyField = async (id, field, value) => {
     const cur = surveys.find((x) => x.id === id);
     const next = { ...cur, [field]: value };
@@ -2341,7 +2351,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div key={sv.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}`, marginBottom: 6 }}>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 600, color: C.t2 }}>{sv.title}</div>
-                <div style={{ fontSize: 10, color: C.t3 }}>{sv.group} · {sv.questions?.length} preguntas</div>
+                <div style={{ fontSize: 10, color: C.t2 }}>{surveyGroups(sv).join(", ")} · {sv.questions?.length} preguntas</div>
               </div>
               <Btn sm v="ok" onClick={() => restoreSurvey(sv.id)}>↩ Restaurar</Btn>
               <Btn sm v="dan" onClick={() => { if (window.confirm("¿Eliminar permanentemente?")) deletePermanent(sv.id); }}>✕ Eliminar</Btn>
@@ -2382,7 +2392,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
               </div>
               <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
                 <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()})</span>
-                <span>👥 {sv.group}</span>
+                <span title="Grupos a los que se aplica">👥 {surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
                 <span>🎯 Máx: {sv.maxSel}</span>
                 <span>{sv.anon ? "🔒 Anónima" : "👤 Identificada"}</span>
               </div>
@@ -2399,7 +2409,17 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div style={{ marginTop: 14, padding: 14, borderRadius: 10, background: C.bgSub, border: `1px solid ${C.border}` }}>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
                 <Inp label="Título" value={sv.title} onChange={(v) => updateSurveyField(sv.id, "title", v)} />
-                <Sel label="Grupo" value={sv.group} onChange={(v) => updateSurveyField(sv.id, "group", v)} options={(GROUPS || []).map((g) => ({ v: g, l: g }))} />
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 6 }}>Grupos de la encuesta</label>
+                  <div style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                    {(GROUPS || []).map((g) => {
+                      const cur = surveyGroups(sv), on = cur.includes(g), gc = GC[g] || "#3b82f6";
+                      return (
+                        <button key={g} aria-pressed={on} title={on && cur.length === 1 ? "La encuesta necesita al menos un grupo" : on ? `Quitar ${g}` : `Agregar ${g}`} onClick={() => updateSurveyGroups(sv.id, on ? (cur.length > 1 ? cur.filter((x) => x !== g) : cur) : [...cur, g])} style={{ padding: "4px 11px", borderRadius: 7, fontSize: 11, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1.5px solid ${on ? gc : C.border}`, background: on ? tint(gc, "26") : "transparent", color: on ? C.text : C.t2 }}>{on ? "✓ " : ""}{g}</button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <Inp label="Máx. selecciones" type="number" value={sv.maxSel} onChange={(v) => updateSurveyField(sv.id, "maxSel", parseInt(v) || 1)} />
               </div>
               <div style={{ fontSize: 11, fontWeight: 600, color: C.teal, marginBottom: 8 }}>📝 Preguntas ({sv.questions.length})</div>
@@ -2683,7 +2703,7 @@ function PublicSurvey({ surveyId, colegioId }) {
         setStudents(stList);
         // Inicializar grupos disponibles según config de la encuesta
         const allGs = [...new Set(stList.map(s => s.group))];
-        const surveyGs = svData.groups?.length > 0 ? svData.groups : svData.group ? [svData.group] : allGs;
+        const surveyGs = surveyGroups(svData).length > 0 ? surveyGroups(svData) : allGs;
         const validGs = surveyGs.filter(g => allGs.includes(g));
         setSelectedGroups(validGs.length > 0 ? validGs : allGs);
         setStep("select");
@@ -2789,7 +2809,7 @@ function PublicSurvey({ surveyId, colegioId }) {
   if (step === "select") {
     const filtered = students.filter(s => selectedGroups.includes(s.group));
     const allAvailGroups = [...new Set(students.filter(s =>
-      (survey?.groups?.length > 0 ? survey.groups : survey?.group ? [survey.group] : [...new Set(students.map(x => x.group))]).includes(s.group)
+      (surveyGroups(survey || {}).length > 0 ? surveyGroups(survey || {}) : [...new Set(students.map(x => x.group))]).includes(s.group)
     ).map(s => s.group))];
 
     return (
@@ -2873,7 +2893,7 @@ function PublicSurvey({ surveyId, colegioId }) {
     const sel = answers[q.id] || [];
     const isLast = qIdx === survey.questions.length - 1;
     // Los estudiantes que puede elegir: los de los grupos disponibles, excluyendo al respondente
-    const surveyGs = survey?.groups?.length > 0 ? survey.groups : survey?.group ? [survey.group] : null;
+    const surveyGs = surveyGroups(survey || {}).length > 0 ? surveyGroups(survey || {}) : null;
     const otherStudents = students.filter(s => s.id !== respondent.id && (surveyGs ? surveyGs.includes(s.group) : true));
 
     return (
@@ -3174,13 +3194,20 @@ export default function App() {
     return () => unsub();
   }, [user]);
 
-  // Encuestas activas sin lista de nombres o sin marca del colegio (anteriores a este modelo): se completan una vez.
+  // Mantiene al día lo que la encuesta pública necesita (sin que nadie tenga que acordarse):
+  //  · encuestas con `group` y `groups` contradictorios (por el selector antiguo) se corrigen;
+  //  · en las activas, la lista de nombres y la marca del colegio se renuevan si faltan o si cambiaron los estudiantes del grupo.
   useEffect(() => {
-    if (!user || user.role === "readonly" || students.length === 0 || !school.loaded) return;
-    surveys.filter((sv) => sv.status === "active" && !sv.deleted && (!Array.isArray(sv.rosterIds) || sv.colegioNombre === undefined)).forEach((sv) => {
-      updateDoc(cdoc("surveys", sv.id), publicSurveyInfo(sv, students)).catch(() => {});
+    if (!user || user.role === "readonly" || !school.loaded || !studentsLoaded) return;
+    surveys.filter((sv) => !sv.deleted).forEach((sv) => {
+      const fix = needsGroupFix(sv) ? { groups: [sv.group] } : {};
+      const base = { ...sv, ...fix };
+      const activa = sv.status === "active";
+      const refrescar = activa && (!Array.isArray(sv.rosterIds) || sv.colegioNombre === undefined || rosterIsStale(base, students));
+      if (!Object.keys(fix).length && !refrescar) return;
+      updateDoc(cdoc("surveys", sv.id), { ...fix, ...(refrescar ? publicSurveyInfo(base, students) : {}) }).catch(() => {});
     });
-  }, [user, surveys, students, school.loaded]);
+  }, [user, surveys, students, school.loaded, studentsLoaded]);
 
   const saveGroup = async (g) => { setGroups((p) => { const ex = p.find((x) => x.id === g.id); return ex ? p.map((x) => (x.id === g.id ? g : x)) : [...p, g]; }); try { await setDoc(cdoc("groups", g.id), g); } catch (e) { console.log(e); } };
   const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("groups", id)); } catch (e) { console.log(e); } };

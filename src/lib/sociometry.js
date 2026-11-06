@@ -71,8 +71,28 @@ export function filterConns(conns, filter) {
 }
 
 /** Lista mínima de nombres que la encuesta pública necesita (ver firestore.rules). */
+/**
+ * Grupos a los que se aplica una encuesta. La encuesta guarda `groups` (lista) y `group` (el primero); si `group` no está en `groups`
+ * es porque se cambió «Grupo» en el panel de edición (que antes solo tocaba `group`): en ese caso manda `group`.
+ */
+export function surveyGroups(sv) {
+  const g = Array.isArray(sv.groups) ? sv.groups.filter(Boolean) : [];
+  if (sv.group && (g.length === 0 || !g.includes(sv.group))) return [sv.group];
+  return g;
+}
+
+/** ¿Tiene la encuesta `group` y `groups` contradictorios (el resto de la app solo mira uno de los dos)? */
+export const needsGroupFix = (sv) => !!sv.group && Array.isArray(sv.groups) && sv.groups.length > 0 && !sv.groups.includes(sv.group);
+
+/** ¿La lista de nombres guardada en la encuesta ya no coincide con los estudiantes de sus grupos? */
+export function rosterIsStale(sv, students) {
+  const norm = (r) => (r || []).map((x) => `${x.id}|${x.name}|${x.group}`).sort().join("\n");
+  return norm(sv.roster) !== norm(buildRoster(sv, students).roster);
+}
+
 export function buildRoster(sv, students) {
-  const gs = sv.groups?.length > 0 ? sv.groups : sv.group ? [sv.group] : null;
+  const sg = surveyGroups(sv);
+  const gs = sg.length > 0 ? sg : null;
   const list = students.filter((s) => !gs || gs.includes(s.group)).map((s) => ({ id: String(s.id), name: s.name, group: s.group, av: s.av || "" }));
   return { roster: list, rosterIds: list.map((s) => s.id) };
 }
