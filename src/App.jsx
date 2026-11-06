@@ -4,10 +4,11 @@ import { onAuthStateChanged } from "firebase/auth";
 import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats, rankStudents } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
 import { REPORT_TYPES, computeReport, renderReportHTML, reportFileName } from "./lib/reports";
+import { buildActivity, formatWhen } from "./lib/activity";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc, limit } from "firebase/firestore";
 
 // ═══════════════════════════════════════
 // REDNEXO — Inteligencia Sociométrica
@@ -108,6 +109,7 @@ if (typeof document !== "undefined" && !document.getElementById("rn-theme-vars")
 let CID = null;
 let SCHOOL = { nombre: "", logo: "" };
 let SESSION_EMAIL = "";
+let SESSION_NAME = "";
 const ROOT_EMAIL = "franksanlo@gmail.com";   // debe coincidir con isRoot() en firestore.rules (la validación real es la de las reglas)
 const setCurrentColegio = (id) => { CID = id; };
 const ccol = (name) => collection(db, "colegios", CID, name);
@@ -126,6 +128,17 @@ const blankSurvey = () => ({ title: "", group: GROUPS?.[0] || "", groups: [], ma
 const TIPO_INFO = { pos: { l: "Positiva", s: "+", c: () => C.teal }, neu: { l: "Neutral", s: "○", c: () => C.amber }, neg: { l: "Negativa", s: "−", c: () => C.err } };
 
 // ── Operaciones de plataforma: bitácora, exportar y eliminar un colegio ──
+/**
+ * Registro de actividad del colegio (lo ve el administrador en la pestaña Actividad).
+ * Nunca debe romper la acción que lo origina: si no se puede escribir, solo avisa en la consola.
+ * El detalle habla de grupos, encuestas y cantidades; no se guardan nombres de estudiantes.
+ */
+function logActivity(type, action, detail = "") {
+  if (!CID || !SESSION_EMAIL) return;
+  addDoc(ccol("activity"), { ...buildActivity(type, action, detail, SESSION_NAME, SESSION_EMAIL), createdAt: serverTimestamp() })
+    .catch((e) => console.log("Actividad no registrada:", e.code || e.message));
+}
+
 async function logAudit(accion, colegio, por, detalle = {}) {
   try { await addDoc(collection(db, "auditoria"), { accion, colegio, por, en: serverTimestamp(), ...detalle }); } catch (e) { console.log("auditoría no registrada", e); }
 }
@@ -1649,7 +1662,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     setNewGroup(""); setAddingGroup(false);
     const ok = await saveGroupFS(g);
     setNotice(ok ? `✅ Grupo «${name}» creado. Agrega estudiantes con «+ Agregar».` : `❌ No se pudo guardar el grupo «${name}». Revisa tu conexión o tus permisos e inténtalo de nuevo.`);
-    if (!ok) setGroups((p) => p.filter((x) => x.id !== g.id));
+    if (!ok) setGroups((p) => p.filter((x) => x.id !== g.id)); else logActivity("group", "creó el grupo", name);
   };
 
   const addStudent = async () => {
@@ -1660,6 +1673,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     setStudents((prev) => [...prev, s]);
     const ok = await saveStudentFS(s);
     if (!ok) { setStudents((prev) => prev.filter((x) => x.id !== id)); setNotice("❌ No se pudo guardar el estudiante. Inténtalo de nuevo."); return; }
+    logActivity("group", "agregó un estudiante al grupo", addingTo);
     setNewName("");
   };
 
@@ -1671,13 +1685,16 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     const bad = newStudents.filter((_, i) => !res[i]);
     if (bad.length) { setStudents((s) => s.filter((x) => !bad.some((b) => b.id === x.id))); setNotice(`❌ No se pudieron guardar ${bad.length} de ${newStudents.length} estudiantes. Inténtalo de nuevo.`); }
     else setNotice(`✅ ${newStudents.length} estudiantes agregados.`);
+    if (newStudents.length - bad.length > 0) logActivity("group", `agregó ${newStudents.length - bad.length} estudiante(s) al grupo`, addingTo);
     setBulkText("");
     setAddingTo(null);
   };
 
   const removeStudent = async (id) => {
+    const g = students.find((x) => x.id === id)?.group;
     setStudents((s) => s.filter((x) => x.id !== id));
     await deleteStudentFS(id);
+    logActivity("group", "eliminó un estudiante del grupo", g || "");
   };
 
   return (
@@ -1768,7 +1785,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                             <div style={{ fontSize: 10, color: gc }}>{s.group}</div>
                           </div>
                           <button
-                            onClick={() => { if (window.confirm(`¿Eliminar a ${s.name}?`)) { setStudents(p => p.filter(x => x.id !== s.id)); deleteStudentFS(s.id); } }}
+                            onClick={() => { if (window.confirm(`¿Eliminar a ${s.name}?`)) { setStudents(p => p.filter(x => x.id !== s.id)); deleteStudentFS(s.id); logActivity("group", "eliminó un estudiante del grupo", s.group); } }}
                             title="Eliminar"
                             style={{ background: "none", border: "none", color: C.t3, cursor: "pointer", padding: "3px 5px", borderRadius: 5, display: "flex", alignItems: "center", transition: "all .15s" }}
                             onMouseEnter={e => { e.currentTarget.style.color = C.err; e.currentTarget.style.background = tint(C.err, "15"); }}
@@ -1927,15 +1944,15 @@ function SurveyProgress({ surveys, students, responses }) {
 // ════════ ACTIVITY LOG ════════
 
 function ActivityLog() {
-  const icons = { create: "📋", report: "📊", system: "⚙", survey: "✅", user: "👤", export: "📄" };
-  const colors = { create: C.rx, report: C.violet, system: C.t2, survey: C.teal, user: C.amber, export: C.sky };
+  const icons = { create: "📋", report: "📊", system: "⚙", survey: "✅", user: "👤", export: "📄", group: "👥" };
+  const colors = { create: C.rx, report: C.violet, system: C.t2, survey: C.teal, user: C.amber, export: C.sky, group: C.rx };
   const [log, setLog] = useState([]);
   const [confirming, setConfirming] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsub = onSnapshot(query(ccol("activity"), orderBy("createdAt", "desc")),
-      (snap) => { if (snap.empty) { setLog([]); } else { setLog(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); } setLoading(false); },
+    const unsub = onSnapshot(query(ccol("activity"), orderBy("createdAt", "desc"), limit(200)),
+      (snap) => { if (snap.empty) { setLog([]); } else { setLog(snap.docs.map((d) => ({ id: d.id, ...d.data({ serverTimestamps: "estimate" }) }))); } setLoading(false); },
       (err) => { console.log("Activity offline:", err); setLog([]); setLoading(false); }
     );
     return () => unsub();
@@ -1953,7 +1970,7 @@ function ActivityLog() {
   return (
     <Card>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>📜 Actividad Reciente <span style={{ fontSize: 10, color: C.t3, fontWeight: 400 }}>({log.length} entradas)</span></div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}>📜 Actividad Reciente <span style={{ fontSize: 10, color: C.t2, fontWeight: 400 }}>({log.length >= 200 ? "últimas 200" : `${log.length} entradas`})</span></div>
         {log.length > 0 && (confirming ? (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <span style={{ fontSize: 11, color: C.err }}>¿Vaciar todo?</span>
@@ -1979,9 +1996,9 @@ function ActivityLog() {
                   <span style={{ fontWeight: 600, color: colors[a.type] || C.text }}>{a.user}</span>{" "}
                   <span style={{ color: C.t2 }}>{a.action}</span>
                 </div>
-                <div style={{ fontSize: 10, color: C.t3 }}>{a.detail}</div>
+                <div style={{ fontSize: 10, color: C.t2 }}>{a.detail}</div>
               </div>
-              <span style={{ fontSize: 10, color: C.t3, whiteSpace: "nowrap" }}>{a.time}</span>
+              <span title={a.email || ""} style={{ fontSize: 10, color: C.t2, whiteSpace: "nowrap" }}>{a.createdAt ? formatWhen(a.createdAt) : (a.time || "")}</span>
             </div>
           ))}
         </div>
@@ -2061,12 +2078,13 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const flash = (m, ms = 4500) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
 
   // Crea una encuesta en borrador (formulario, plantilla o archivo importado).
-  const addSurvey = async (data) => {
+  const addSurvey = async (data, origen = "") => {
     const id = "sv_" + Date.now();
     // Las respuestas se guardan por identificador de pregunta: toda pregunta nueva debe tener uno propio.
     const questions = (data.questions || []).map((q, i) => ({ ...q, id: q.id || `q_${Date.now()}_${i}` }));
     try {
       await setDoc(cdoc("surveys", id), { ...data, questions, id, status: "draft", createdAt: serverTimestamp() });
+      logActivity("create", origen === "plantilla" ? "creó la encuesta de prueba" : origen === "importada" ? "importó la encuesta" : "creó la encuesta", `${data.title} · ${questions.length} preguntas`);
       return id;
     } catch (e) {
       console.error("Error guardando encuesta:", e);
@@ -2090,7 +2108,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
   const useTemplate = async () => {
     if ((GROUPS || []).length === 0) { flash("⚠ Primero crea un grupo y agrega estudiantes en la pestaña Grupos; la encuesta de prueba se aplica a tus grupos."); return; }
-    const id = await addSurvey(buildTemplateSurvey(GROUPS));
+    const id = await addSurvey(buildTemplateSurvey(GROUPS), "plantilla");
     if (id) flash("✅ Encuesta de prueba creada en borrador, con preguntas positivas, neutrales y negativas. Pulsa «Borrador» para activarla y «Aplicar» para abrirla.", 7000);
   };
 
@@ -2106,27 +2124,32 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const confirmImport = async () => {
     const r = importPreview?.result; if (!r?.ok) return;
     const groups = (GROUPS || []).slice();
-    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, anon: r.survey.anon, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) });
+    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, anon: r.survey.anon, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) }, "importada");
     if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
     setImportPreview(null);
   };
 
   const exportSurvey = (sv, kind) => {
+    logActivity("export", `exportó la encuesta (${kind.toUpperCase()})`, sv.title);
     if (kind === "json") downloadFile(surveyFileName(sv, "json"), JSON.stringify(exportSurveyJSON(sv), null, 2), "application/json");
     else downloadFile(surveyFileName(sv, "csv"), surveyToCSV(sv), "text/csv;charset=utf-8");
   };
 
+  const tituloDe = (id) => surveys.find((x) => x.id === id)?.title || "";
   const deleteSurvey = async (id) => {
+    logActivity("survey", "movió a la papelera la encuesta", tituloDe(id));
     try {
       await updateDoc(cdoc("surveys", id), { deleted: true, deletedAt: serverTimestamp() });
     } catch (e) { setSurveys((s) => s.map((x) => x.id === id ? { ...x, deleted: true } : x)); }
   };
   const restoreSurvey = async (id) => {
+    logActivity("survey", "restauró la encuesta", tituloDe(id));
     try {
       await updateDoc(cdoc("surveys", id), { deleted: false, deletedAt: null });
     } catch (e) { setSurveys((s) => s.map((x) => x.id === id ? { ...x, deleted: false } : x)); }
   };
   const deletePermanent = async (id) => {
+    logActivity("survey", "eliminó definitivamente la encuesta", tituloDe(id));
     try { await deleteDoc(cdoc("surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
   };
   const updateSurveyField = async (id, field, value) => {
@@ -2135,9 +2158,11 @@ function SurveyBuilder({ role, students, GROUPS }) {
     // Al activar (o cambiar los grupos de una encuesta activa) se refresca la lista de nombres.
     const extra = next.status === "active" && (field === "status" || field === "groups" || field === "group") ? publicSurveyInfo(next, students) : {};
     setSurveys((s) => s.map((x) => (x.id === id ? { ...x, [field]: value, ...extra } : x)));
-    try { await updateDoc(cdoc("surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); }
+    try { await updateDoc(cdoc("surveys", id), { [field]: value, ...extra }); } catch (e) { console.error(e); return; }
+    // Solo el cambio de estado: título y máximo se editan tecla a tecla y llenarían el registro.
+    if (field === "status") logActivity("survey", value === "active" ? "activó la encuesta" : "pasó a borrador la encuesta", cur?.title || "");
   };
-  const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(cdoc("surveys", id), { questions }); } catch (e) { console.error(e); } };
+  const updateSurveyQuestions = async (id, questions) => { setSurveys((s) => s.map((x) => (x.id === id ? { ...x, questions } : x))); try { await updateDoc(cdoc("surveys", id), { questions }); logActivity("survey", "modificó las preguntas de la encuesta", tituloDe(id)); } catch (e) { console.error(e); } };
 
   if (creating) return (
     <div style={{ animation: "slideIn .3s ease" }}>
@@ -2335,7 +2360,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <Btn sm v="ghost" onClick={() => exportSurvey(sv, "json")} title="Descargar la encuesta como JSON (para importarla en otro colegio)">⬇ JSON</Btn>
               <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)">⬇ CSV</Btn>
-              <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); }}>▶ Aplicar</Btn>
+              <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); logActivity("survey", "abrió para aplicar la encuesta", sv.title); }}>▶ Aplicar</Btn>
               <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
             </div>
@@ -2396,12 +2421,13 @@ function ReportsPanel({ students, conns }) {
   const groupLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
   const dateStr = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
   const build = (mode) => renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC });
-  const exportHTML = () => dl(build("html"), reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;");
+  const exportHTML = () => { dl(build("html"), reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;"); logActivity("report", `descargó el reporte ${REPORT_TYPES[reportType]} (HTML)`, groupLabel); };
   const exportPDF = () => {
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) { alert("El navegador bloqueó la ventana del PDF. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."); return; }
     win.document.write(build("pdf"));
     win.document.close();
+    logActivity("report", `abrió el reporte ${REPORT_TYPES[reportType]} para imprimir (PDF)`, groupLabel);
   };
   const TYPE_HELP = {
     individual: "Índices de cada estudiante y una ficha por persona: quién la eligió, quién la rechazó y a quién eligió. Incluye nombres.",
@@ -2501,6 +2527,7 @@ function SettingsPanel() {
         const act = await getDocs(query(ccol("surveys"), where("status", "==", "active")));
         await Promise.all(act.docs.map((d) => updateDoc(d.ref, { colegioNombre: cfg.colegio || "", logo: cfg.logo || deleteField() })));
       } catch (e) { console.log("No se pudieron actualizar encuestas activas", e); }
+      logActivity("system", "actualizó la configuración del colegio", "");
       setSaved(true); setDirty(false); setTimeout(() => setSaved(false), 3000); } catch (e) { console.error(e); }
   };
 
@@ -2556,7 +2583,7 @@ function SettingsPanel() {
       <Card style={{ marginTop: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Datos del colegio</div>
         <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Descarga una copia completa de los datos de este colegio (estudiantes, grupos, encuestas, respuestas, usuarios y ajustes) en un archivo JSON. Guárdala en un lugar seguro: contiene datos de menores.</div>
-        <Btn v="sec" disabled={exporting} onClick={async () => { setExporting(true); setExportMsg(""); try { const c = await exportColegio({ id: CID, nombre: cfg.colegio }, SESSION_EMAIL); setExportMsg(`✅ Descargado: ${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas.`); } catch (e) { setExportMsg("❌ No se pudo exportar: " + e.message); } setExporting(false); }}>{exporting ? "Exportando..." : "⬇ Exportar datos del colegio"}</Btn>
+        <Btn v="sec" disabled={exporting} onClick={async () => { setExporting(true); setExportMsg(""); try { const c = await exportColegio({ id: CID, nombre: cfg.colegio }, SESSION_EMAIL); setExportMsg(`✅ Descargado: ${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas.`); logActivity("export", "exportó los datos del colegio", `${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas`); } catch (e) { setExportMsg("❌ No se pudo exportar: " + e.message); } setExporting(false); }}>{exporting ? "Exportando..." : "⬇ Exportar datos del colegio"}</Btn>
         {exportMsg && <div style={{ fontSize: 11, marginTop: 8, color: C.t2 }}>{exportMsg}</div>}
       </Card>
       {dirty && (<div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}><Btn v="pri" onClick={save}>💾 Guardar todos los cambios</Btn></div>)}
@@ -3097,6 +3124,14 @@ export default function App() {
     });
   }, [user, groups, students, groupsLoaded, studentsLoaded]);
 
+  // Ingreso al colegio: una sola entrada por sesión del navegador (no una por cada recarga).
+  useEffect(() => {
+    if (!user || !colegioId) return;
+    const key = `rn_ingreso_${colegioId}_${user.email}`;
+    try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch (e) {}
+    logActivity("user", "ingresó a RedNexo", "");
+  }, [user, colegioId]);
+
   // Nombre y logo del colegio actual (para la cabecera y para copiarlos a las encuestas activas).
   useEffect(() => {
     if (!user) return;
@@ -3121,8 +3156,8 @@ export default function App() {
   const deleteGroup = async (id) => { setGroups((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("groups", id)); } catch (e) { console.log(e); } };
   const saveStudent = async (s) => { const sid = s.id.toString(); setStudents((p) => { const ex = p.find((x) => x.id === s.id); return ex ? p.map((x) => (x.id === s.id ? s : x)) : [...p, s]; }); try { await setDoc(cdoc("students", sid), { ...s, id: sid }); } catch (e) { console.log(e); } };
   const deleteStudent = async (id) => { setStudents((p) => p.filter((x) => x.id !== id)); try { await deleteDoc(cdoc("students", id.toString())); } catch (e) { console.log(e); } };
-  const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(cdoc("miembros", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); return true; } catch (e) { return false; } };
-  const revokeUser = async (email) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "revoked", role: "readonly" }); return true; } catch (e) { return false; } };
+  const authorizeUser = async (email, role = "psychologist") => { try { await setDoc(cdoc("miembros", email.toLowerCase()), { email: email.toLowerCase(), role, status: "active", createdAt: serverTimestamp() }); logActivity("user", `autorizó el acceso (${ROLES[role]?.label || role})`, email.toLowerCase()); return true; } catch (e) { return false; } };
+  const revokeUser = async (email) => { try { await updateDoc(cdoc("miembros", email.toLowerCase()), { status: "revoked", role: "readonly" }); logActivity("user", "revocó el acceso", email.toLowerCase()); return true; } catch (e) { return false; } };
   const saveStudentFS = async (s) => { try { await setDoc(cdoc("students", String(s.id)), { ...s, id: String(s.id) }); return true; } catch (e) { console.error("No se guardó el estudiante", e); return false; } };
   const deleteStudentFS = async (id) => { try { await deleteDoc(cdoc("students", String(id))); } catch (e) {} };
   const saveGroupFS = async (g) => { try { await setDoc(cdoc("groups", g.id), g); return true; } catch (e) { console.error("No se guardó el grupo", e); return false; } };
@@ -3156,7 +3191,7 @@ export default function App() {
           if (list.length === 0) { await deny("Tu correo no está autorizado en ningún colegio. Solicita acceso al administrador."); setAuthLoading(false); return; }
         }
         setColegios(list);
-        SESSION_EMAIL = email;
+        SESSION_EMAIL = email; SESSION_NAME = fbUser.displayName || email;
         setSession({ email, isSuper, isRoot, name: fbUser.displayName || email, photo: fbUser.photoURL });
         let last = null; try { last = localStorage.getItem("rn_colegio"); } catch (e) {}
         const usable = list.filter((c) => isSuper || c.estado !== "suspendido");

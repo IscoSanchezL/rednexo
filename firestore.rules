@@ -165,7 +165,17 @@ service cloud.firestore {
       }
       match /activity/{id} {
         allow read, delete: if cAdmin(cid);
-        allow create: if cWrite(cid);
+        // Una entrada solo puede escribirse a nombre de quien la crea, con la hora del servidor y con el formato esperado.
+        // (El superadmin queda exento para poder copiar el registro antiguo al migrar.)
+        allow create: if isSuper() || (cWrite(cid)
+          && request.resource.data.keys().hasOnly(['type', 'action', 'detail', 'user', 'email', 'createdAt'])
+          && request.resource.data.keys().hasAll(['type', 'action', 'user', 'email', 'createdAt'])
+          && request.resource.data.type in ['create', 'survey', 'group', 'user', 'export', 'report', 'system']
+          && request.resource.data.action is string && request.resource.data.action.size() <= 200
+          && request.resource.data.get('detail', '') is string && request.resource.data.get('detail', '').size() <= 300
+          && request.resource.data.user is string && request.resource.data.user.size() <= 120
+          && request.resource.data.email == myEmail()
+          && request.resource.data.createdAt == request.time);
         allow update: if isSuper();   // solo para repetir la migración; la auditoría no se edita
       }
       match /settings/{id} {
