@@ -73,3 +73,9 @@ test("graciaDias personalizada: 0 días bloquea al vencer", async () => {
   await env.withSecurityRulesDisabled(async (c) => { await updateDoc(doc(c.firestore(), "colegios/gracia"), { "licencia.graciaDias": 0 }); });
   await assertFails(getDoc(doc(as("psi@gracia.co"), "colegios/gracia/students/1")));
 });
+test("plataforma/planes: cualquier sesión lee, solo el superadmin escribe", async () => {
+  await assertSucceeds(setDoc(doc(as(ROOT), "plataforma/planes"), { basico: { maxEstudiantes: 350, precio: 1300000 } }));
+  await assertSucceeds(getDoc(doc(as("psi@vigente.co"), "plataforma/planes")));
+  await assertFails(getDoc(doc(anon(), "plataforma/planes")));
+  await assertFails(setDoc(doc(as("admin@vigente.co"), "plataforma/planes"), { basico: { maxEstudiantes: 1, precio: 1 } }));
+});

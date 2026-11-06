@@ -211,6 +211,12 @@ service cloud.firestore {
       }
     }
 
+    // Ajustes de la plataforma (planes y precios). Los lee cualquier sesión (para mostrar su plan); solo el superadmin los cambia.
+    match /plataforma/{id} {
+      allow read: if signedIn();
+      allow write: if isSuper();
+    }
+
     // Superadmins adicionales (cuentas de la empresa). Cada quien puede ver si es superadmin; solo la raíz los administra.
     match /superadmins/{email} {
       allow get: if isSuper() || (signedIn() && email == myEmail());
