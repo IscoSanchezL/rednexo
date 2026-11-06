@@ -14,7 +14,7 @@ export const TEMPLATE_QUESTIONS = [
   { text: "¿Con quién te sientes menos cómodo(a) en el salón?", tp: "neg" },
 ];
 export function buildTemplateSurvey(groups) {
-  return { title: "Encuesta de prueba — Sociograma", groups: [...groups], group: groups[0] || "", maxSel: 3, anon: true, questions: TEMPLATE_QUESTIONS.map((q) => ({ ...q })) };
+  return { title: "Encuesta de prueba — Sociograma", groups: [...groups], group: groups[0] || "", maxSel: 3, questions: TEMPLATE_QUESTIONS.map((q) => ({ ...q })) };
 }
 
 /** Normaliza el tipo escrito por una persona: «Positiva», «pos», «+», «NEGATIVA»… → "pos" | "neu" | "neg" | null. */
@@ -44,7 +44,6 @@ export function exportSurveyJSON(sv) {
     formato: "rednexo-encuesta-v1",
     titulo: sv.title,
     maxSel: sv.maxSel || 3,
-    anonima: sv.anon !== false,
     preguntas: (sv.questions || []).map((q) => ({ texto: q.text, tipo: TIPOS[q.tp] || "positiva" })),
   };
 }
@@ -89,7 +88,7 @@ export function parseSurveyImport(text, fileName = "") {
   if (!raw.trim()) return fail("El archivo está vacío.");
   if (raw.length > LIMITS.maxBytes) return fail("El archivo es demasiado grande (máximo 200 KB).");
   const fromName = clean(String(fileName).replace(/\.[^.]+$/, "").replace(/^encuesta-/, "").replace(/-\d{4}-\d{2}-\d{2}$/, "").replace(/[-_]+/g, " "));
-  let title = "", maxSel = 3, anon = true, items = [];   // items: { n, text, tipo }
+  let title = "", maxSel = 3, items = [];   // items: { n, text, tipo }
   const isJson = /^\s*[\[{]/.test(raw) || /\.json$/i.test(fileName);
   if (isJson) {
     let data;
@@ -97,7 +96,7 @@ export function parseSurveyImport(text, fileName = "") {
     const list = Array.isArray(data) ? data : (data.preguntas || data.questions || null);
     if (!Array.isArray(list)) return fail("No se encontró la lista de preguntas (campo «preguntas»).");
     title = clean(Array.isArray(data) ? "" : (data.titulo || data.title || ""));
-    if (!Array.isArray(data)) { if (data.maxSel != null) maxSel = data.maxSel; if (data.anonima != null || data.anon != null) anon = (data.anonima ?? data.anon) !== false; }
+    if (!Array.isArray(data)) { if (data.maxSel != null) maxSel = data.maxSel; /* «anonima» de archivos antiguos se ignora: toda encuesta es confidencial */ }
     items = list.map((q, i) => ({ n: i + 1, text: typeof q === "string" ? q : (q && (q.texto ?? q.text ?? q.pregunta)), tipo: typeof q === "string" ? "" : (q && (q.tipo ?? q.tp ?? q.type)) }));
   } else {
     const rows = parseCSV(raw);
@@ -122,5 +121,5 @@ export function parseSurveyImport(text, fileName = "") {
   }
   if (questions.length > LIMITS.maxQuestions) { errors.push(`Hay ${questions.length} preguntas; el máximo es ${LIMITS.maxQuestions}.`); }
   if (questions.length === 0 && errors.length === 0) errors.push("El archivo no tiene preguntas.");
-  return { ok: errors.length === 0, survey: { title, maxSel, anon, questions }, errors, warnings };
+  return { ok: errors.length === 0, survey: { title, maxSel, questions }, errors, warnings };
 }

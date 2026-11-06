@@ -5,7 +5,8 @@ import { TEMPLATE_QUESTIONS, buildTemplateSurvey, parseTipo, countTipos, exportS
 test("la plantilla de prueba trae preguntas positivas, neutrales y negativas", () => {
   assert.deepEqual(countTipos(TEMPLATE_QUESTIONS), { pos: 3, neu: 2, neg: 2 });
   const s = buildTemplateSurvey(["5A", "5B"]);
-  assert.deepEqual([s.groups, s.group, s.maxSel, s.anon, s.questions.length], [["5A", "5B"], "5A", 3, true, 7]);
+  assert.deepEqual([s.groups, s.group, s.maxSel, s.questions.length], [["5A", "5B"], "5A", 3, 7]);
+  assert.ok(!("anon" in s));                                          // ya no existe la opción «anónima»
   assert.equal(buildTemplateSurvey([]).group, "");
   s.questions[0].text = "x"; assert.notEqual(TEMPLATE_QUESTIONS[0].text, "x");     // es una copia
 });
@@ -14,9 +15,10 @@ test("tipo: acepta español, inglés, símbolos, tildes y mayúsculas; rechaza l
   for (const v of ["", null, undefined, "medio", "positivo!"]) assert.equal(parseTipo(v), null, String(v));
 });
 test("exportar JSON y CSV conservan texto, tildes, ñ y el tipo de cada pregunta", () => {
-  const sv = { title: "Año 2026 — Ñandú", maxSel: 2, anon: false, questions: [{ text: "¿Con quién, \"sí\" o no?", tp: "pos" }, { text: "¿Quién lidera?", tp: "neu" }, { text: "¿Con quién NO?", tp: "neg" }] };
+  const sv = { title: "Año 2026 — Ñandú", maxSel: 2, questions: [{ text: "¿Con quién, \"sí\" o no?", tp: "pos" }, { text: "¿Quién lidera?", tp: "neu" }, { text: "¿Con quién NO?", tp: "neg" }] };
   const j = exportSurveyJSON(sv);
-  assert.deepEqual([j.formato, j.maxSel, j.anonima, j.preguntas.map((p) => p.tipo)], ["rednexo-encuesta-v1", 2, false, ["positiva", "neutral", "negativa"]]);
+  assert.deepEqual([j.formato, j.maxSel, j.preguntas.map((p) => p.tipo)], ["rednexo-encuesta-v1", 2, ["positiva", "neutral", "negativa"]]);
+  assert.ok(!("anonima" in j));
   const csv = surveyToCSV(sv);
   assert.ok(csv.startsWith("﻿pregunta;tipo\r\n"));
   assert.ok(csv.includes('"¿Con quién, ""sí"" o no?";positiva'));
@@ -26,10 +28,10 @@ test("nombre de archivo sin tildes ni símbolos y con fecha", () => {
   assert.equal(surveyFileName({ title: "***" }, "json", new Date("2026-01-02T00:00:00Z")), "encuesta-encuesta-2026-01-02.json");
 });
 test("ida y vuelta: lo que se exporta en JSON o CSV se vuelve a importar idéntico", () => {
-  const sv = { title: "Mi encuesta", maxSel: 4, anon: false, questions: [{ text: "¿Con quién, \"sí\" o no?", tp: "pos" }, { text: "Línea uno\nlínea dos", tp: "neu" }, { text: "¿Con quién NO?", tp: "neg" }] };
+  const sv = { title: "Mi encuesta", maxSel: 4, questions: [{ text: "¿Con quién, \"sí\" o no?", tp: "pos" }, { text: "Línea uno\nlínea dos", tp: "neu" }, { text: "¿Con quién NO?", tp: "neg" }] };
   const esperado = [{ text: "¿Con quién, \"sí\" o no?", tp: "pos" }, { text: "Línea uno línea dos", tp: "neu" }, { text: "¿Con quién NO?", tp: "neg" }];
   const a = parseSurveyImport(JSON.stringify(exportSurveyJSON(sv)), "x.json");
-  assert.ok(a.ok); assert.deepEqual(a.survey.questions, esperado); assert.deepEqual([a.survey.title, a.survey.maxSel, a.survey.anon], ["Mi encuesta", 4, false]);
+  assert.ok(a.ok); assert.deepEqual(a.survey.questions, esperado); assert.deepEqual([a.survey.title, a.survey.maxSel], ["Mi encuesta", 4]); assert.ok(!("anon" in a.survey));
   const b = parseSurveyImport(surveyToCSV(sv), "encuesta-mi-encuesta-2026-11-05.csv");
   assert.ok(b.ok); assert.deepEqual(b.survey.questions, esperado); assert.equal(b.survey.title, "mi encuesta");
 });
@@ -73,4 +75,11 @@ test("seguridad: se quitan caracteres de control y se neutralizan fórmulas de E
   assert.deepEqual(parseSurveyImport(csv, "f.csv").survey.questions, sv.questions);                       // se recupera el texto original
   assert.equal(parseSurveyImport("Hola\u0000\u0007 mundo;pos", "c.csv").survey.questions[0].text, "Hola mundo");
   assert.equal(parseSurveyImport('[{"texto":"<script>alert(1)</script>","tipo":"pos"}]', "s.json").survey.questions[0].text, "<script>alert(1)</script>");   // se guarda como texto; React lo muestra escapado
+});
+
+test("un archivo antiguo con «anonima» se importa igual: ese dato se ignora (toda encuesta es confidencial)", () => {
+  for (const flag of [true, false]) {
+    const r = parseSurveyImport(JSON.stringify({ titulo: "Vieja", maxSel: 2, anonima: flag, preguntas: [{ texto: "¿A?", tipo: "positiva" }] }), "vieja.json");
+    assert.deepEqual([r.ok, r.survey.title, r.survey.maxSel, "anon" in r.survey, "anonima" in r.survey], [true, "Vieja", 2, false, false]);
+  }
 });
