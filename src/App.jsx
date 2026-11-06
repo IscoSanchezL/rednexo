@@ -134,7 +134,7 @@ function downloadBytes(name, bytes, mime) {
   a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
 }
-const blankSurvey = () => ({ title: "", group: GROUPS?.[0] || "", groups: [], maxSel: 3, anon: true, questions: [] });
+const blankSurvey = () => ({ title: "", group: GROUPS?.[0] || "", groups: [], maxSel: 3, questions: [] });
 const TIPO_INFO = { pos: { l: "Positiva", s: "+", c: () => C.teal }, neu: { l: "Neutral", s: "○", c: () => C.amber }, neg: { l: "Negativa", s: "−", c: () => C.err } };
 
 // ── Operaciones de plataforma: bitácora, exportar y eliminar un colegio ──
@@ -2163,7 +2163,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const confirmImport = async () => {
     const r = importPreview?.result; if (!r?.ok) return;
     const groups = (GROUPS || []).slice();
-    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, anon: r.survey.anon, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) }, "importada");
+    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) }, "importada");
     if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
     setImportPreview(null);
   };
@@ -2173,7 +2173,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const gs = surveyGroups(sv);
     const base = `Copia de ${sv.title}`;
     const n = surveys.filter((x) => !x.deleted && (x.title === base || x.title.startsWith(base + " ("))).length;
-    const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, anon: sv.anon, questions: (sv.questions || []).map((q) => ({ text: q.text, tp: q.tp })) }, "duplicada");
+    const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, questions: (sv.questions || []).map((q) => ({ text: q.text, tp: q.tp })) }, "duplicada");
     if (id) { setEditing(id); flash("✅ Copia creada en borrador, sin respuestas. Cambia el título y los grupos, y actívala cuando quieras aplicarla.", 8000); }
   };
 
@@ -2267,11 +2267,9 @@ function SurveyBuilder({ role, students, GROUPS }) {
               </div>
             </div>
             <Inp label="Máx. selecciones" type="number" value={nS.maxSel} onChange={(v) => setNS((s) => ({ ...s, maxSel: parseInt(v) || 1 }))} />
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <div onClick={() => setNS((s) => ({ ...s, anon: !s.anon }))} style={{ width: 38, height: 20, borderRadius: 10, cursor: "pointer", background: nS.anon ? C.rx : C.border, display: "flex", alignItems: "center", padding: 2, transition: "all .2s" }}>
-                <div style={{ width: 16, height: 16, borderRadius: "50%", background: "#fff", transition: "all .2s", transform: nS.anon ? "translateX(18px)" : "translateX(0)" }} />
-              </div>
-              <span style={{ fontSize: 12, color: C.t2 }}>Anónima</span>
+            <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, background: tint(C.teal, "12"), border: `1px solid ${tint(C.teal, "30")}` }}>
+              <span>🔒</span>
+              <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}><b style={{ color: C.text }}>Confidencial.</b> Los estudiantes no ven lo que responden los demás; solo el equipo del colegio ve las respuestas. Se guarda quién respondió, porque el sociograma lo necesita.</div>
             </div>
           </div>
         </Card>
@@ -2420,7 +2418,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()})</span>
                 <span title="Grupos a los que se aplica">👥 {surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
                 <span>🎯 Máx: {sv.maxSel}</span>
-                <span>{sv.anon ? "🔒 Anónima" : "👤 Identificada"}</span>
+                <span title="Los estudiantes no ven las respuestas de los demás; solo el equipo del colegio las ve. Se guarda quién respondió.">🔒 Confidencial</span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -2874,6 +2872,9 @@ function PublicSurvey({ surveyId, colegioId }) {
               <span>📋 {survey?.questions?.length} preguntas</span>
               <span>🎯 Máx. {survey?.maxSel} selecciones</span>
               <span>👥 {filtered.length} participantes</span>
+            </div>
+            <div style={{ fontSize: 11, color: "#9498ae", marginTop: 10, lineHeight: 1.5 }}>
+              🔒 Tus respuestas son confidenciales: solo las ve el equipo del colegio. Tus compañeros no ven lo que respondes.
             </div>
           </div>
 
