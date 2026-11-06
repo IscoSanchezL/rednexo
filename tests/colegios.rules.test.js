@@ -168,3 +168,31 @@ test("la encuesta pública sigue sin poder actualizar respuestas ni marcas (solo
   await assertFails(updateDoc(doc(as("admin@a.co"), "colegios/a/responses/sv1_1"), { answers: {} }));
   await assertFails(updateDoc(doc(as("psi@a.co"), "colegios/a/responses/sv1_1"), { answers: {} }));
 });
+
+// ── Registro de actividad: no se puede falsificar ──
+const entrada = (email, over = {}) => ({ type: "group", action: "creó el grupo", detail: "5A", user: "Ana", email, createdAt: serverTimestamp(), ...over });
+test("actividad: un psicólogo registra su propia acción; el solo lectura no", async () => {
+  await assertSucceeds(setDoc(doc(as("psi@a.co"), "colegios/A/activity/n1"), entrada("psi@a.co")));
+  { const { detail, ...sinDetalle } = entrada("admin@a.co"); await assertSucceeds(setDoc(doc(as("admin@a.co"), "colegios/A/activity/n2"), sinDetalle)); }   // el detalle es opcional
+  await assertFails(setDoc(doc(as("ro@a.co"), "colegios/A/activity/n3"), entrada("ro@a.co")));
+  await assertFails(setDoc(doc(anon(), "colegios/A/activity/n4"), entrada("x@x.co")));
+});
+test("actividad: no se puede firmar a nombre de otra persona, ni falsear la hora, ni añadir campos o tipos", async () => {
+  const db = as("psi@a.co");
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f1"), entrada("admin@a.co")));                                   // a nombre de otro
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f2"), entrada("psi@a.co", { createdAt: new Date("2020-01-01") }))); // hora inventada
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f3"), entrada("psi@a.co", { extra: 1 })));                          // campo extra
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f4"), entrada("psi@a.co", { type: "borrado" })));                   // tipo desconocido
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f5"), entrada("psi@a.co", { action: "x".repeat(201) })));           // demasiado largo
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f6"), entrada("psi@a.co", { detail: "x".repeat(301) })));
+  await assertFails(setDoc(doc(db, "colegios/A/activity/f7"), entrada("PSI@A.CO")));                                        // el correo debe coincidir exacto en minúsculas
+});
+test("actividad: no se escribe en otro colegio; solo el administrador la lee y ni él puede editar una entrada", async () => {
+  await assertFails(setDoc(doc(as("psi@b.co"), "colegios/A/activity/o1"), entrada("psi@b.co")));
+  await assertSucceeds(setDoc(doc(as("psi@a.co"), "colegios/A/activity/l1"), entrada("psi@a.co")));
+  await assertFails(getDoc(doc(as("psi@a.co"), "colegios/A/activity/l1")));                   // el psicólogo no lee el registro
+  await assertSucceeds(getDoc(doc(as("admin@a.co"), "colegios/A/activity/l1")));
+  await assertSucceeds(getDocs(collection(as("admin@a.co"), "colegios/A/activity")));
+  await assertFails(updateDoc(doc(as("admin@a.co"), "colegios/A/activity/l1"), { action: "otra" }));
+  await assertFails(updateDoc(doc(as("psi@a.co"), "colegios/A/activity/l1"), { action: "otra" }));
+});
