@@ -1,0 +1,90 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RedNexo — Licencias, bloqueo por falta de pago y precios</title><link rel="stylesheet" href="estilo.css"></head><body>
+<h1>RedNexo · Licencias, bloqueo por falta de pago y precios</h1>
+<p>Documento interno de Iskonex para decidir cómo cobrar y cómo suspender el acceso. <b>Las cifras son propuestas y estimaciones</b> (pesos colombianos, ≈ COP 4.000 por USD); los costos de terceros deben verificarse en sus páginas oficiales antes de firmar contratos. Los aspectos legales son orientativos: valídelos con un abogado.</p>
+
+<div class="nota"><b>Estado de implementación (actualizado):</b> ya está programado el vencimiento automático con gracia de 15 días en solo lectura, bloqueo posterior, retención de datos de 90 días, selector de plan (el plan fija solo el máximo de estudiantes y el costo), botón «Renovar 12 meses» para el Super Admin, avisos en pantalla y tarjeta de licencia en Config. El cobro es <b>manual (opción A)</b>; el límite de estudiantes solo avisa. Pendientes: recordatorios por correo, cobro automático y eliminación a los 90 días (manual).</div>
+<h2>1. Cómo se bloquea el acceso si no hay pago</h2>
+<h3>Lo que ya existe hoy</h3>
+<p>Cada colegio tiene un campo <code>estado</code> (activo / suspendido). Cuando el Super Admin lo pone en <b>suspendido</b>, las <b>reglas de seguridad de Firestore</b> impiden leer y escribir los datos de ese colegio, incluida la encuesta pública de los estudiantes. Es un bloqueo real (en el servidor), no solo visual. Hoy es <b>manual</b>: alguien debe acordarse de suspender.</p>
+<h3>Lo que se propone: licencia con vencimiento automático</h3>
+<p>Agregar al colegio una <b>licencia</b>: <code>plan</code>, <code>vence</code> (fecha), <code>graciaDias</code> y <code>maxEstudiantes</code>. Las reglas comparan la hora del servidor con la fecha de vencimiento, así que el bloqueo ocurre solo, sin que nadie lo ejecute y sin posibilidad de evadirlo desde el navegador.</p>
+<table><tr><th>Etapa</th><th>Cuándo</th><th>Qué pasa</th></tr>
+<tr><td>1. Vigente</td><td>Hasta la fecha de vencimiento</td><td>Todo funciona. Desde 30 días antes, el administrador ve un aviso «Tu licencia vence el …».</td></tr>
+<tr><td>2. Gracia</td><td>Vencimiento + N días (sugerido 15)</td><td>Se puede <b>ver y exportar</b> todo, pero no crear encuestas ni recibir respuestas nuevas. Aviso rojo permanente.</td></tr>
+<tr><td>3. Bloqueado</td><td>Después de la gracia</td><td>Nadie del colegio entra (solo ven «Licencia vencida, contacte a su proveedor»). La encuesta pública deja de aceptar respuestas.</td></tr>
+<tr><td>4. Retención</td><td>Hasta 90 días bloqueado</td><td>Los datos se conservan por si renuevan. Al renovar, todo vuelve tal cual estaba.</td></tr>
+<tr><td>5. Eliminación</td><td>Pasados los 90 días</td><td>Previo aviso por correo, se entrega un respaldo (Excel) y se eliminan los datos. Debe constar en el contrato y en la política de tratamiento de datos.</td></tr></table>
+<h3>Otros controles que se pueden incluir</h3>
+<ul><li><b>Límite de estudiantes</b> por plan: al superarlo no deja crear más estudiantes (o solo avisa, según su política comercial).</li><li><b>Pantalla de licencia</b> en Config: plan, vencimiento, estudiantes usados y datos de contacto para renovar.</li><li><b>Panel del Super Admin</b>: lista de colegios ordenada por vencimiento, botón «Renovar 12 meses» y registro en la bitácora de auditoría.</li><li><b>Recordatorios</b> por correo a 30/15/7 días (requiere automatizar envíos; ver opción C).</li></ul>
+
+<h3>Tres formas de cobrar (de la más simple a la más automática)</h3>
+<table><tr><th></th><th>A. Manual</th><th>B. Link de pago + confirmación manual</th><th>C. Automático</th></tr>
+<tr><td>Cómo funciona</td><td>El colegio paga por transferencia/factura. Usted verifica y pulsa «Renovar» en su panel.</td><td>Usted envía un link de pago (Wompi, Mercado Pago, PayU, Stripe…). Al ver el pago, pulsa «Renovar».</td><td>El pago dispara un webhook que renueva la licencia solo, y un proceso diario envía recordatorios y bloquea.</td></tr>
+<tr><td>Infraestructura</td><td>Ninguna adicional (plan gratuito Spark sirve).</td><td>Ninguna adicional.</td><td>Cloud Functions → requiere plan <b>Blaze</b> (pago por uso, con tarjeta; hoy el proyecto está en Spark).</td></tr>
+<tr><td>Esfuerzo de desarrollo</td><td>Bajo</td><td>Bajo</td><td>Medio-alto</td></tr>
+<tr><td>Costo por transacción</td><td>0</td><td>Comisión de la pasarela (normalmente ~2,5–3,5 % + tarifa fija; verificar)</td><td>Igual que B</td></tr>
+<tr><td>Recomendado cuando</td><td>Hasta ~10–15 colegios; pagan anual por transferencia.</td><td>Colegios que prefieren pagar con tarjeta/PSE.</td><td>Más de ~20 colegios o cobros mensuales.</td></tr></table>
+<div class="nota"><b>Recomendación:</b> empezar con <b>A</b> (más el bloqueo automático por fecha, que no necesita Cloud Functions) y pasar a <b>C</b> cuando el volumen lo justifique. Con colegios, lo habitual es facturar anual por adelantado con factura electrónica; los pagos automáticos pesan menos.</div>
+<div class="ojo"><b>Antes de bloquear a un cliente:</b> el contrato debe indicar vencimiento, gracia, retención/eliminación de datos y quién es responsable del tratamiento de datos de menores (el colegio, con Iskonex como encargado). Consulte con un abogado (Ley 1581 de 2012 y decretos reglamentarios).</div>
+
+<h2 class="salto">2. Cuánto le cuesta a usted atender un colegio</h2>
+<p>Los costos de infraestructura son muy bajos porque Firebase cobra por uso y tiene una cuota gratuita diaria.</p>
+<table><tr><th>Concepto</th><th>Estimación</th><th>Nota</th></tr>
+<tr><td>Firebase (Firestore + Hosting) por colegio de ~500 estudiantes</td><td>≈ USD 0–3 / mes</td><td>Una aplicación de encuesta genera pocos miles de lecturas/escrituras. Referencia: ~USD 0,03 por 100 mil lecturas y ~0,09 por 100 mil escrituras tras la cuota gratis (verificar tarifas vigentes en la página oficial de Firebase).</td></tr>
+<tr><td>Dominio</td><td>≈ USD 15 / año en total</td><td>Compartido por todos los colegios.</td></tr>
+<tr><td>Pasarela de pagos</td><td>~3 % + tarifa fija por pago</td><td>Solo en opciones B y C.</td></tr>
+<tr><td>Soporte y capacitación</td><td>Su tiempo</td><td>Es el costo real: 2–4 h de inducción por colegio más soporte.</td></tr>
+<tr><td>Impuestos / contabilidad</td><td>IVA (19 %) según su régimen, renta, factura electrónica</td><td>Consulte con su contador.</td></tr></table>
+<p>Conclusión: el margen bruto sobre infraestructura supera el 90 %. El precio debe fijarse por <b>valor para el colegio</b> y por el costo de soporte, no por el costo del servidor.</p>
+
+<h2>3. Referencias de mercado (orientativas)</h2>
+<ul><li>Q10 (plataforma académica colombiana): cifras de terceros apuntan a ≈ USD 2,3 por estudiante al año. Es un sistema académico completo, no solo sociometría.</li><li>Herramientas de seguimiento estudiantil internacionales: del orden de USD 5–20 por estudiante al año (p. ej. listados de Capterra), con cargos de configuración.</li><li>Software escolar en EE. UU.: licencias base de cientos de dólares más ≈ USD 5 por estudiante activo al año.</li></ul>
+<p class="ojo">Son datos públicos o de terceros, sin contrastar para este documento. Úselos como rango, no como cotización.</p>
+
+<h2 class="salto">4. Todas las formas posibles de cobrar</h2>
+<table><tr><th>Modelo</th><th>Cómo se cobra</th><th>Ventajas</th><th>Desventajas</th></tr>
+<tr><td><b>1. Por estudiante al año</b></td><td>Precio × estudiantes matriculados</td><td>Escala con el tamaño del colegio; fácil de justificar.</td><td>El colegio puede discutir el conteo; hay que auditar el número.</td></tr>
+<tr><td><b>2. Planes por rangos (tramos)</b></td><td>Cuota anual fija según rango de estudiantes</td><td>Simple de cotizar y presupuestar; predecible.</td><td>Efectos de borde entre tramos.</td></tr>
+<tr><td><b>3. Tarifa plana por colegio</b></td><td>Un solo precio, sin límites</td><td>Muy sencillo de vender.</td><td>Pierde ingreso con colegios grandes y es injusto para los pequeños.</td></tr>
+<tr><td><b>4. Por profesional (puesto)</b></td><td>Precio × psicólogos/administradores</td><td>Encaja con colegios con pocos orientadores.</td><td>Incentiva compartir cuentas; no refleja el valor (el valor está en los estudiantes).</td></tr>
+<tr><td><b>5. Por aplicación de encuesta</b></td><td>Pago por cada encuesta aplicada</td><td>Barrera de entrada baja.</td><td>Ingresos irregulares; desincentiva el uso, que es lo que genera valor.</td></tr>
+<tr><td><b>6. Freemium / piloto</b></td><td>Gratis con límites (1 grupo, 1 encuesta) y pago para el resto</td><td>Facilita la demostración.</td><td>Soporte para clientes que no pagan; conviene limitar a un piloto de 30–60 días.</td></tr>
+<tr><td><b>7. Cuota de implementación + anualidad</b></td><td>Pago único de instalación/capacitación + licencia anual</td><td>Cubre su tiempo inicial.</td><td>Sube la barrera de entrada.</td></tr>
+<tr><td><b>8. Híbrido (recomendado)</b></td><td>Plan por rangos + implementación opcional + módulos extra</td><td>Combina simplicidad, escala y cubre soporte.</td><td>Hay que explicarlo bien.</td></tr>
+<tr><td><b>9. Suscripción mensual</b></td><td>Cuota mensual (≈ anual / 10)</td><td>Entrada fácil, flujo de caja constante.</td><td>Más cobros y más morosidad; los colegios suelen preferir pago anual.</td></tr>
+<tr><td><b>10. Convenio por red / secretaría</b></td><td>Precio especial para cadenas de colegios o entes públicos</td><td>Volumen.</td><td>Ventas largas, licitaciones, requisitos de contratación.</td></tr></table>
+
+<h2 class="salto">5. Propuesta de planes (ejemplo en COP, por año)</h2>
+<p>Precios ilustrativos antes de IVA. Ajuste según su posicionamiento: equivalen a ≈ USD 1 por estudiante al año en los planes medios, es decir, por debajo de las referencias de mercado.</p>
+<table><tr><th>Plan</th><th>Estudiantes</th><th>Usuarios</th><th>Incluye</th><th>Precio anual (COP)</th><th>≈ por estudiante</th></tr>
+<tr><td><b>Piloto</b></td><td>Hasta 60</td><td>2</td><td>Todo, 45 días, sin soporte extendido</td><td>Gratis</td><td>—</td></tr>
+<tr><td><b>Básico</b></td><td>Hasta 300</td><td>3</td><td>Encuestas, matriz, reportes, Excel</td><td>1.200.000</td><td>4.000</td></tr>
+<tr><td><b>Estándar</b></td><td>Hasta 800</td><td>8</td><td>Todo lo del Básico + logo propio + bitácora</td><td>2.800.000</td><td>3.500</td></tr>
+<tr><td><b>Plus</b></td><td>Hasta 1.500</td><td>Ilimitados</td><td>Todo + soporte prioritario + capacitación anual</td><td>4.900.000</td><td>3.300</td></tr>
+<tr><td><b>Institucional</b></td><td>Más de 1.500 o varias sedes</td><td>Ilimitados</td><td>A medida</td><td>Cotización</td><td>≈ 2.500–3.000</td></tr></table>
+<h3>Opciones y descuentos</h3>
+<table><tr><th>Concepto</th><th>Valor sugerido</th></tr>
+<tr><td>Implementación y capacitación (opcional)</td><td>300.000 – 800.000 por colegio (según horas y desplazamiento)</td></tr>
+<tr><td>Pago por 2 años adelantado</td><td>−10 %</td></tr>
+<tr><td>Pago por 3 años adelantado</td><td>−15 %</td></tr>
+<tr><td>Segunda sede o red de ≥ 3 colegios</td><td>−10 % a −20 % por colegio</td></tr>
+<tr><td>Colegio público / fundación sin ánimo de lucro</td><td>−20 % a −40 %, según convenio</td></tr>
+<tr><td>Estudiantes por encima del plan</td><td>≈ 3.000 por estudiante adicional, o subir al plan siguiente</td></tr>
+<tr><td>Mensual (modelo 9)</td><td>Anual / 10 por mes (recargo ≈ 20 % frente al anual)</td></tr>
+<tr><td>Renovación</td><td>Congelar el precio 1 año; luego ajustar por IPC</td></tr>
+<tr><td>Reactivación tras bloqueo</td><td>Sin recargo dentro de la retención (90 días); con recargo simbólico si se pasa</td></tr></table>
+<h3>Servicios adicionales que se pueden vender</h3>
+<ul><li>Informe interpretativo del grupo hecho por un profesional (por curso).</li><li>Migración de datos históricos desde Excel.</li><li>Personalización de preguntas/plantillas por nivel.</li><li>Módulo anónimo verdadero (en evaluación) y comparación entre aplicaciones.</li><li>Capacitación a docentes y charla a familias.</li></ul>
+
+<p class="nota">Estos son los valores que usa el selector de planes de la aplicación: Piloto (60 estudiantes, 45 días gratis), Básico (300 · $1.200.000), Estándar (800 · $2.800.000), Plus (1.500 · $4.900.000) e Institucional (sin tope, a convenir). Cambiarlos requiere editar un archivo del código (<code>src/lib/licencia.js</code>).</p>
+<h2>6. Ejemplo de ingresos y punto de equilibrio</h2>
+<table><tr><th>Escenario</th><th>Colegios</th><th>Ingreso anual aprox.</th></tr>
+<tr><td>Conservador</td><td>5 Básico + 3 Estándar</td><td>5×1,2 + 3×2,8 = 14,4 M</td></tr>
+<tr><td>Medio</td><td>10 Estándar + 4 Plus + 5 Básico</td><td>28 + 19,6 + 6 = 53,6 M</td></tr>
+<tr><td>Ambicioso</td><td>25 Estándar + 10 Plus + 10 Básico</td><td>70 + 49 + 12 = 131 M</td></tr></table>
+<p>Costos fijos de infraestructura inferiores a ≈ 1 M anual en estos escenarios; el límite real es su capacidad de vender, capacitar y dar soporte.</p>
+
+<h2>7. Decisiones tomadas</h2>
+<p>Se adoptaron las recomendaciones: gracia 15 días en solo lectura, retención 90 días, cobro manual y límite que solo avisa.</p><ol style="display:none"><li><b>Política de bloqueo:</b> ¿días de gracia (sugerido 15)? ¿en gracia solo lectura, o bloqueo total?</li><li><b>Retención de datos tras el bloqueo:</b> ¿90 días?</li><li><b>Cobro:</b> ¿manual (A), link de pago (B) o automático (C, requiere Blaze)?</li><li><b>Plan de precios:</b> ¿usamos la tabla propuesta (rangos) u otro modelo?</li><li><b>Límite de estudiantes:</b> ¿bloquea o solo avisa?</li></ol>
+
+</body></html>

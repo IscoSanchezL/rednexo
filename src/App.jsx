@@ -10,8 +10,9 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
+import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan } from "./lib/licencia";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
-import { collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc, limit } from "firebase/firestore";
+import { Timestamp, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc, limit } from "firebase/firestore";
 
 // ═══════════════════════════════════════
 // REDNEXO — Inteligencia Sociométrica
@@ -2596,7 +2597,25 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
 
 // ════════ SETTINGS PANEL ════════
 
-function SettingsPanel() {
+function LicenciaCard({ licencia, nEstudiantes }) {
+  const est = estadoLicencia(licencia);
+  if (est.fase === "sin_licencia") return null;
+  const plan = PLANES[licencia.plan];
+  const f = (ms) => new Date(ms).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+  const costo = licencia.plan === "piloto" ? "Gratis (piloto)" : plan?.precio ? `$${plan.precio.toLocaleString("es-CO")} COP + IVA` : "A convenir";
+  const filas = [["Plan", plan ? plan.label : "—"], ["Estudiantes", `${nEstudiantes}${licencia.maxEstudiantes ? ` de ${licencia.maxEstudiantes}` : " (sin tope)"}`], ["Costo anual", costo], ["Vigencia", `hasta el ${f(est.vence)}`]];
+  return (
+    <Card style={{ marginBottom: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔑 Licencia</div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
+        {filas.map(([k, v]) => <div key={k}><div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".05em" }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600 }}>{v}</div></div>)}
+      </div>
+      <div style={{ fontSize: 11, color: C.t3, marginTop: 8 }}>Para cambiar de plan o renovar, comunícate con Iskonex.</div>
+    </Card>
+  );
+}
+
+function SettingsPanel({ licencia, nEstudiantes }) {
   const [cfg, setCfg] = useState({ colegio: "", ciudad: "", periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -2632,6 +2651,7 @@ function SettingsPanel() {
           <Btn v="pri" onClick={save} disabled={!dirty}>💾 Guardar cambios</Btn>
         </div>
       </div>
+      <LicenciaCard licencia={licencia} nEstudiantes={nEstudiantes} />
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
         <Card glow={C.rx}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>🏫 Institución</div>
@@ -3026,10 +3046,11 @@ function PublicSurvey({ surveyId, colegioId }) {
 
 // ════════ SELECTOR DE COLEGIO ════════
 
-function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
+function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onRenew, onPlan, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
   const [nombre, setNombre] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
+  const [planNuevo, setPlanNuevo] = useState("piloto");
   const [deleting, setDeleting] = useState(null);
   const [typed, setTyped] = useState("");
   const [exported, setExported] = useState(false);
@@ -3037,6 +3058,9 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
   const isSuper = session.isSuper;
   const hasLegacy = colegios.some((c) => c.id === LEGACY_COLEGIO_ID);
   const suspended = (c) => c.estado === "suspendido";
+  const licDe = (c) => estadoLicencia(c.licencia);
+  const sinLic = (c) => !isSuper && !licDe(c).puedeLeer;
+  const etiquetaLic = (c) => { const e = licDe(c); const f = (ms) => new Date(ms).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" }); if (e.fase === "sin_licencia") return null; const plan = PLANES[c.licencia?.plan]?.label || "—"; return { texto: `${plan} · ${e.fase === "bloqueada" ? "vencida" : e.fase === "gracia" ? "en gracia" : "vence"} ${f(e.vence)}`, color: e.fase === "vigente" ? C.t3 : e.fase === "por_vencer" ? C.amber : C.err }; };
   return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", display: "flex", justifyContent: "center", padding: 24 }}>
       <div style={{ width: "100%", maxWidth: 620, margin: "auto 0" }}>
@@ -3050,17 +3074,23 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
           {colegios.length === 0 && <div style={{ fontSize: 13, color: C.t2 }}>{isSuper ? "Todavía no hay colegios. Crea el primero o importa los datos existentes." : "Tu correo no pertenece a ningún colegio activo."}</div>}
           {colegios.map((c) => {
-            const blocked = suspended(c) && !isSuper;
+            const blocked = (suspended(c) || sinLic(c)) && !isSuper;
             return (
               <div key={c.id} style={{ borderRadius: 10, border: `1px solid ${suspended(c) ? tint(C.amber, "80") : C.border}`, background: C.surface, overflow: "hidden" }}>
                 <button disabled={blocked} onClick={() => onPick(c.id)} style={{ width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: "transparent", color: C.text, cursor: blocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: blocked ? 0.6 : 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id} {suspended(c) && <span style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>· {etiquetaEstado(c.estado).toUpperCase()}</span>}</div>
                   <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
-                  {blocked && <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>Acceso suspendido. Comunícate con el administrador de la plataforma.</div>}
+                  {etiquetaLic(c) && <div style={{ fontSize: 11, color: etiquetaLic(c).color, marginTop: 2 }}>🔑 {etiquetaLic(c).texto}</div>}
+                  {blocked && <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>{sinLic(c) ? "Licencia vencida. Comunícate con Iskonex para renovarla." : "Acceso suspendido. Comunícate con el administrador de la plataforma."}</div>}
                 </button>
                 {isSuper && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 14px 12px" }}>
                     <Btn sm v="ghost" disabled={busy} onClick={() => onExport(c)}>⬇ Exportar</Btn>
+                    <Btn sm v="teal" disabled={busy} onClick={() => onRenew(c)} title="Suma 12 meses a la licencia (si ya venció, cuenta desde hoy)">🔑 Renovar 12 meses</Btn>
+                    <select disabled={busy} value={c.licencia?.plan || ""} onChange={(e) => e.target.value && onPlan(c, e.target.value)} title="Al elegir un plan se ajustan solos el máximo de estudiantes y el costo" style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 12, fontFamily: "inherit" }}>
+                      <option value="">Elegir plan…</option>
+                      {Object.keys(PLANES).map((k) => <option key={k} value={k}>{etiquetaPlan(k)}</option>)}
+                    </select>
                     <Btn sm v="ghost" disabled={busy} onClick={() => onSuspend(c)}>{suspended(c) ? "▶ Reactivar" : "⏸ Suspender"}</Btn>
                     <Btn sm v="dan" disabled={busy} onClick={() => { setDeleting(deleting === c.id ? null : c.id); setTyped(""); setExported(false); }}>🗑 Eliminar</Btn>
                   </div>
@@ -3088,8 +3118,9 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                 <Inp label="Nombre del colegio" value={nombre} onChange={setNombre} placeholder="Colegio San José" />
                 <Inp label="Ciudad" value={ciudad} onChange={setCiudad} placeholder="Ciudad" />
                 <Inp label="Correo del administrador del colegio (opcional)" value={adminEmail} onChange={setAdminEmail} placeholder="admin@colegio.edu.co" />
+                <Sel label="Plan (define el máximo de estudiantes y el costo)" value={planNuevo} onChange={setPlanNuevo} options={Object.keys(PLANES).map((k) => ({ v: k, l: etiquetaPlan(k) }))} />
               </div>
-              <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase() }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
+              <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase(), plan: planNuevo }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
             </Card>
             <Card style={{ marginTop: 14 }}>
               <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👑 Superadmins de la plataforma</div>
@@ -3144,6 +3175,7 @@ export default function App() {
   const [session, setSession] = useState(null);
   const [colegios, setColegios] = useState([]);
   const [colegioId, setColegioId] = useState(null);
+  const [licencia, setLicencia] = useState(null);
   const [supers, setSupers] = useState([]);
   const [groupsLoaded, setGroupsLoaded] = useState(false);
   const [studentsLoaded, setStudentsLoaded] = useState(false);
@@ -3241,7 +3273,8 @@ export default function App() {
       SCHOOL = { nombre, logo: d.logo || "" };
       setSchool({ nombre, logo: d.logo || "", loaded: true });
     }, (err) => setSchool((p) => ({ ...p, loaded: true, blocked: err?.code === "permission-denied" })));
-    return () => unsub();
+    const unsubLic = onSnapshot(doc(db, "colegios", colegioId), (snap) => setLicencia(snap.exists() ? snap.data().licencia || null : null), () => {});
+    return () => { unsub(); unsubLic(); setLicencia(null); };
   }, [user]);
 
   // Mantiene al día lo que la encuesta pública necesita (sin que nadie tenga que acordarse):
@@ -3298,21 +3331,21 @@ export default function App() {
         let list;
         if (isSuper) {
           const snap = await getDocs(collection(db, "colegios"));
-          list = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo" }));
+          list = snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo", licencia: d.data().licencia || null }));
           try { setSupers((await getDocs(collection(db, "superadmins"))).docs.map((d) => ({ email: d.id, activo: d.data().activo === true }))); } catch (e) {}
         } else {
           const snap = await getDocs(query(collectionGroup(db, "miembros"), where("email", "==", email)));
           const mine = snap.docs.map((d) => ({ id: d.ref.parent.parent.id, ...d.data() }));
           const act = mine.filter((m) => m.status === "active" && ["admin", "psychologist", "readonly"].includes(m.role));
           if (mine.length > 0 && act.length === 0) { await deny(mine.some((m) => m.status === "pending") ? "Tu cuenta está pendiente de aprobación." : "Tu acceso fue revocado."); setAuthLoading(false); return; }
-          list = await Promise.all(act.map(async (m) => { let nombre = m.id, estado = "activo"; try { const c = await getDoc(doc(db, "colegios", m.id)); if (c.exists()) { nombre = c.data().nombre || m.id; estado = c.data().estado || "activo"; } } catch (e) {} return { id: m.id, nombre, estado, role: m.role }; }));
+          list = await Promise.all(act.map(async (m) => { let nombre = m.id, estado = "activo", licencia = null; try { const c = await getDoc(doc(db, "colegios", m.id)); if (c.exists()) { nombre = c.data().nombre || m.id; estado = c.data().estado || "activo"; licencia = c.data().licencia || null; } } catch (e) {} return { id: m.id, nombre, estado, licencia, role: m.role }; }));
           if (list.length === 0) { await deny("Tu correo no está autorizado en ningún colegio. Solicita acceso al administrador."); setAuthLoading(false); return; }
         }
         setColegios(list);
         SESSION_EMAIL = email; SESSION_NAME = fbUser.displayName || email;
         setSession({ email, isSuper, isRoot, name: fbUser.displayName || email, photo: fbUser.photoURL });
         let last = null; try { last = localStorage.getItem("rn_colegio"); } catch (e) {}
-        const usable = list.filter((c) => isSuper || c.estado !== "suspendido");
+        const usable = list.filter((c) => isSuper || (c.estado !== "suspendido" && estadoLicencia(c.licencia).puedeLeer));
         const pick = list.length === 1 && usable.length === 1 ? list[0].id : (usable.find((c) => c.id === last)?.id || null);
         setColegioId(pick);
       } catch (e) { await deny("No se pudo verificar tu acceso. Intenta de nuevo."); }
@@ -3331,7 +3364,7 @@ export default function App() {
 
   const reloadColegios = async () => {
     const snap = await getDocs(collection(db, "colegios"));
-    setColegios(snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo" })));
+    setColegios(snap.docs.map((d) => ({ id: d.id, nombre: d.data().nombre || d.id, estado: d.data().estado || "activo", licencia: d.data().licencia || null })));
   };
   const reloadSupers = async () => { try { setSupers((await getDocs(collection(db, "superadmins"))).docs.map((d) => ({ email: d.id, activo: d.data().activo === true }))); } catch (e) {} };
 
@@ -3346,6 +3379,28 @@ export default function App() {
       setPickerMsg(suspender ? `⏸ «${c.nombre}» suspendido.` : `▶ «${c.nombre}» reactivado.`);
     } catch (e) { setPickerMsg("❌ No se pudo cambiar el estado: " + e.message); }
     setPickerBusy(false);
+  };
+  const guardarLicencia = async (c, lic, accion, texto) => {
+    setPickerBusy(true); setPickerMsg("");
+    try {
+      await updateDoc(doc(db, "colegios", c.id), { licencia: { ...lic, vence: Timestamp.fromMillis(aMs(lic.vence)) } });  // las reglas comparan con request.time: debe ser Timestamp
+      await logAudit(accion, c.id, session.email);
+      await reloadColegios();
+      setPickerMsg(texto);
+    } catch (e) { setPickerMsg("❌ No se pudo actualizar la licencia: " + e.message); }
+    setPickerBusy(false);
+  };
+  const renovarColegio = async (c) => {
+    const nueva = c.licencia ? renovar(c.licencia, 12) : licenciaNueva("basico");
+    const f = new Date(nueva.vence).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+    if (!window.confirm(`¿Renovar «${c.nombre}» hasta el ${f}?`)) return;
+    await guardarLicencia(c, nueva, "renovar_licencia", `🔑 «${c.nombre}» renovado hasta el ${f}.`);
+  };
+  const cambiarPlan = async (c, clave) => {
+    if (!PLANES[clave]) return;
+    const nueva = aplicarPlan(c.licencia, clave);
+    if (!window.confirm(`¿Cambiar «${c.nombre}» al plan ${etiquetaPlan(clave)}?`)) { await reloadColegios(); return; }
+    await guardarLicencia(c, nueva, "cambiar_plan", `🔑 «${c.nombre}» ahora tiene el plan ${etiquetaPlan(clave)}.`);
   };
   const exportFromPicker = async (c) => {
     setPickerBusy(true); setPickerMsg("Exportando...");
@@ -3374,14 +3429,15 @@ export default function App() {
     setPickerBusy(false);
   };
 
-  const createColegio = async ({ nombre, ciudad, adminEmail }) => {
+  const createColegio = async ({ nombre, ciudad, adminEmail, plan = "piloto" }) => {
     const id = slugify(nombre);
     if (!id) return false;
     setPickerBusy(true); setPickerMsg("");
     try {
       if ((await getDoc(doc(db, "colegios", id))).exists()) { setPickerMsg("❌ Ya existe un colegio con ese nombre."); setPickerBusy(false); return false; }
       const batch = writeBatch(db);
-      batch.set(doc(db, "colegios", id), { nombre, ciudad, createdAt: serverTimestamp() });
+      const lic0 = licenciaNueva(plan);
+      batch.set(doc(db, "colegios", id), { nombre, ciudad, createdAt: serverTimestamp(), licencia: { ...lic0, vence: Timestamp.fromMillis(lic0.vence) } });
       batch.set(doc(db, "colegios", id, "settings", "global"), { colegio: nombre, ciudad, periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
       if (adminEmail.includes("@")) batch.set(doc(db, "colegios", id, "miembros", adminEmail), { email: adminEmail, role: "admin", status: "active", createdAt: serverTimestamp() });
       await batch.commit();
@@ -3437,27 +3493,31 @@ export default function App() {
   // ── Encuesta pública — no requiere login ──
   if (publicSurvey) return <PublicSurvey surveyId={publicSurvey.surveyId} colegioId={publicSurvey.colegioId} />;
 
-  if (user && school.blocked && !session.isSuper) return (
+  const estLic = estadoLicencia(licencia);
+  const licBloqueada = estLic.fase === "bloqueada";
+  if (user && (school.blocked || licBloqueada) && !session.isSuper) return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 420, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>⏸</div>
-        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>Acceso suspendido</div>
-        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 18 }}>El acceso de este colegio está suspendido o ya no tienes permisos. Tus datos se conservan. Comunícate con el administrador de la plataforma.</div>
+        <div style={{ fontSize: 40, marginBottom: 10 }}>{licBloqueada ? "🔑" : "⏸"}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{licBloqueada ? "Licencia vencida" : "Acceso suspendido"}</div>
+        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 18 }}>{licBloqueada ? mensajeLicencia(estLic) : "El acceso de este colegio está suspendido o ya no tienes permisos. Tus datos se conservan. Comunícate con el administrador de la plataforma."}</div>
         <Btn v="sec" onClick={doLogout}>Salir</Btn>
       </div>
     </div>
   );
 
-  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
+  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
     if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);
     return (<LoginPage onGoogleLogin={handleGoogleLogin} onRegister={() => setAuthView("register")} loading={loginLoading} error={loginError} />);
   }
 
-  const { role } = user;
-  const ri = ROLES[role];
-  const isAdmin = role === "superadmin" || role === "admin";
+  // En gracia (licencia vencida) el colegio queda en solo lectura; la plataforma (superadmin) no se limita.
+  const soloLecturaLic = estLic.fase === "gracia" && !session.isSuper;
+  const isAdmin = user.role === "superadmin" || user.role === "admin";
+  const role = soloLecturaLic ? "readonly" : user.role;
+  const ri = ROLES[user.role];
   const canEdit = role !== "readonly";
 
   const tabs = [
@@ -3529,7 +3589,17 @@ export default function App() {
         <Btn sm v="ghost" onClick={doLogout}>Salir</Btn>
       </header>
 
-      {role === "readonly" && (
+      {["por_vencer", "gracia"].includes(estLic.fase) && (isAdmin || estLic.fase === "gracia") && (
+        <div style={{ background: estLic.fase === "gracia" ? tint(C.err, "18") : tint(C.amber, "18"), borderBottom: `1px solid ${tint(estLic.fase === "gracia" ? C.err : C.amber, "40")}`, padding: "6px 22px", fontSize: 12, color: estLic.fase === "gracia" ? C.err : C.amber, fontWeight: 600 }}>
+          🔑 {mensajeLicencia(estLic)}
+        </div>
+      )}
+      {isAdmin && excedeTope(licencia, students.length) && (
+        <div style={{ background: tint(C.amber, "18"), borderBottom: `1px solid ${tint(C.amber, "40")}`, padding: "6px 22px", fontSize: 12, color: C.amber, fontWeight: 600 }}>
+          ⚠ Tu plan incluye hasta {licencia.maxEstudiantes} estudiantes y hay {students.length}. Comunícate con Iskonex para ampliar tu plan.
+        </div>
+      )}
+      {role === "readonly" && !soloLecturaLic && (
         <div style={{ background: C.skyDim, borderBottom: `1px solid ${tint(C.sky, "20")}`, padding: "5px 22px", fontSize: 11, color: C.sky }}>
           👁 Modo solo lectura
         </div>
@@ -3742,7 +3812,7 @@ export default function App() {
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
         {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesRaw} surveys={surveys} surveyFilter={activeFilter} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
-        {tab === "settings" && isAdmin && <SettingsPanel />}
+        {tab === "settings" && isAdmin && <SettingsPanel licencia={licencia} nEstudiantes={students.length} />}
       </main>
     </div>
   );
