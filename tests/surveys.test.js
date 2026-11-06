@@ -83,3 +83,12 @@ test("un archivo antiguo con «anonima» se importa igual: ese dato se ignora (t
     assert.deepEqual([r.ok, r.survey.title, r.survey.maxSel, "anon" in r.survey, "anonima" in r.survey], [true, "Vieja", 2, false, false]);
   }
 });
+
+test("plantilla de encuesta: se importa tal cual y trae los tres tipos", async () => {
+  const { plantillaEncuestaCSV, parseSurveyImport } = await import("../src/lib/surveys.js");
+  const t = plantillaEncuestaCSV();
+  assert.ok(t.startsWith("﻿pregunta;tipo"));
+  const r = parseSurveyImport(t, "plantilla-encuesta.csv");
+  assert.equal(r.ok, true);
+  assert.deepEqual([...new Set(r.survey.questions.map((q) => q.tp))].sort(), ["neg", "neu", "pos"]);
+});

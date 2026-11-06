@@ -53,6 +53,12 @@ export function surveyToCSV(sv, d = ";") {
   const rows = [["pregunta", "tipo"], ...(sv.questions || []).map((q) => [q.text, TIPOS[q.tp] || "positiva"])];
   return "﻿" + rows.map((r) => r.map((c) => csvCell(c, d)).join(d)).join("\r\n") + "\r\n";
 }
+/** Plantilla para diligenciar en Excel: encabezado, tipos permitidos y preguntas de ejemplo que se pueden cambiar. */
+export function plantillaEncuestaCSV(d = ";") {
+  const rows = [["pregunta", "tipo"], ["¿Con quién te gustaría trabajar en un proyecto en equipo?", "positiva"], ["¿A quién invitarías a tu cumpleaños?", "positiva"], ["¿Quién consideras que es el líder del grupo?", "neutral"], ["¿Con quién NO te gustaría trabajar en equipo?", "negativa"]];
+  return "\uFEFF" + rows.map((r) => r.map((c) => csvCell(c, d)).join(d)).join("\r\n") + "\r\n";
+}
+export const PLANTILLA_ENCUESTA_NOMBRE = "plantilla-encuesta.csv";
 export function surveyFileName(sv, ext, now = new Date()) {
   const base = String(sv.title || "encuesta").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "encuesta";
   return `encuesta-${base}-${now.toISOString().slice(0, 10)}.${ext}`;

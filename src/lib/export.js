@@ -1,6 +1,8 @@
 // Exportación y borrado completo de un colegio (lógica pura, sin Firebase).
 
 /** Subcolecciones de colegios/{id}: se exportan y se borran todas. */
+/** Datos comerciales del colegio: se borran con el colegio, pero NO van en su exportación (son de Iskonex). */
+export const COLEGIO_GESTION = ["legal", "pagos", "historial", "contratos"];
 export const COLEGIO_SUBCOLLECTIONS = ["students", "groups", "surveys", "responses", "responseMarks", "activity", "settings", "miembros"];
 
 /** Convierte valores de Firestore (Timestamp) a texto ISO para poder guardarlos como JSON. */

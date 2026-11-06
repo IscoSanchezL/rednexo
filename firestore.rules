@@ -203,6 +203,12 @@ service cloud.firestore {
           && request.resource.data.createdAt == request.time);
         allow update: if isSuper();   // solo para repetir la migración; la auditoría no se edita
       }
+      // Gestión comercial (datos legales, pagos, historial de licencias y contratos): SOLO el superadmin.
+      // Un colegio nunca ve lo que paga ni los datos de otros; tampoco entra en su exportación.
+      match /legal/{id}     { allow read, write: if isSuper(); }
+      match /pagos/{id}     { allow read, write: if isSuper(); }
+      match /historial/{id} { allow read, write: if isSuper(); }
+      match /contratos/{id} { allow read, write: if isSuper(); }
       match /settings/{id} {
         allow read: if cRead(cid);
         allow create, update: if cAdminW(cid)
@@ -211,10 +217,14 @@ service cloud.firestore {
       }
     }
 
-    // Ajustes de la plataforma (planes y precios). Los lee cualquier sesión (para mostrar su plan); solo el superadmin los cambia.
-    match /plataforma/{id} {
+    // Planes y precios: los lee cualquier sesión (para mostrar el plan del colegio); solo el superadmin los cambia.
+    match /plataforma/planes {
       allow read: if signedIn();
       allow write: if isSuper();
+    }
+    // Resto de la plataforma (datos legales de la empresa para el contrato): solo el superadmin.
+    match /plataforma/{id} {
+      allow read, write: if isSuper();
     }
 
     // Superadmins adicionales (cuentas de la empresa). Cada quien puede ver si es superadmin; solo la raíz los administra.
