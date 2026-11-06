@@ -5,6 +5,8 @@ import { initials, parseBulkStudents, density, buildConnections, buildRoster, su
 import { tint, mixOn, ink } from "./lib/color";
 import { REPORT_TYPES, computeReport, renderReportHTML, reportFileName } from "./lib/reports";
 import { buildActivity, formatWhen } from "./lib/activity";
+import { buildXlsx, XLSX_MIME } from "./lib/xlsx";
+import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -121,6 +123,13 @@ const publicSurveyInfo = (sv, students) => ({ ...buildRoster(sv, students), cole
 /** Descarga un archivo de texto desde el navegador. */
 function downloadFile(name, text, mime) {
   const blob = new Blob([text], { type: mime });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+}
+/** Descarga un archivo binario (p. ej. .xlsx) desde el navegador. */
+function downloadBytes(name, bytes, mime) {
+  const blob = new Blob([bytes], { type: mime });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 4000);
@@ -2114,7 +2123,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const questions = (data.questions || []).map((q, i) => ({ ...q, id: q.id || `q_${Date.now()}_${i}` }));
     try {
       await setDoc(cdoc("surveys", id), { ...data, questions, id, status: "draft", createdAt: serverTimestamp() });
-      logActivity("create", origen === "plantilla" ? "creó la encuesta de prueba" : origen === "importada" ? "importó la encuesta" : "creó la encuesta", `${data.title} · ${questions.length} preguntas`);
+      logActivity("create", origen === "plantilla" ? "creó la encuesta de prueba" : origen === "importada" ? "importó la encuesta" : origen === "duplicada" ? "duplicó la encuesta" : "creó la encuesta", `${data.title} · ${questions.length} preguntas`);
       return id;
     } catch (e) {
       console.error("Error guardando encuesta:", e);
@@ -2157,6 +2166,23 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, anon: r.survey.anon, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) }, "importada");
     if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
     setImportPreview(null);
+  };
+
+  // Copia una encuesta (mismas preguntas y grupos, sin respuestas) para volver a aplicarla: otro grupo, otro periodo o el mismo grupo más adelante.
+  const duplicateSurvey = async (sv) => {
+    const gs = surveyGroups(sv);
+    const base = `Copia de ${sv.title}`;
+    const n = surveys.filter((x) => !x.deleted && (x.title === base || x.title.startsWith(base + " ("))).length;
+    const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, anon: sv.anon, questions: (sv.questions || []).map((q) => ({ text: q.text, tp: q.tp })) }, "duplicada");
+    if (id) { setEditing(id); flash("✅ Copia creada en borrador, sin respuestas. Cambia el título y los grupos, y actívala cuando quieras aplicarla.", 8000); }
+  };
+
+  // Resultados de una encuesta a Excel (.xlsx): hojas con índices, conexiones, matriz y una fila por respuesta.
+  const exportResults = (sv) => {
+    const res = buildResultsSheets({ students, surveys, responses, surveyId: sv.id, group: "Todos", colegio: SCHOOL.nombre });
+    downloadBytes(resultsFileName({ colegio: SCHOOL.nombre, surveyTitle: sv.title }), buildXlsx(res.sheets), XLSX_MIME);
+    logActivity("export", "exportó los resultados de la encuesta (Excel)", sv.title);
+    flash(`✅ Excel descargado: ${res.resumen.respuestas} respuestas, ${res.resumen.elecciones} elecciones. Contiene datos de menores: guárdalo con cuidado.`, 7000);
   };
 
   const exportSurvey = (sv, kind) => {
@@ -2400,6 +2426,8 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
               <Btn sm v="ghost" onClick={() => exportSurvey(sv, "json")} title="Descargar la encuesta como JSON (para importarla en otro colegio)">⬇ JSON</Btn>
               <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)">⬇ CSV</Btn>
+              {canEdit && <Btn sm v="ghost" onClick={() => duplicateSurvey(sv)} title="Crea una copia sin respuestas para aplicarla a otro grupo o en otro periodo">⧉ Duplicar</Btn>}
+              {canEdit && <Btn sm v="teal" disabled={!responses.some((r) => r.surveyId === sv.id)} onClick={() => exportResults(sv)} title={responses.some((r) => r.surveyId === sv.id) ? "Descarga los resultados en Excel (.xlsx) para hacer tus propios gráficos" : "Aún no hay respuestas para exportar"}>⬇ Resultados (Excel)</Btn>}
               <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); logActivity("survey", "abrió para aplicar la encuesta", sv.title); }}>▶ Aplicar</Btn>
               <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
@@ -2444,7 +2472,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
 // ════════ REPORTS PANEL ════════
 
-function ReportsPanel({ students, conns }) {
+function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFilter = "all" }) {
   const grupos = ["Todos", ...Array.from(new Set(students.map((s) => s.group)))];
   const [selectedGroup, setSelectedGroup] = useState("Todos");
   const [reportType, setReportType] = useState("individual");
@@ -2472,6 +2500,13 @@ function ReportsPanel({ students, conns }) {
   const dateStr = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
   const build = (mode) => renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC });
   const exportHTML = () => { dl(build("html"), reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;"); logActivity("report", `descargó el reporte ${REPORT_TYPES[reportType]} (HTML)`, groupLabel); };
+  const sinRespuestas = !(surveyFilter === "all" ? responses : responses.filter((r) => r.surveyId === surveyFilter)).some((r) => filteredStudents.some((s) => String(s.id) === String(r.respondentId)));
+  const exportExcel = () => {
+    const titulo = surveyFilter === "all" ? "" : (surveys.find((x) => x.id === surveyFilter) || {}).title || "";
+    const res = buildResultsSheets({ students, surveys, responses, surveyId: surveyFilter, group: selectedGroup, colegio: SCHOOL.nombre });
+    downloadBytes(resultsFileName({ colegio: SCHOOL.nombre, group: selectedGroup, surveyTitle: titulo }), buildXlsx(res.sheets), XLSX_MIME);
+    logActivity("export", "exportó los resultados a Excel", `${groupLabel}${titulo ? " · " + titulo : " · todas las encuestas"}`);
+  };
   const exportPDF = () => {
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) { alert("El navegador bloqueó la ventana del PDF. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."); return; }
@@ -2522,7 +2557,7 @@ function ReportsPanel({ students, conns }) {
           📌 {filteredStudents.length} participantes · {filteredConns.length} conexiones{selectedGroup !== "Todos" && <span style={{ color: GC[selectedGroup] || C.rx, fontWeight: 700, marginLeft: 6 }}>· {selectedGroup}</span>}
         </div>
       </Card>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
         <Card glow={C.sky} style={{ cursor: "pointer" }}>
           <div onClick={() => setActive(active === "preview" ? null : "preview")}>
             <div style={{ fontSize: 28, marginBottom: 8 }}>👁</div>
@@ -2545,6 +2580,14 @@ function ReportsPanel({ students, conns }) {
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Descargar HTML</div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Archivo HTML completo para abrir en navegador e imprimir</div>
             <Btn v="sec" sm style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>Descargar ↓</Btn>
+          </div>
+        </Card>
+        <Card glow={C.teal} style={{ cursor: sinRespuestas ? "not-allowed" : "pointer", opacity: sinRespuestas ? 0.6 : 1 }}>
+          <div onClick={sinRespuestas ? undefined : exportExcel}>
+            <div style={{ fontSize: 28, marginBottom: 8 }}>📗</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Excel (.xlsx)</div>
+            <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>{sinRespuestas ? "Aún no hay respuestas de este grupo para exportar" : "Índices, conexiones, matriz y una fila por respuesta, para hacer tus propios gráficos"}</div>
+            <Btn v="teal" sm disabled={sinRespuestas} style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>Descargar Excel ↓</Btn>
           </div>
         </Card>
       </div>
@@ -3114,6 +3157,8 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [filter, setFilter] = useState("all");
   const [selNode, setSelNode] = useState(null);
+  const [responsesRaw, setResponsesRaw] = useState([]);   // todas las respuestas del colegio
+  const [surveyFilter, setSurveyFilter] = useState("all"); // qué encuesta alimenta el análisis (todas o una)
   const [rankMode, setRankMode] = useState("pos");        // ranking del dashboard: "pos" = más aceptados, "neg" = más rechazados
   const [rankAll, setRankAll] = useState(false);
   const [expandedNode, setExpandedNode] = useState(null); // nodo cuyo detalle de conexiones está desplegado completo
@@ -3151,17 +3196,21 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(ccol("responses"), (snap) => {
-      if (snap.empty) { setConns(IS_DEMO ? initConns : []); return; }
-      const built = buildConnections(snap.docs.map((d) => d.data()), surveys);
-      setConns(built.length > 0 || !IS_DEMO ? built : initConns);
-    }, () => setConns(IS_DEMO ? initConns : []));
+    const unsub = onSnapshot(ccol("responses"), (snap) => setResponsesRaw(snap.docs.map((d) => d.data())), () => setResponsesRaw([]));
     return () => unsub();
-  }, [user, surveys]);
+  }, [user]);
+
+  // Las conexiones del sociograma, la matriz y los reportes salen de las respuestas de TODAS las encuestas o de una sola.
+  const activeFilter = surveyFilter !== "all" && surveys.some((sv) => sv.id === surveyFilter && !sv.deleted) ? surveyFilter : "all";
+  useEffect(() => {
+    const rs = activeFilter === "all" ? responsesRaw : responsesRaw.filter((r) => r.surveyId === activeFilter);
+    const built = buildConnections(rs, surveys);
+    setConns(built.length > 0 || !IS_DEMO ? built : initConns);
+  }, [responsesRaw, surveys, activeFilter]);
 
   // Al cambiar de colegio no deben quedar datos del anterior en pantalla.
   useEffect(() => {
-    setStudents(IS_DEMO ? initStudents : []); setGroups([]); setConns(IS_DEMO ? initConns : []); setSurveys([]); setTab("dashboard"); setGroupsLoaded(false); setStudentsLoaded(false);
+    setStudents(IS_DEMO ? initStudents : []); setGroups([]); setConns(IS_DEMO ? initConns : []); setSurveys([]); setResponsesRaw([]); setSurveyFilter("all"); setTab("dashboard"); setGroupsLoaded(false); setStudentsLoaded(false);
     setSchool({ nombre: "", logo: "", loaded: false }); SCHOOL = { nombre: "", logo: "" };
   }, [colegioId]);
 
@@ -3486,6 +3535,16 @@ export default function App() {
       )}
 
       <main style={{ padding: 22, animation: "slideIn .3s ease" }}>
+        {students.length > 0 && ["dashboard", "matrix", "reports"].includes(tab) && surveys.filter((sv) => !sv.deleted).length > 1 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <label htmlFor="rn-fuente" style={{ fontSize: 12, fontWeight: 600, color: C.t2 }}>Datos de:</label>
+            <select id="rn-fuente" value={activeFilter} onChange={(e) => setSurveyFilter(e.target.value)} style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 8, padding: "5px 9px", color: C.text, fontSize: 12, fontFamily: "inherit", maxWidth: "100%" }}>
+              <option value="all">Todas las encuestas</option>
+              {surveys.filter((sv) => !sv.deleted).map((sv) => <option key={sv.id} value={sv.id}>{sv.title} ({responsesRaw.filter((r) => r.surveyId === sv.id).length} respuestas)</option>)}
+            </select>
+            {activeFilter !== "all" && <span style={{ fontSize: 11, color: C.amber }}>Se muestra solo esta encuesta</span>}
+          </div>
+        )}
         {students.length === 0 && ["dashboard", "matrix", "reports"].includes(tab) && <EmptyState canEdit={canEdit} onGo={() => setTab("groups")} />}
         {students.length > 0 && tab === "dashboard" && (() => {
           // ── Cálculos dinámicos del dashboard ──
@@ -3680,7 +3739,7 @@ export default function App() {
           <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
         ))}
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
-        {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} />}
+        {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesRaw} surveys={surveys} surveyFilter={activeFilter} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel />}
       </main>
