@@ -6,13 +6,16 @@ export const DIAS_AVISO = 30;
 export const DIAS_RETENCION = 90;
 const DIA = 86400000;
 
-export const PLANES = {
+const PLANES_BASE = {
   piloto: { label: "Piloto", maxEstudiantes: 60, precio: 0 },
   basico: { label: "Básico", maxEstudiantes: 300, precio: 1200000 },
   estandar: { label: "Estándar", maxEstudiantes: 800, precio: 2800000 },
   plus: { label: "Plus", maxEstudiantes: 1500, precio: 4900000 },
   institucional: { label: "Institucional", maxEstudiantes: 0, precio: 0 }, // 0 = sin tope; precio a convenir
 };
+/** Planes vigentes: los de fábrica con los ajustes que guarde el superadmin (plataforma/planes). Se modifica en el sitio. */
+export const PLANES = JSON.parse(JSON.stringify(PLANES_BASE));
+
 
 /** Convierte un Timestamp de Firestore, Date o número a milisegundos (o null). */
 export function aMs(v) {
@@ -100,4 +103,45 @@ export function aplicarPlan(lic, clave, ahora = Date.now()) {
   if (!p) return lic;
   if (!lic || aMs(lic.vence) == null) return licenciaNueva(clave, ahora);
   return { ...lic, plan: clave, maxEstudiantes: p.maxEstudiantes, precio: p.precio };
+}
+
+const entero = (v) => (typeof v === "number" || (typeof v === "string" && v.trim() !== "")) && Number.isInteger(Number(v)) && Number(v) >= 0;
+/** Valida lo que escribe el superadmin: { clave: { maxEstudiantes, precio } }. Solo se editan tope y precio (no las claves ni los nombres). */
+export function validarPlanes(entrada) {
+  const errores = [], planes = {};
+  for (const k of Object.keys(PLANES_BASE)) {
+    const e = entrada?.[k] || {};
+    if (!entero(e.maxEstudiantes)) errores.push(`${PLANES_BASE[k].label}: el máximo de estudiantes debe ser un número entero (0 = sin tope).`);
+    else if (!entero(e.precio)) errores.push(`${PLANES_BASE[k].label}: el precio debe ser un número entero en pesos.`);
+    else planes[k] = { maxEstudiantes: Number(e.maxEstudiantes), precio: Number(e.precio) };
+  }
+  return { ok: errores.length === 0, errores, planes };
+}
+/** Aplica los ajustes guardados sobre los planes de fábrica (ignora claves o valores inválidos). */
+export function aplicarPlanes(ajustes) {
+  for (const k of Object.keys(PLANES_BASE)) {
+    PLANES[k] = { ...PLANES_BASE[k] };
+    const a = ajustes?.[k];
+    if (a && entero(a.maxEstudiantes) && entero(a.precio)) { PLANES[k].maxEstudiantes = Number(a.maxEstudiantes); PLANES[k].precio = Number(a.precio); }
+  }
+}
+
+/** Colegios que conviene avisar: por vencer, en gracia o bloqueados, del más urgente al menos. */
+export function porAvisar(colegios, ahora = Date.now()) {
+  const orden = { bloqueada: 0, gracia: 1, por_vencer: 2 };
+  return colegios
+    .map((c) => ({ c, est: estadoLicencia(c.licencia, ahora) }))
+    .filter((x) => x.est.fase in orden)
+    .sort((a, b) => orden[a.est.fase] - orden[b.est.fase] || a.est.vence - b.est.vence);
+}
+
+/** Correo listo para enviar al administrador del colegio. */
+export function recordatorio(nombreColegio, est) {
+  const f = (ms) => new Date(ms).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
+  const asunto = est.fase === "bloqueada" ? `RedNexo: la licencia de ${nombreColegio} venció` : est.fase === "gracia" ? `RedNexo: ${nombreColegio} está en periodo de gracia` : `RedNexo: la licencia de ${nombreColegio} vence pronto`;
+  const estado = est.fase === "por_vencer" ? `vence el ${f(est.vence)}`
+    : est.fase === "gracia" ? `venció el ${f(est.vence)}. Hasta el ${f(est.finGracia)} el acceso es de solo lectura (no se pueden crear encuestas ni recibir respuestas)`
+    : `venció el ${f(est.vence)} y el acceso está bloqueado. Sus datos se conservan y se reactivan al renovar`;
+  const cuerpo = `Hola,\n\nLa licencia de RedNexo de ${nombreColegio} ${estado}.\n\nPara renovarla, responda este correo y le enviamos los datos de pago. Al confirmar el pago, la licencia se renueva de inmediato.\n\nGracias,\nIskonex`.replace(/\\n/g, "\n");
+  return { asunto, cuerpo };
 }

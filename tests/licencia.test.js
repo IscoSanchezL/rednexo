@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { etiquetaPlan, aplicarPlan, estadoLicencia, renovar, sumarMeses, licenciaNueva, excedeTope, DIAS_GRACIA } from "../src/lib/licencia.js";
+import { validarPlanes, aplicarPlanes, porAvisar, recordatorio, PLANES, etiquetaPlan, aplicarPlan, estadoLicencia, renovar, sumarMeses, licenciaNueva, excedeTope, DIAS_GRACIA } from "../src/lib/licencia.js";
 
 const DIA = 86400000, T0 = Date.UTC(2026, 5, 1);
 const lic = { plan: "basico", vence: T0, graciaDias: 15, maxEstudiantes: 300 };
@@ -56,4 +56,32 @@ test("etiqueta de plan", () => {
   assert.equal(etiquetaPlan("basico"), "Básico · hasta 300 estudiantes · $1.200.000/año");
   assert.match(etiquetaPlan("piloto"), /gratis 45 días/);
   assert.match(etiquetaPlan("institucional"), /sin tope.*a convenir/);
+});
+test("planes editables: se validan y se aplican sobre los de fábrica", () => {
+  const ok = { basico: { maxEstudiantes: "350", precio: "1300000" }, estandar: { maxEstudiantes: 800, precio: 2800000 }, plus: { maxEstudiantes: 1500, precio: 4900000 }, piloto: { maxEstudiantes: 60, precio: 0 }, institucional: { maxEstudiantes: 0, precio: 0 } };
+  const v = validarPlanes(ok); assert.equal(v.ok, true); assert.equal(v.planes.basico.maxEstudiantes, 350);
+  assert.equal(validarPlanes({ ...ok, basico: { maxEstudiantes: -1, precio: 5 } }).ok, false);
+  assert.equal(validarPlanes({ ...ok, plus: { maxEstudiantes: "abc", precio: 5 } }).ok, false);
+  assert.equal(validarPlanes({ ...ok, plus: { maxEstudiantes: 1.5, precio: 5 } }).ok, false);
+  aplicarPlanes(v.planes);
+  assert.equal(PLANES.basico.precio, 1300000);
+  assert.match(etiquetaPlan("basico"), /350 estudiantes · \$1\.300\.000/);
+  assert.equal(aplicarPlan(lic, "basico").maxEstudiantes, 350);
+  aplicarPlanes({});  // vuelve a los de fábrica
+  assert.equal(PLANES.basico.precio, 1200000);
+  aplicarPlanes({ basico: { maxEstudiantes: "x", precio: 1 } });  // inválido: se ignora
+  assert.equal(PLANES.basico.maxEstudiantes, 300);
+});
+test("por avisar: solo por vencer, gracia y bloqueados, el más urgente primero", () => {
+  const mk = (id, dias) => ({ id, nombre: id, licencia: { vence: T0 + dias * DIA } });
+  const r = porAvisar([mk("ok", 90), mk("pv", 10), mk("gr", -5), mk("bl", -40), { id: "sin", nombre: "sin" }], T0);
+  assert.deepEqual(r.map((x) => x.c.id), ["bl", "gr", "pv"]);
+});
+test("recordatorio: asunto y cuerpo según la fase", () => {
+  const mk = (d) => estadoLicencia(lic, T0 + d * DIA);
+  assert.match(recordatorio("Col X", mk(-10)).asunto, /vence pronto/);
+  assert.match(recordatorio("Col X", mk(5)).asunto, /periodo de gracia/);
+  assert.match(recordatorio("Col X", mk(60)).asunto, /venció/);
+  const c = recordatorio("Col X", mk(5)).cuerpo;
+  assert.match(c, /solo lectura/); assert.match(c, /\n/); assert.doesNotMatch(c, /\\n/);
 });

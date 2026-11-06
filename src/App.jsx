@@ -10,7 +10,7 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
-import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan } from "./lib/licencia";
+import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
 import { Timestamp, collection, doc, getDoc, getDocs, setDoc, deleteDoc, onSnapshot, updateDoc, serverTimestamp, query, orderBy, collectionGroup, where, writeBatch, deleteField, addDoc, limit } from "firebase/firestore";
 
@@ -3046,7 +3046,54 @@ function PublicSurvey({ surveyId, colegioId }) {
 
 // ════════ SELECTOR DE COLEGIO ════════
 
-function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onRenew, onPlan, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
+// Panel del superadmin: vencimientos por avisar y precios de los planes.
+function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
+  const [abierto, setAbierto] = useState(null);
+  const [form, setForm] = useState({});
+  const avisar = porAvisar(colegios);
+  const abrirPlanes = () => { setForm(Object.fromEntries(Object.keys(PLANES).map((k) => [k, { maxEstudiantes: String(PLANES[k].maxEstudiantes), precio: String(PLANES[k].precio) }]))); setAbierto(abierto === "planes" ? null : "planes"); };
+  const v = validarPlanes(form);
+  const f = (ms) => new Date(ms).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" });
+  const colorFase = { por_vencer: C.amber, gracia: C.err, bloqueada: C.err };
+  const textoFase = { por_vencer: "por vencer", gracia: "en gracia", bloqueada: "bloqueado" };
+  return (
+    <div style={{ marginBottom: 18, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12, alignItems: "center" }}>
+        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>⚙ Plataforma</div>
+        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "venc" ? null : "venc")}>⏰ Vencimientos{avisar.length ? ` (${avisar.length})` : ""}</Btn>
+        <Btn sm v="ghost" onClick={abrirPlanes}>💲 Planes y precios</Btn>
+      </div>
+      {abierto === "venc" && (
+        <div style={{ padding: "0 12px 12px" }}>
+          {avisar.length === 0 && <div style={{ fontSize: 12, color: C.t2 }}>Ningún colegio está por vencer. 🎉</div>}
+          {avisar.map(({ c, est }) => (
+            <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${C.border}`, fontSize: 12 }}>
+              <div style={{ flex: 1 }}><b>{c.nombre || c.id}</b> <span style={{ color: colorFase[est.fase], fontWeight: 700 }}>· {textoFase[est.fase]}</span><div style={{ color: C.t3, fontSize: 11 }}>vence {f(est.vence)}</div></div>
+              <Btn sm v="teal" disabled={busy} onClick={() => onRecordar(c, est)} title="Abre tu correo con el mensaje listo para el administrador del colegio">✉ Recordatorio</Btn>
+            </div>
+          ))}
+          <div style={{ fontSize: 10, color: C.t3, marginTop: 6 }}>El envío automático de correos necesita el plan Blaze de Firebase; mientras tanto, el recordatorio se abre en tu correo ya redactado.</div>
+        </div>
+      )}
+      {abierto === "planes" && (
+        <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${C.border}` }}>
+          <div style={{ fontSize: 11, color: C.t2, margin: "10px 0" }}>Los cambios valen para los colegios que elijas o renueves desde ahora. Los que ya tienen plan conservan su tope y costo hasta que les vuelvas a asignar el plan. 0 estudiantes = sin tope.</div>
+          {Object.keys(PLANES).map((k) => (
+            <div key={k} style={{ display: "grid", gridTemplateColumns: "110px 1fr 1fr", gap: 8, alignItems: "end", marginBottom: 6 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, paddingBottom: 8 }}>{PLANES[k].label}</div>
+              <Inp label="Máx. estudiantes" value={form[k]?.maxEstudiantes ?? ""} onChange={(x) => setForm({ ...form, [k]: { ...form[k], maxEstudiantes: x } })} />
+              <Inp label="Precio anual (COP)" value={form[k]?.precio ?? ""} onChange={(x) => setForm({ ...form, [k]: { ...form[k], precio: x } })} />
+            </div>
+          ))}
+          {!v.ok && <div style={{ fontSize: 11, color: C.err, marginBottom: 6 }}>{v.errores[0]}</div>}
+          <Btn v="pri" sm disabled={busy || !v.ok} onClick={async () => { if (await onGuardarPlanes(v.planes)) setAbierto(null); }}>💾 Guardar planes</Btn>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, onLogout, onSuspend, onRenew, onPlan, onGuardarPlanes, onRecordar, onExport, onDelete, onAddSuper, onToggleSuper, busy, msg }) {
   const [nombre, setNombre] = useState("");
   const [ciudad, setCiudad] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
@@ -3068,6 +3115,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
           <Logo size="md" />
           <Btn sm v="ghost" onClick={onLogout}>Salir</Btn>
         </div>
+        {isSuper && <PanelSuper colegios={colegios} onGuardarPlanes={onGuardarPlanes} onRecordar={onRecordar} busy={busy} />}
         <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Elige tu colegio</div>
         <div style={{ fontSize: 12, color: C.t2, marginBottom: 16 }}>{session.email}{isSuper ? " · Superadmin" : ""}</div>
         {msg && <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: C.surface, border: `1px solid ${C.border}` }}>{msg}</div>}
@@ -3328,6 +3376,7 @@ export default function App() {
       if (!isSuper) { try { const sd = await getDoc(doc(db, "superadmins", email)); isSuper = sd.exists() && sd.data().activo === true; } catch (e) {} }
       const deny = async (msg) => { await logout(); setLoginError(msg); setSession(null); setColegios([]); setColegioId(null); };
       try {
+        try { const pl = await getDoc(doc(db, "plataforma", "planes")); aplicarPlanes(pl.exists() ? pl.data() : {}); } catch (e) {}
         let list;
         if (isSuper) {
           const snap = await getDocs(collection(db, "colegios"));
@@ -3401,6 +3450,24 @@ export default function App() {
     const nueva = aplicarPlan(c.licencia, clave);
     if (!window.confirm(`¿Cambiar «${c.nombre}» al plan ${etiquetaPlan(clave)}?`)) { await reloadColegios(); return; }
     await guardarLicencia(c, nueva, "cambiar_plan", `🔑 «${c.nombre}» ahora tiene el plan ${etiquetaPlan(clave)}.`);
+  };
+  const guardarPlanes = async (planes) => {
+    setPickerBusy(true); setPickerMsg("");
+    try {
+      await setDoc(doc(db, "plataforma", "planes"), planes);
+      aplicarPlanes(planes);
+      await logAudit("editar_planes", "plataforma", session.email);
+      setPickerMsg("✅ Planes y precios guardados.");
+      setPickerBusy(false); return true;
+    } catch (e) { setPickerMsg("❌ No se pudieron guardar los planes: " + e.message); setPickerBusy(false); return false; }
+  };
+  // Abre el correo del administrador del colegio con el recordatorio ya redactado.
+  const recordarColegio = async (c, est) => {
+    let correos = [];
+    try { correos = (await getDocs(collection(db, "colegios", c.id, "miembros"))).docs.map((d) => d.data()).filter((m) => m.role === "admin" && m.status === "active").map((m) => m.email); } catch (e) {}
+    const { asunto, cuerpo } = recordatorio(c.nombre || c.id, est);
+    window.location.href = `mailto:${correos.join(",")}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    if (!correos.length) setPickerMsg("⚠ Este colegio no tiene un administrador activo: escribe el destinatario a mano.");
   };
   const exportFromPicker = async (c) => {
     setPickerBusy(true); setPickerMsg("Exportando...");
@@ -3506,7 +3573,7 @@ export default function App() {
     </div>
   );
 
-  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
+  if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onGuardarPlanes={guardarPlanes} onRecordar={recordarColegio} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
     if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);
