@@ -3,6 +3,7 @@ import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats, rankStudents } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
+import { REPORT_TYPES, computeReport, renderReportHTML, reportFileName } from "./lib/reports";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
@@ -2381,96 +2382,45 @@ function ReportsPanel({ students, conns }) {
     return fromOk && toOk;
   });
 
-  const calcIdx = (s, stList, cnList) => {
-    const t = stList.length - 1 || 1;
-    const hechas = cnList.filter((c) => String(c.f) === String(s.id)).length;
-    const recibidas = cnList.filter((c) => String(c.t) === String(s.id)).length;
-    const posR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length;
-    const negR = cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "neg")).length;
-    const mutuas = cnList.filter((c) => String(c.f) === String(s.id) && cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(s.id))).length;
-    return { hechas, recibidas, posR, negR, mutuas, popularidad: ((posR / t) * 100).toFixed(1), rechazo: ((negR / t) * 100).toFixed(1), expansion: ((hechas / t) * 100).toFixed(1), rol: posR >= 3 ? "⭐ Líder" : negR >= 2 ? "⚠️ Rechazado" : recibidas === 0 && hechas === 0 ? "🔴 Aislado" : mutuas >= 2 ? "🔗 Integrado" : "Regular" };
-  };
-
   const dl = (content, filename, type) => {
     const blob = new Blob([content], { type });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url; a.download = filename;
     document.body.appendChild(a); a.click();
-    document.body.removeChild(a); URL.revokeObjectURL(url);
+    document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(url), 4000);
   };
 
-  const sharedCSS = `*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;background:#f5f6fa;color:#1a1a2e;font-size:13px}.page{max-width:1050px;margin:0 auto;padding:28px 20px}.header{background:#050a1a;color:#fff;padding:24px 28px;border-radius:14px;margin-bottom:22px;display:flex;justify-content:space-between;align-items:center}.header h1{font-size:26px;font-weight:800;letter-spacing:-1px}.header h1 span{color:#3b82f6}.header .meta{text-align:right;font-size:12px;color:#9498ae;line-height:2}.section{background:#fff;border-radius:10px;padding:20px;margin-bottom:18px;box-shadow:0 1px 8px rgba(0,0,0,.07)}.section h2{font-size:15px;font-weight:700;margin-bottom:3px;display:flex;align-items:center;gap:7px;color:#1a1a2e}.section .sub{font-size:11px;color:#888;margin-bottom:14px}.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}.kpi{background:#fff;border-radius:10px;padding:14px;box-shadow:0 1px 8px rgba(0,0,0,.07);text-align:center}.kpi .val{font-size:28px;font-weight:800}.kpi .lbl{font-size:10px;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-top:3px}table{border-collapse:collapse;width:100%;font-size:11px}th,td{border:1px solid #e5e7eb;padding:6px 9px;text-align:center}th{background:#f9fafb;font-weight:700;font-size:10px;color:#555;text-transform:uppercase;letter-spacing:.3px}td:first-child{text-align:left}tr:hover td{background:#fafafa}.pos{color:#2dd4bf;font-weight:700}.neg{color:#f87171;font-weight:700}.mut{color:#34d399}.badge{display:inline-block;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700}.alert{border-radius:8px;padding:10px 14px;margin-bottom:10px;font-size:12px;border-left:4px solid}.alert-ok{background:#d1fae5;border-color:#10b981;color:#065f46}.alert-warn{background:#fef3c7;border-color:#f59e0b;color:#92400e}.alert-info{background:#dbeafe;border-color:#3b82f6;color:#1e40af}.footer{text-align:center;font-size:10px;color:#aaa;margin-top:24px;padding:12px;border-top:1px solid #e5e7eb}@media print{body{background:#fff}.section{box-shadow:none;border:1px solid #e5e7eb;break-inside:avoid}.kpis{break-inside:avoid}}`;
-  const logoSVG = `<div style="width:44px;height:44px;background:#050a1a;border-radius:12px;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="32" height="32" viewBox="0 0 40 40" fill="none"><ellipse cx="20" cy="22" rx="14" ry="5" fill="#3b82f6" opacity="0.09"/><circle cx="6" cy="7" r="1.8" fill="#3b82f6" opacity="0.4"/><circle cx="30" cy="7" r="1.8" fill="#3b82f6" opacity="0.4"/><line x1="6" y1="7" x2="17" y2="7" stroke="#3b82f6" stroke-width="0.7" opacity="0.2"/><line x1="30" y1="7" x2="17" y2="7" stroke="#3b82f6" stroke-width="0.7" opacity="0.2"/><polyline points="4,20 9,20 12,13 15,27 17,7 19,27 22,20 32,20 36,20" stroke="#3b82f6" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/><circle cx="17" cy="7" r="3.5" fill="#3b82f6" opacity="0.2"/><circle cx="17" cy="7" r="2.2" fill="#3b82f6"/><circle cx="17" cy="7" r="1" fill="#050a1a"/></svg></div>`;
-
-  const buildReportBody = (stList, cnList) => {
-    const date = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
-    const grupoLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
-    const t = stList.length - 1 || 1;
-    const totalConns = cnList.length;
-    const posConns = cnList.filter((c) => hasType(c, "pos")).length;
-    const negConns = cnList.filter((c) => hasType(c, "neg")).length;
-    const mutuasTotal = Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2);
-    const lideres = stList.filter((s) => cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length >= 3);
-    const aislados = stList.filter((s) => cnList.filter((c) => String(c.f) === String(s.id) || String(c.t) === String(s.id)).length === 0);
-    const densidad = density(totalConns, stList.length);
-    const grupos = [...new Set(stList.map((s) => s.group))];
-    const indivRows = stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || "#3b82f6"; return `<tr><td><b>${s.name}</b></td><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${s.group}</span></td><td>${idx.hechas}</td><td>${idx.recibidas}</td><td class="pos">${idx.posR}</td><td class="neg">${idx.negR}</td><td class="mut">${idx.mutuas}</td><td class="pos">${idx.popularidad}%</td><td class="neg">${idx.rechazo}%</td><td style="color:#a78bfa;font-weight:700">${idx.expansion}%</td><td><b>${idx.rol}</b></td></tr>`; }).join("");
-    const grupoRows = grupos.map((g) => { const miembros = stList.filter((s) => s.group === g); const connInt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f?.group === g && t2?.group === g; }); const connExt = cnList.filter((c) => { const f = stList.find((s) => String(s.id) === String(c.f)); const t2 = stList.find((s) => String(s.id) === String(c.t)); return f && t2 && f.group !== t2.group && (f.group === g || t2.group === g); }); const dens = miembros.length > 1 ? ((connInt.length / (miembros.length * (miembros.length - 1))) * 100).toFixed(1) + "%" : "N/A"; const lider = miembros.map((s) => ({ s, posR: cnList.filter((c) => String(c.t) === String(s.id) && hasType(c, "pos")).length })).sort((a, b) => b.posR - a.posR)[0]; const gc = GC[g] || "#3b82f6"; return `<tr><td><span class="badge" style="background:${tint(gc, "20")};color:${gc}">${g}</span></td><td>${miembros.length}</td><td class="pos">${connInt.length}</td><td style="color:#a78bfa">${connExt.length}</td><td><b>${dens}</b></td><td>${lider ? `<b>${lider.s.name}</b> <span style="color:#888">(${lider.posR} elec.)</span>` : "—"}</td></tr>`; }).join("");
-    const matrizTH = `<th style="min-width:90px">De ↓ / Para →</th>` + stList.map((s) => `<th title="${s.name}" style="min-width:32px">${s.av}</th>`).join("") + `<th class="pos">Σ+</th><th class="neg">Σ−</th>`;
-    const matrizRows = stList.map((from) => { let pos = 0, neg = 0; const cells = stList.map((to) => { if (String(from.id) === String(to.id)) return `<td style="background:#f3f4f6">—</td>`; const c = cnList.find((c) => String(c.f) === String(from.id) && String(c.t) === String(to.id)); const rev = cnList.find((c) => String(c.f) === String(to.id) && String(c.t) === String(from.id)); if (hasType(c, "pos")) pos++; if (hasType(c, "neg")) neg++; const sym = c ? c.tp === "pos" ? rev ? "⬥" : "+" : c.tp === "neg" ? "−" : "○" : ""; const col = c ? c.tp === "pos" ? rev ? "#34d399" : "#2dd4bf" : c.tp === "neg" ? "#f87171" : "#fbbf24" : "#ccc"; return `<td style="color:${col};font-weight:${rev ? "800" : "500"}">${sym}</td>`; }).join(""); return `<tr><td style="font-weight:700;white-space:nowrap">${from.av} ${from.name}</td>${cells}<td class="pos">${pos}</td><td class="neg">${neg}</td></tr>`; }).join("");
-    return { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows };
-  };
-
-  const exportHTML = () => {
-    const { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows } = buildReportBody(filteredStudents, filteredConns);
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte RedNexo — ${grupoLabel}</title><style>${sharedCSS}</style></head><body><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:14px">${logoSVG}<div><div style="font-size:10px;color:#9498ae;letter-spacing:2px;margin-bottom:3px">INTELIGENCIA SOCIOMÉTRICA</div><h1>Red<span>Nexo</span></h1><div style="font-size:12px;color:#9498ae;margin-top:3px">Reporte ${reportType === "individual" ? "Individual" : "Grupal"} · ${grupoLabel}</div></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div><div>🔗 ${totalConns} conexiones</div><div>📋 ${grupoLabel}</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#3b82f6">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Elecciones positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Relaciones mutuas</div></div></div><div class="section"><h2>📋 Resumen ejecutivo</h2><div class="sub">Hallazgos clave — ${grupoLabel}</div>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ <b>Líderes (${lideres.length}):</b> ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ <b>Aislados (${aislados.length}):</b> ${aislados.map((s) => s.name).join(", ")}</div>` : ""}${negConns >= 5 ? `<div class="alert alert-warn">🔴 <b>Alto nivel de rechazos:</b> ${negConns} elecciones negativas.</div>` : ""}<div class="alert alert-info">📊 <b>Densidad:</b> ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div class="sub">Métricas por participante</div><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Análisis por grupo</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. internas</th><th style="color:#a78bfa">Conn. externas</th><th>Densidad</th><th>Líder del grupo</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div class="sub">+ positiva · ⬥ mutua · − rechazo · ○ neutral</div><div style="overflow-x:auto"><table style="font-size:10px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div></body></html>`;
-    dl(html, `reporte_rednexo_${grupoLabel.replace(/ /g, "_")}.html`, "text/html;charset=utf-8;");
-  };
-
+  // Un único generador para la vista previa, el HTML descargado y el PDF: lo que ves es lo que se exporta.
+  const report = useMemo(() => computeReport(filteredStudents, filteredConns), [filteredStudents, filteredConns]);
+  const groupLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
+  const dateStr = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
+  const build = (mode) => renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC });
+  const exportHTML = () => dl(build("html"), reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;");
   const exportPDF = () => {
-    const { date, grupoLabel, totalConns, posConns, negConns, mutuasTotal, lideres, aislados, densidad, indivRows, grupoRows, matrizTH, matrizRows } = buildReportBody(filteredStudents, filteredConns);
     const win = window.open("", "_blank", "width=900,height=700");
-    win.document.write(`<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Reporte PDF — ${grupoLabel}</title><style>${sharedCSS}@page{size:A4;margin:15mm 12mm}body{background:#fff;font-size:11px}.no-print{display:none}@media print{.no-print{display:none}}</style></head><body><div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#050a1a;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;z-index:999;font-family:'Segoe UI',Arial,sans-serif;font-size:13px"><span style="flex:1">RedNexo · Reporte ${grupoLabel}</span><button onclick="window.print()" style="background:#3b82f6;color:#fff;border:none;padding:7px 18px;border-radius:7px;font-weight:700;cursor:pointer">🖨 Imprimir / PDF</button><button onclick="window.close()" style="background:transparent;color:#9498ae;border:1px solid #555;padding:7px 14px;border-radius:7px;cursor:pointer">Cerrar</button></div><div style="height:44px" class="no-print"></div><div class="page"><div class="header"><div style="display:flex;align-items:center;gap:12px">${logoSVG}<div><h1>Red<span>Nexo</span></h1></div></div><div class="meta"><div>📅 ${date}</div><div>👥 ${filteredStudents.length} participantes</div></div></div><div class="kpis"><div class="kpi"><div class="val" style="color:#3b82f6">${filteredStudents.length}</div><div class="lbl">Participantes</div></div><div class="kpi"><div class="val" style="color:#2dd4bf">${posConns}</div><div class="lbl">Positivas</div></div><div class="kpi"><div class="val" style="color:#f87171">${negConns}</div><div class="lbl">Rechazos</div></div><div class="kpi"><div class="val" style="color:#34d399">${mutuasTotal}</div><div class="lbl">Mutuas</div></div></div><div class="section"><h2>📋 Resumen</h2>${lideres.length > 0 ? `<div class="alert alert-ok">⭐ Líderes: ${lideres.map((s) => s.name).join(", ")}</div>` : ""}${aislados.length > 0 ? `<div class="alert alert-warn">⚠️ Aislados: ${aislados.map((s) => s.name).join(", ")}</div>` : ""}<div class="alert alert-info">📊 Densidad: ${densidad}%</div></div>${reportType === "individual" || reportType === "ambos" ? `<div class="section"><h2>👤 Índices individuales</h2><div style="overflow-x:auto"><table><thead><tr><th>Nombre</th><th>Grupo</th><th>Elige</th><th>Recibe</th><th class="pos">Pos.</th><th class="neg">Neg.</th><th class="mut">Mutuas</th><th class="pos">Popular.</th><th class="neg">Rechazo</th><th style="color:#a78bfa">Expansión</th><th>Rol</th></tr></thead><tbody>${indivRows}</tbody></table></div></div>` : ""}${reportType === "grupal" || reportType === "ambos" ? `<div class="section"><h2>👥 Grupos</h2><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. int.</th><th style="color:#a78bfa">Conn. ext.</th><th>Densidad</th><th>Líder</th></tr></thead><tbody>${grupoRows}</tbody></table></div>` : ""}<div class="section"><h2>⊞ Matriz sociométrica</h2><div style="overflow-x:auto"><table style="font-size:9px"><thead><tr>${matrizTH}</tr></thead><tbody>${matrizRows}</tbody></table></div></div><div class="footer">RedNexo — ${date} · ${grupoLabel}</div></div><script>setTimeout(()=>window.print(),600)</script></body></html>`);
+    if (!win) { alert("El navegador bloqueó la ventana del PDF. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."); return; }
+    win.document.write(build("pdf"));
     win.document.close();
   };
-
-  const renderPreview = () => {
-    const stList = filteredStudents;
-    const cnList = filteredConns;
-    return (
-      <Card style={{ marginTop: 16 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: C.sky }}>
-            👁 Vista Previa — {reportType === "individual" ? "Índices Individuales" : reportType === "grupal" ? "Análisis Grupal" : "Reporte Completo"}
-            <span style={{ fontSize: 10, color: C.t3, fontWeight: 400, marginLeft: 8 }}>{selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup} · {stList.length} participantes</span>
-          </div>
-          <Btn sm v="ghost" onClick={() => setActive(null)}>✕ Cerrar</Btn>
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8, marginBottom: 16 }}>
-          {[{ l: "Participantes", v: stList.length, c: C.rx }, { l: "Elec. positivas", v: cnList.filter((c) => hasType(c, "pos")).length, c: C.teal }, { l: "Rechazos", v: cnList.filter((c) => hasType(c, "neg")).length, c: C.err }, { l: "Mutuas", v: Math.round(cnList.filter((c) => cnList.some((r) => String(r.f) === String(c.t) && String(r.t) === String(c.f))).length / 2), c: C.ok }].map((k) => (
-            <div key={k.l} style={{ background: C.bgSub, borderRadius: 8, padding: "10px 12px", textAlign: "center" }}>
-              <div style={{ fontSize: 22, fontWeight: 800, color: k.c }}>{k.v}</div>
-              <div style={{ fontSize: 9, color: C.t3, textTransform: "uppercase", letterSpacing: ".4px", marginTop: 2 }}>{k.l}</div>
-            </div>
-          ))}
-        </div>
-        {(reportType === "individual" || reportType === "ambos") && (
-          <>
-            <div style={{ fontSize: 11, fontWeight: 700, color: C.t2, marginBottom: 8 }}>ÍNDICES INDIVIDUALES</div>
-            <div style={{ overflowX: "auto", marginBottom: 16 }}>
-              <table style={{ borderCollapse: "collapse", fontSize: 11, width: "100%" }}>
-                <thead><tr>{["Nombre","Grupo","Elige","Recibe","Pos.","Neg.","Mutuas","Popular.","Rechazo","Expansión","Rol"].map((h) => (<th key={h} style={{ padding: "5px 8px", background: C.surface, border: `1px solid ${C.border}`, fontSize: 9, color: C.t2, fontWeight: 700, textAlign: "left", textTransform: "uppercase" }}>{h}</th>))}</tr></thead>
-                <tbody>
-                  {stList.map((s) => { const idx = calcIdx(s, stList, cnList); const gc = GC[s.group] || C.t2; return (<tr key={s.id}><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, fontWeight: 600, color: C.text }}>{s.name}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}` }}><span style={{ background: tint(gc, "18"), color: gc, padding: "2px 7px", borderRadius: 6, fontSize: 9, fontWeight: 700 }}>{s.group}</span></td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.hechas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center" }}>{idx.recibidas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.posR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err, fontWeight: 700 }}>{idx.negR}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.ok }}>{idx.mutuas}</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.teal, fontWeight: 700 }}>{idx.popularidad}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.err }}>{idx.rechazo}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", color: C.violet }}>{idx.expansion}%</td><td style={{ padding: "5px 8px", border: `1px solid ${C.border}`, textAlign: "center", fontSize: 10 }}>{idx.rol}</td></tr>); })}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-      </Card>
-    );
+  const TYPE_HELP = {
+    individual: "Índices de cada estudiante y una ficha por persona: quién la eligió, quién la rechazó y a quién eligió. Incluye nombres.",
+    grupal: "Solo cifras del grupo: densidad, roles en conteos y tabla de grupos. Sin nombres de estudiantes ni quién eligió a quién.",
+    ambos: "Todo: resumen, índices, grupos, matriz sociométrica con nombres y fichas por estudiante.",
   };
+
+  const renderPreview = () => (
+    <Card style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+        <div style={{ fontSize: 13, fontWeight: 700, color: C.sky }}>
+          👁 Vista Previa — Reporte {REPORT_TYPES[reportType]}
+          <span style={{ fontSize: 10, color: C.t2, fontWeight: 400, marginLeft: 8 }}>{groupLabel} · {filteredStudents.length} participantes</span>
+        </div>
+        <Btn sm v="ghost" onClick={() => setActive(null)}>✕ Cerrar</Btn>
+      </div>
+      <iframe title="Vista previa del reporte" sandbox="" srcDoc={build("preview")} style={{ width: "100%", height: 700, border: `1px solid ${C.border}`, borderRadius: 10, background: "#f5f6fa" }} />
+    </Card>
+  );
 
   return (
     <div>
@@ -2489,6 +2439,7 @@ function ReportsPanel({ students, conns }) {
             <div style={{ display: "flex", gap: 6 }}>
               {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
             </div>
+            <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginTop: 7 }}>{TYPE_HELP[reportType]}</div>
           </div>
         </div>
         <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}`, fontSize: 11, color: C.t2 }}>
