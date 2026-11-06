@@ -208,3 +208,37 @@ test("nodo: solo cuenta las conexiones que se le pasan (los grupos ocultos no in
   assert.equal(nodeStats("1", todas, 2).aceptacion, "2.00");                                   // mezcla mal: 2 recibidas ÷ 1
   assert.equal(nodeStats("1", todas.filter((c) => c.f !== "9"), 2).aceptacion, "1.00");        // solo lo visible
 });
+
+import { rankStudents } from "../src/lib/sociometry.js";
+test("ranking: ordena de verdad por elecciones positivas recibidas y no por el orden de la lista", () => {
+  const st = [{ id: "1", name: "Ana" }, { id: "2", name: "Beto" }, { id: "3", name: "Cami" }, { id: "4", name: "Dani" }, { id: "5", name: "Eli" }];
+  const sv = [{ id: "s", questions: [{ id: "p", tp: "pos" }, { id: "g", tp: "neg" }] }];
+  const resp = [
+    { surveyId: "s", respondentId: "1", answers: { p: ["5"], g: ["2"] } },
+    { surveyId: "s", respondentId: "2", answers: { p: ["5", "4"] } },
+    { surveyId: "s", respondentId: "3", answers: { p: ["5"], g: ["2"] } },
+    { surveyId: "s", respondentId: "4", answers: { p: ["5", "3"], g: ["2"] } },
+  ];
+  const conns = buildConnections(resp, sv);
+  const acept = rankStudents(st, conns, "pos");
+  assert.deepEqual(acept.rows.map((r) => [r.student.name, r.count, r.rank, r.ratio]), [["Eli", 4, 1, "1.00"], ["Cami", 1, 2, "0.25"], ["Dani", 1, 2, "0.25"]]);   // Eli está al FINAL de la lista y sale primero
+  assert.equal(acept.total, 3);
+  const rech = rankStudents(st, conns, "neg");
+  assert.deepEqual(rech.rows.map((r) => [r.student.name, r.count, r.ratio]), [["Beto", 3, "0.75"]]);
+});
+test("ranking: empates conservan el puesto, sin ceros, con límite y con total; solo cuenta lo visible", () => {
+  const st = ["A", "B", "C", "D", "E", "F"].map((n, i) => ({ id: String(i + 1), name: n }));
+  const conns = [["1", "6"], ["2", "6"], ["3", "5"], ["4", "5"], ["6", "1"]].map(([f, t]) => ({ f, t, s: 1, tp: "pos" }));
+  const r = rankStudents(st, conns, "pos", 2);
+  assert.deepEqual(r.rows.map((x) => [x.student.name, x.count, x.rank]), [["E", 2, 1], ["F", 2, 1]]);   // empate: ambos puesto 1, por nombre
+  assert.equal(r.total, 3);                                                                              // A también tiene 1, fuera del límite
+  assert.deepEqual(rankStudents(st, conns, "neg").rows, []);                                             // nadie rechazado: no se inventa un ranking
+  const visibles = rankStudents(st.slice(0, 5), conns, "pos");                                          // F oculto: sus elecciones y las que recibe no cuentan
+  assert.deepEqual(visibles.rows.map((x) => [x.student.name, x.count]), [["E", 2]]);
+  assert.deepEqual(rankStudents([], [], "pos"), { rows: [], total: 0 });
+  assert.deepEqual(rankStudents([{ id: "1", name: "Solo" }], [{ f: "1", t: "1", s: 1, tp: "pos" }], "pos").rows[0].ratio, "0.00");   // un solo participante: sin división por cero
+});
+test("ranking: conexiones antiguas sin `types` y ids numéricos también cuentan", () => {
+  const st = [{ id: 1, name: "A" }, { id: 2, name: "B" }];
+  assert.deepEqual(rankStudents(st, [{ f: "1", t: 2, s: 1, tp: "neg" }], "neg").rows.map((r) => [r.student.name, r.count]), [["B", 1]]);
+});

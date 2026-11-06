@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { auth, loginWithGoogle, logout, db } from "./firebase";
 import { onAuthStateChanged } from "firebase/auth";
-import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats } from "./lib/sociometry";
+import { initials, parseBulkStudents, density, buildConnections, buildRoster, surveyProgress, groupExists, groupIdFor, allGroupNames, missingGroups, searchGroups, highlightRange, hasType, filterConns, nodeStats, rankStudents } from "./lib/sociometry";
 import { tint, mixOn, ink } from "./lib/color";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -3086,6 +3086,9 @@ export default function App() {
   const [tab, setTab] = useState("dashboard");
   const [filter, setFilter] = useState("all");
   const [selNode, setSelNode] = useState(null);
+  const [rankMode, setRankMode] = useState("pos");        // ranking del dashboard: "pos" = más aceptados, "neg" = más rechazados
+  const [rankAll, setRankAll] = useState(false);
+  const [expandedNode, setExpandedNode] = useState(null); // nodo cuyo detalle de conexiones está desplegado completo
   const [students, setStudents] = useState(IS_DEMO ? initStudents : []);
   const [groups, setGroups] = useState(
     IS_DEMO ? DEFAULT_GROUPS.map((n, i) => ({ id: "g" + (i + 1), name: n, color: GROUP_COLORS[i] })) : []
@@ -3552,8 +3555,8 @@ export default function App() {
                           </div>
                         ))}
                       </div>
-                      <div style={{ fontSize: 10, fontWeight: 700, color: C.t3, marginBottom: 5 }}>CONEXIONES</div>
-                      {pC.slice(0, 5).map((c, i) => {
+                      <div style={{ fontSize: 10, fontWeight: 700, color: C.t2, marginBottom: 5 }}>CONEXIONES ({pC.length})</div>
+                      {(expandedNode === selNode ? pC : pC.slice(0, 5)).map((c, i) => {
                         const o = students.find((p) => p.id === (c.f === selNode ? c.t : c.f));
                         return (
                           <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 7px", borderRadius: 6, background: C.bgSub, fontSize: 11, marginBottom: 2 }}>
@@ -3563,6 +3566,11 @@ export default function App() {
                           </div>
                         );
                       })}
+                      {pC.length > 5 && (
+                        <button onClick={() => setExpandedNode(expandedNode === selNode ? null : selNode)} style={{ width: "100%", marginTop: 4, padding: "5px 0", borderRadius: 6, border: `1px dashed ${C.border}`, background: "transparent", color: C.t2, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          {expandedNode === selNode ? "Mostrar menos" : `Ver las ${pC.length - 5} restantes`}
+                        </button>
+                      )}
                     </>
                   ) : (
                     <div style={{ textAlign: "center", padding: "28px 14px" }}>
@@ -3572,17 +3580,38 @@ export default function App() {
                   )}
                 </Card>
                 <Card>
-                  <div style={{ fontSize: 11, fontWeight: 700, marginBottom: 8, color: C.rx }}>🏆 Top Conexiones</div>
-                  {students.slice(0, 4).map((p, i) => {
-                    const cnt = conns.filter((c) => c.f === p.id || c.t === p.id).length;
-                    return (
-                      <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 7, padding: "4px 0", borderBottom: i < 3 ? `1px solid ${C.border}` : "none" }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: i === 0 ? C.amber : C.t3, fontFamily: "monospace", width: 16 }}>#{i + 1}</span>
-                        <span style={{ fontSize: 11, flex: 1 }}>{p.name}</span>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.rx }}>{cnt}</span>
+                  {(() => {
+                    const neg = rankMode === "neg";
+                    const { rows, total } = rankStudents(visStudents, visConns, rankMode, rankAll ? 999 : 4);
+                    const col = neg ? C.err : C.teal;
+                    return (<>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 6, flexWrap: "wrap" }}>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.rx }}>🏆 Ranking</div>
+                        <div style={{ display: "flex", gap: 2 }}>
+                          {[{ id: "pos", l: "Más aceptados", c: C.teal }, { id: "neg", l: "Más rechazados", c: C.err }].map((o) => (
+                            <button key={o.id} onClick={() => { setRankMode(o.id); setRankAll(false); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${rankMode === o.id ? tint(o.c, "66") : C.border}`, background: rankMode === o.id ? tint(o.c, "1f") : "transparent", color: rankMode === o.id ? ink(o.c) : C.t2 }}>{o.l}</button>
+                          ))}
+                        </div>
                       </div>
-                    );
-                  })}
+                      {rows.length === 0 && (
+                        <div style={{ fontSize: 11, color: C.t2, padding: "8px 2px", lineHeight: 1.5 }}>{neg ? "Nadie ha recibido rechazos en los grupos visibles." : "Todavía nadie ha sido elegido positivamente en los grupos visibles."}</div>
+                      )}
+                      {rows.map((r, i) => (
+                        <div key={r.student.id} onClick={() => setSelNode(r.student.id)} title={neg ? `${r.count} compañero(s) lo rechazaron · ${r.ratio} = ${r.count} ÷ (participantes − 1)` : `${r.count} compañero(s) lo eligieron positivamente · ${r.ratio} = ${r.count} ÷ (participantes − 1)`} style={{ display: "flex", alignItems: "center", gap: 7, padding: "5px 0", cursor: "pointer", borderBottom: i < rows.length - 1 ? `1px solid ${C.border}` : "none" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: r.rank === 1 ? (neg ? ink(C.err) : C.amber) : C.t2, fontFamily: "monospace", width: 18 }}>#{r.rank}</span>
+                          <span style={{ fontSize: 11, flex: 1, fontWeight: selNode === r.student.id ? 700 : 500 }}>{r.student.name}</span>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: ink(col) }}>{r.count}</span>
+                          <span style={{ fontSize: 9, color: C.t2, width: 30, textAlign: "right" }}>{r.ratio}</span>
+                        </div>
+                      ))}
+                      {total > 4 && (
+                        <button onClick={() => setRankAll(!rankAll)} style={{ width: "100%", marginTop: 6, padding: "4px 0", borderRadius: 6, border: `1px dashed ${C.border}`, background: "transparent", color: C.t2, fontSize: 10, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                          {rankAll ? "Mostrar menos" : `Ver los ${total} del ranking`}
+                        </button>
+                      )}
+                      {rows.length > 0 && <div style={{ fontSize: 9, color: C.t2, marginTop: 6 }}>{neg ? "Rechazos recibidos" : "Elecciones positivas recibidas"} · proporción = cantidad ÷ (participantes − 1)</div>}
+                    </>);
+                  })()}
                 </Card>
               </div>
             </div>
