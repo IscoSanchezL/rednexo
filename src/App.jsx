@@ -9,6 +9,7 @@ import { buildXlsx, XLSX_MIME } from "./lib/xlsx";
 import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
+import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
 import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
 import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { sumarMeses, aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
@@ -783,6 +784,9 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
             >
               + Solicitar acceso
             </button>
+            <div style={{ textAlign: "center", marginTop: 14 }}>
+              <button onClick={() => abrirSoporte({ type: "acceso" })} style={{ background: "none", border: "none", color: "#7a7e99", fontSize: 12, cursor: "pointer", fontFamily: "inherit", textDecoration: "underline" }}>¿No puedes entrar? Contacta a soporte</button>
+            </div>
           </div>
 
           {/* Footer */}
@@ -3094,6 +3098,19 @@ function PublicSurvey({ surveyId, colegioId }) {
 
 // ════════ SELECTOR DE COLEGIO ════════
 
+// Botón «Soporte»: abre el formulario de Iskonex Soporte (se carga la primera vez que se necesita).
+const SOPORTE_BASE = urlSoporte({ override: import.meta.env.VITE_SOPORTE_URL, emuladores: import.meta.env.VITE_USE_EMULATORS === "true" });
+const VERSION_APP = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "";
+async function abrirSoporte(prefill) {
+  if (esEncuestaPublica(window.location.search)) return;   // nunca en la encuesta de los estudiantes
+  const w = await cargarWidget({ base: SOPORTE_BASE });
+  if (w) w.open(prefill);
+  else alert("No se pudo abrir el soporte. Revisa tu conexión e inténtalo de nuevo.");
+}
+const BtnSoporte = ({ prefill, label = "❓ Soporte" }) => (
+  <Btn sm v="ghost" onClick={() => abrirSoporte(prefill)} title="Contactar a soporte (no escribas datos de estudiantes)">{label}</Btn>
+);
+
 // Abre una ventana con el HTML y lanza la impresión (el navegador permite «Guardar como PDF»).
 function imprimirHTML(html) {
   const w = window.open("", "_blank");
@@ -3377,7 +3394,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
       <div style={{ width: "100%", maxWidth: 620, margin: "auto 0" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
           <Logo size="md" />
-          <Btn sm v="ghost" onClick={onLogout}>Salir</Btn>
+          <div style={{ display: "flex", gap: 8 }}><BtnSoporte /><Btn sm v="ghost" onClick={onLogout}>Salir</Btn></div>
         </div>
         {isSuper && <PanelSuper colegios={colegios} onGuardarPlanes={onGuardarPlanes} onRecordar={onRecordar} busy={busy} />}
         <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 4 }}>Elige tu colegio</div>
@@ -3818,6 +3835,20 @@ export default function App() {
     try { await loginWithGoogle(); } catch (e) { if (e.code !== "auth/popup-closed-by-user" && e.code !== "auth/cancelled-popup-request") { setLoginError("Error al iniciar sesión con Google."); } setLoginLoading(false); }
   };
 
+  // Soporte: se configura cuando cambia la sesión (verificada con el token de Firebase). Nunca en la encuesta pública.
+  useEffect(() => {
+    if (publicSurvey || authLoading || !SOPORTE_BASE) return;
+    let vivo = true;
+    cargarWidget({ base: SOPORTE_BASE }).then((w) => {
+      if (!vivo || !w) return;
+      w.configure(configuracionSoporte({
+        sesion: session, rol: user?.role || (session?.isSuper ? "superadmin" : ""), colegio: school.nombre || current?.nombre || "",
+        getIdToken: () => auth.currentUser?.getIdToken(), version: VERSION_APP,
+      }));
+    });
+    return () => { vivo = false; };
+  }, [publicSurvey, authLoading, session, user, school.nombre, current?.nombre]);  // eslint-disable-line
+
   if (authLoading) return (
     <div style={{ minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16 }}>
       <Logo size="lg" />
@@ -3840,7 +3871,7 @@ export default function App() {
         <div style={{ fontSize: 40, marginBottom: 10 }}>{licBloqueada ? "🔑" : "⏸"}</div>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{licBloqueada ? "Licencia vencida" : "Acceso suspendido"}</div>
         <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 18 }}>{licBloqueada ? mensajeLicencia(estLic) : "El acceso de este colegio está suspendido o ya no tienes permisos. Tus datos se conservan. Comunícate con el administrador de la plataforma."}</div>
-        <Btn v="sec" onClick={doLogout}>Salir</Btn>
+        <div style={{ display: "flex", gap: 8, justifyContent: "center" }}><BtnSoporte /><Btn v="sec" onClick={doLogout}>Salir</Btn></div>
       </div>
     </div>
   );
@@ -3903,6 +3934,8 @@ export default function App() {
           ))}
         </div>
         <div style={{ flex: 1 }} />
+
+        <BtnSoporte />
 
         {/* ── TOGGLE MODO CLARO/OSCURO ── */}
         <button
