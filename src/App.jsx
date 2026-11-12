@@ -1043,10 +1043,12 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
       const cr = Math.min(cx, cy) * (groups.length === 1 ? 0 : 0.42);
       groupCenters[g] = { x: cx + Math.cos(a) * cr, y: cy + Math.sin(a) * cr };
     });
+    const tamGrupo = {}, vistos = {};   // tamaño de cada grupo y puesto de cada estudiante (sin recorrer la lista por cada uno)
+    students.forEach((s) => { tamGrupo[s.group] = (tamGrupo[s.group] || 0) + 1; });
     nodesRef.current = students.map((p, i) => {
       const gc = groupCenters[p.group] || { x: cx, y: cy };
-      const groupMembers = students.filter(s => s.group === p.group);
-      const idxInGroup = groupMembers.findIndex(s => s.id === p.id);
+      const groupMembers = { length: tamGrupo[p.group] };
+      const idxInGroup = vistos[p.group] = (vistos[p.group] ?? -1) + 1;
       const spread = Math.min(cx, cy) * 0.52;
       const a = (idxInGroup / Math.max(groupMembers.length, 1)) * Math.PI * 2;
       const tx = gc.x + Math.cos(a) * spread * 0.75;
@@ -1106,7 +1108,9 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
       const dragging = dragRef.current;
       const fC = filterConns(conns, filter);
 
-      // ── Física: spring hacia target + repulsión entre nodos
+      // ── Física: spring hacia target + repulsión entre nodos (solo con los vecinos cercanos, en una cuadrícula: antes era cada nodo contra todos)
+      const grid = new Map();
+      N.forEach((o) => { const k = Math.floor(o.x / 75) + "," + Math.floor(o.y / 75); const l = grid.get(k); if (l) l.push(o); else grid.set(k, [o]); });
       N.forEach((n) => {
         if (dragging && n.id === dragging.id) return;
         // Solo aplicar spring si NO está pinned (fue arrastrado por el usuario)
@@ -1122,16 +1126,21 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
           return;
         }
         // Repulsión entre nodos
-        N.forEach((o) => {
-          if (o.id === n.id) return;
-          const dx = n.x - o.x, dy = n.y - o.y;
-          const dist = Math.hypot(dx, dy) || 1;
-          if (dist < 75) {
-            const f = (75 - dist) / 75 * 0.55;
-            n.vx += (dx / dist) * f;
-            n.vy += (dy / dist) * f;
+        const gx0 = Math.floor(n.x / 75), gy0 = Math.floor(n.y / 75);
+        for (let gx = gx0 - 1; gx <= gx0 + 1; gx++) for (let gy = gy0 - 1; gy <= gy0 + 1; gy++) {
+          const celda = grid.get(gx + "," + gy);
+          if (!celda) continue;
+          for (const o of celda) {
+            if (o.id === n.id) continue;
+            const dx = n.x - o.x, dy = n.y - o.y;
+            const dist = Math.hypot(dx, dy) || 1;
+            if (dist < 75) {
+              const f = (75 - dist) / 75 * 0.55;
+              n.vx += (dx / dist) * f;
+              n.vy += (dy / dist) * f;
+            }
           }
-        });
+        }
         n.vx *= 0.88;
         n.vy *= 0.88;
         n.x += n.vx;
@@ -3140,6 +3149,8 @@ const BtnSoporte = ({ prefill, label = "❓ Soporte" }) => (
   <Btn sm v="ghost" onClick={() => abrirSoporte(prefill)} title="Contactar a soporte (no escribas datos de estudiantes)">{label}</Btn>
 );
 
+const DASH_AUTO = 250;   // más estudiantes que esto: el Dashboard empieza por un solo grupo
+
 // Abre una ventana con el HTML y lanza la impresión (el navegador permite «Guardar como PDF»).
 function imprimirHTML(html) {
   const w = window.open("", "_blank");
@@ -3569,12 +3580,16 @@ export default function App() {
   const dynGC = Object.fromEntries(groups.map((g) => [g.name, g.color]));
   GROUPS = dynGROUPS;
   GC = dynGC;
-  const [visibleGroups, setVisibleGroups] = useState(IS_DEMO ? DEFAULT_GROUPS.slice() : []);
-  const toggleGroup = (g) => setVisibleGroups((p) => p.includes(g) ? (p.length > 1 ? p.filter((x) => x !== g) : p) : [...p, g]);
+  // Con muchos estudiantes el mapa empieza mostrando un solo grupo (dibujar cientos de nodos a la vez lo vuelve lento); se agregan con los botones.
+  const [visSel, setVisSel] = useState(null);   // null = automático
+  const nombresGrupos = groups.map((g) => g.name);
+  const dashAuto = visSel === null && students.length > DASH_AUTO && nombresGrupos.length > 1;
+  const visibleGroups = visSel ?? (dashAuto ? nombresGrupos.slice(0, 1) : nombresGrupos);
+  const toggleGroup = (g) => setVisSel(visibleGroups.includes(g) ? (visibleGroups.length > 1 ? visibleGroups.filter((x) => x !== g) : visibleGroups) : [...visibleGroups, g]);
 
   useEffect(() => {
     if (!user) return;
-    const unsub = onSnapshot(ccol("groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisibleGroups(data.map((g) => g.name)); } if (!snap.metadata.fromCache || data.length > 0) setGroupsLoaded(true); }, (err) => console.log("Grupos offline"));
+    const unsub = onSnapshot(ccol("groups"), (snap) => { const data = snap.docs.map((d) => d.data()); if (data.length > 0 || !IS_DEMO) { setGroups(data); setVisSel(null); } if (!snap.metadata.fromCache || data.length > 0) setGroupsLoaded(true); }, (err) => console.log("Grupos offline"));
     return () => unsub();
   }, [user]);
 
@@ -4030,6 +4045,7 @@ export default function App() {
           const ns = nodeStats(selNode, visConns, n);
 
           return (<>
+            {dashAuto && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, background: tint(C.sky, "14"), border: `1px solid ${tint(C.sky, "35")}`, color: C.t2 }}>ℹ Con {students.length} estudiantes el mapa empieza mostrando solo «{visibleGroups[0]}». Activa más grupos con los botones del mapa.</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 10, marginBottom: 14 }}>
               {[
                 { i: "👥", v: visStudents.length, l: "Participantes", c: C.rx },

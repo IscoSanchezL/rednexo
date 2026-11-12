@@ -91,3 +91,30 @@ test("nombre de archivo sin tildes ni caracteres peligrosos", () => {
   assert.equal(reportFileName("5° A / Ñandú", "individual", "html"), "reporte_rednexo_Individual_5_A_Nandu.html");
   assert.equal(reportFileName("***", "ambos", "pdf"), "reporte_rednexo_Completo_grupo.pdf");
 });
+
+// ── Equivalencia con el cálculo directo (el índice nuevo no debe cambiar ningún resultado) y límites de tamaño ──
+test("studentStats con índice = cálculo directo sobre un grafo al azar", async () => {
+  const { studentStats, computeReport, MATRIZ_MAX_REPORTE, renderReportHTML } = await import("../src/lib/reports.js");
+  const { hasType } = await import("../src/lib/sociometry.js");
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const st = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, name: "E" + i, group: i < 20 ? "A" : "B" }));
+  const tipos = ["pos", "neg", "neu"]; const cn = [];
+  for (const a of st) for (const b of st) if (a.id !== b.id && rnd() < 0.12) { const t = [tipos[Math.floor(rnd() * 3)]]; if (rnd() < 0.2) t.push("neg"); cn.push({ f: String(a.id), t: b.id, tp: t[0], types: [...new Set(t)], s: 1 }); }
+  for (const s of st) {
+    const out = cn.filter((c) => String(c.f) === String(s.id)), inn = cn.filter((c) => String(c.t) === String(s.id));
+    const back = (c, ty) => cn.some((r) => String(r.f) === String(c.t) && String(r.t) === String(s.id) && hasType(r, ty));
+    const r = studentStats(s, st, cn);
+    assert.equal(r.hechas, out.length); assert.equal(r.recibidas, inn.length);
+    assert.equal(r.posR, inn.filter((c) => hasType(c, "pos")).length); assert.equal(r.negR, inn.filter((c) => hasType(c, "neg")).length);
+    assert.equal(r.mutuasPos, out.filter((c) => hasType(c, "pos") && back(c, "pos")).length);
+    assert.equal(r.rechazosMutuos, out.filter((c) => hasType(c, "neg") && back(c, "neg")).length);
+  }
+  const rep = computeReport(st, cn);
+  assert.equal(rep.fichas.length, 40);
+  assert.ok(rep.fichas.every((f) => Array.isArray(f.mutuas)));
+  // Matriz del reporte completo: se incluye hasta el límite y se reemplaza por un aviso por encima
+  assert.match(renderReportHTML(rep, { type: "ambos" }), /Matriz sociométrica/);
+  const grande = Array.from({ length: MATRIZ_MAX_REPORTE + 1 }, (_, i) => ({ id: i + 1, name: "G" + i, group: "A" }));
+  const h = renderReportHTML(computeReport(grande, []), { type: "ambos" });
+  assert.match(h, /demasiado grande para incluirla/); assert.doesNotMatch(h, /Fila = quien responde/);
+});

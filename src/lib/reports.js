@@ -18,6 +18,9 @@ const safeColor = (c, d = "#3b82f6") => (/^#[0-9a-fA-F]{6}$/.test(String(c)) ? c
 const same = (a, b) => String(a) === String(b);
 const pct = (k, t) => (t > 0 ? ((k / t) * 100).toFixed(1) : "0.0");
 
+/** Más estudiantes que esto y la matriz del reporte «Completo» no se incluye (sería un archivo gigante e ilegible). */
+export const MATRIZ_MAX_REPORTE = 120;
+
 /** Umbral de «muchos»: la mitad del grupo (n − 1 compañeros), con un mínimo de 2. */
 export const roleThreshold = (n) => Math.max(2, Math.ceil((n - 1) / 2));
 
@@ -28,13 +31,27 @@ export const roleThreshold = (n) => Math.max(2, Math.ceil((n - 1) / 2));
  *  rechazado: muchos rechazos, pocas elecciones · aislado: nadie lo eligió positivamente ·
  *  integrado: ≥ 2 mutuas positivas · regular: el resto.
  */
-export function studentStats(s, stList, cnList) {
+/** Índices para no recorrer todas las conexiones por cada estudiante (con 1.500 estudiantes pasaba de 7 s a milisegundos). */
+function indexar(stList, cnList) {
+  const byId = new Map(stList.map((s) => [String(s.id), s]));
+  const out = new Map(), inn = new Map(), pares = { pos: new Set(), neg: new Set(), neu: new Set() };
+  for (const c of cnList) {
+    const f = String(c.f), t = String(c.t);
+    if (!out.has(f)) out.set(f, []); out.get(f).push(c);
+    if (!inn.has(t)) inn.set(t, []); inn.get(t).push(c);
+    for (const ty of ["pos", "neg", "neu"]) if (hasType(c, ty)) pares[ty].add(f + ">" + t);
+  }
+  return { byId, out, inn, pares };
+}
+
+export function studentStats(s, stList, cnList, ix = indexar(stList, cnList)) {
   const t = stList.length - 1, thr = roleThreshold(stList.length);
-  const out = cnList.filter((c) => same(c.f, s.id)), inn = cnList.filter((c) => same(c.t, s.id));
+  const sid = String(s.id);
+  const out = ix.out.get(sid) || [], inn = ix.inn.get(sid) || [];
   const posR = inn.filter((c) => hasType(c, "pos")).length;
   const negR = inn.filter((c) => hasType(c, "neg")).length;
   const neuR = inn.filter((c) => hasType(c, "neu")).length;
-  const back = (c, ty) => cnList.some((r) => same(r.f, c.t) && same(r.t, s.id) && hasType(r, ty));
+  const back = (c, ty) => ix.pares[ty].has(String(c.t) + ">" + sid);
   const mutuasPos = out.filter((c) => hasType(c, "pos") && back(c, "pos")).length;
   const rechazosMutuos = out.filter((c) => hasType(c, "neg") && back(c, "neg")).length;
   let rol = "regular";
@@ -49,12 +66,13 @@ export function studentStats(s, stList, cnList) {
 /** Todo lo que necesitan los reportes, ya calculado. */
 export function computeReport(stList, cnList) {
   const n = stList.length;
-  const rows = stList.map((s) => ({ student: s, ...studentStats(s, stList, cnList) }));
-  const nameOf = (id) => { const s = stList.find((x) => same(x.id, id)); return s ? s.name : "?"; };
+  const ix = indexar(stList, cnList);
+  const rows = stList.map((s) => ({ student: s, ...studentStats(s, stList, cnList, ix) }));
+  const nameOf = (id) => { const s = ix.byId.get(String(id)); return s ? s.name : "?"; };
   const byRole = Object.fromEntries(Object.keys(ROLE_LABELS).map((k) => [k, rows.filter((r) => r.rol === k)]));
   const groups = [...new Set(stList.map((s) => s.group))].map((g) => {
     const miembros = rows.filter((r) => r.student.group === g);
-    const inG = (id) => { const s = stList.find((x) => same(x.id, id)); return s ? s.group : null; };
+    const inG = (id) => { const s = ix.byId.get(String(id)); return s ? s.group : null; };
     const connInt = cnList.filter((c) => inG(c.f) === g && inG(c.t) === g).length;
     const connExt = cnList.filter((c) => inG(c.f) !== null && inG(c.t) !== null && inG(c.f) !== inG(c.t) && (inG(c.f) === g || inG(c.t) === g)).length;
     return { group: g, miembros: miembros.length, connInt, connExt, densidad: miembros.length > 1 ? density(connInt, miembros.length) + "%" : "N/A",
@@ -63,9 +81,9 @@ export function computeReport(stList, cnList) {
   });
   const fichas = rows.map((r) => {
     const id = r.student.id;
-    const inn = cnList.filter((c) => same(c.t, id)), out = cnList.filter((c) => same(c.f, id));
+    const inn = ix.inn.get(String(id)) || [], out = ix.out.get(String(id)) || [];
     const list = (arr, ty, key) => arr.filter((c) => hasType(c, ty)).map((c) => nameOf(c[key])).sort((a, b) => a.localeCompare(b, "es"));
-    const mutuas = out.filter((c) => hasType(c, "pos") && cnList.some((x) => same(x.f, c.t) && same(x.t, id) && hasType(x, "pos"))).map((c) => nameOf(c.t)).sort((a, b) => a.localeCompare(b, "es"));
+    const mutuas = out.filter((c) => hasType(c, "pos") && ix.pares.pos.has(String(c.t) + ">" + String(id))).map((c) => nameOf(c.t)).sort((a, b) => a.localeCompare(b, "es"));
     return { row: r, eligieronPos: list(inn, "pos", "f"), rechazaron: list(inn, "neg", "f"), neutralDe: list(inn, "neu", "f"), eligioPos: list(out, "pos", "t"), rechazo: list(out, "neg", "t"), mutuas };
   });
   return {
@@ -123,14 +141,17 @@ export function renderReportHTML(report, { type = "ambos", groupLabel = "Todos l
   const grupos = `<div class="section"><h2>Grupos</h2><div class="sub">Conexiones dentro de cada grupo y hacia otros grupos</div><table><thead><tr><th>Grupo</th><th>Miembros</th><th class="pos">Conn. int.</th><th>Conn. ext.</th><th>Densidad</th>${isG ? `<th>Líderes</th><th>Controvertidos</th><th>Rechazados</th><th>Aislados</th>` : `<th>Líder</th>`}</tr></thead><tbody>${grpRows}</tbody></table></div>`;
 
   let matriz = "";
-  if (type === "ambos") {
+  if (type === "ambos" && report.students.length > MATRIZ_MAX_REPORTE) {
+    matriz = `<div class="section"><h2>Matriz sociométrica</h2><div class="alert alert-warn">Con <b>${report.students.length}</b> estudiantes la matriz es demasiado grande para incluirla (máximo ${MATRIZ_MAX_REPORTE}). Genera el reporte de un solo grupo para ver su matriz, o descarga el Excel de resultados.</div></div>`;
+  } else if (type === "ambos") {
     const st = report.students, cn = report.conns;
+    const porPar = new Map(cn.map((x) => [String(x.f) + ">" + String(x.t), x]));
     const th = `<th style="min-width:90px">De ↓ / Para →</th>` + st.map((s) => `<th title="${esc(s.name)}" style="min-width:32px">${esc(s.av || String(s.name).slice(0, 2))}</th>`).join("") + `<th class="pos">Σ+</th><th class="neg">Σ−</th>`;
     const body = st.map((from) => {
       let pos = 0, neg = 0;
       const cells = st.map((to) => {
         if (same(from.id, to.id)) return `<td style="background:#f3f4f6">—</td>`;
-        const c = cn.find((x) => same(x.f, from.id) && same(x.t, to.id)), rev = cn.find((x) => same(x.f, to.id) && same(x.t, from.id));
+        const c = porPar.get(String(from.id) + ">" + String(to.id)), rev = porPar.get(String(to.id) + ">" + String(from.id));
         if (hasType(c, "pos")) pos++; if (hasType(c, "neg")) neg++;
         const sym = c ? (c.tp === "pos" ? (rev ? "◆" : "+") : c.tp === "neg" ? "−" : "○") : "";
         const col = c ? (c.tp === "pos" ? (rev ? "#059669" : "#0d9488") : c.tp === "neg" ? "#dc2626" : "#b45309") : "#ccc";

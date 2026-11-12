@@ -105,3 +105,22 @@ test("al exportar UNA encuesta, los participantes son los de sus grupos (no todo
   assert.equal(buildResultsSheets({ ...ctx, surveys: SV_GRUPOS, surveyId: "all", group: "Todos" }).resumen.participantes, 6);   // todas las encuestas: todo el colegio
   assert.equal(buildResultsSheets({ ...ctx, surveys: SV_GRUPOS, surveyId: "s1", group: "Grupo Prueba 1" }).resumen.participantes, 0);   // un grupo que no es de la encuesta
 });
+
+test("colegio grande: la hoja «Matriz» se reemplaza por un aviso y el libro se arma en milisegundos", async () => {
+  const { MATRIZ_MAX_EXCEL } = await import("../src/lib/results.js");
+  const n = MATRIZ_MAX_EXCEL + 50;
+  const st = Array.from({ length: n }, (_, i) => ({ id: String(i + 1), name: "E" + (i + 1), group: "G" + (i % 5) }));
+  const sv = [{ id: "s1", title: "T", questions: [{ id: "p", text: "¿Con quién?", tp: "pos" }], groups: [...new Set(st.map((s) => s.group))] }];
+  const rs = st.map((e, i) => ({ surveyId: "s1", respondentId: e.id, answers: { p: [st[(i + 1) % n].id, st[(i + 2) % n].id] } }));
+  const t0 = Date.now();
+  const r = buildResultsSheets({ students: st, surveys: sv, responses: rs });
+  assert.ok(Date.now() - t0 < 3000, "tardó " + (Date.now() - t0) + " ms");
+  const m = r.sheets.find((h) => h.name === "Matriz");
+  assert.equal(m.rows[0][0], "Matriz omitida"); assert.match(m.rows[1][0], /demasiado grande/);
+  assert.equal(r.sheets.find((h) => h.name === "Conexiones").rows.length - 1, r.resumen.conexiones);
+  // Con pocos estudiantes la matriz sí va, y la marca de «mutua» sigue funcionando
+  const chico = buildResultsSheets({ students: st.slice(0, 3), surveys: sv, responses: [{ surveyId: "s1", respondentId: "1", answers: { p: ["2"] } }, { surveyId: "s1", respondentId: "2", answers: { p: ["1"] } }] });
+  assert.equal(chico.sheets.find((h) => h.name === "Matriz").rows.length, 4);
+  const con = chico.sheets.find((h) => h.name === "Conexiones").rows;
+  assert.ok(con.slice(1).every((f) => f[9] === "Sí"), "las dos conexiones son mutuas");
+});

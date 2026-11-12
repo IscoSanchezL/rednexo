@@ -2,6 +2,8 @@
 import { buildConnections, hasType, surveyGroups } from "./sociometry.js";
 import { computeReport, ROLE_LABELS, ROLE_HELP } from "./reports.js";
 
+/** Más estudiantes que esto y la hoja «Matriz» del Excel se reemplaza por un aviso (2.000.000 de celdas no sirven a nadie). */
+export const MATRIZ_MAX_EXCEL = 250;
 const TIPO = { pos: "Positiva", neu: "Neutral", neg: "Negativa" };
 const sameId = (a, b) => String(a) === String(b);
 const when = (ts) => { try { const d = ts && typeof ts.toDate === "function" ? ts.toDate() : ts instanceof Date ? ts : ts ? new Date(ts) : null; return d && !isNaN(d) ? d : null; } catch (e) { return null; } };
@@ -55,20 +57,23 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
   for (const r of report.rows) indices.push([r.student.name, r.student.group, r.hechas, r.recibidas, r.posR, r.neuR, r.negR, r.mutuasPos, ratio(r.posR), ratio(r.negR), ratio(r.hechas), r.rolLabel, respondieron.has(String(r.student.id)) ? "Sí" : "No"]);
 
   // ── Conexiones ──
+  const porPar = new Map(conns.map((x) => [String(x.f) + ">" + String(x.t), x]));   // búsqueda directa: con 1.500 estudiantes recorrer la lista por cada celda tardaba más de un minuto
   const conexiones = [["De", "Grupo (de)", "Para", "Grupo (para)", "Tipo dominante", "Positivas", "Neutrales", "Negativas", "Fuerza (1-3)", "¿Mutua positiva?"]];
   const sorted = conns.slice().sort((a, b) => nombre(a.f).localeCompare(nombre(b.f), "es") || nombre(a.t).localeCompare(nombre(b.t), "es"));
   for (const c of sorted) {
-    const mutua = hasType(c, "pos") && conns.some((x) => sameId(x.f, c.t) && sameId(x.t, c.f) && hasType(x, "pos"));
+    const mutua = hasType(c, "pos") && hasType(porPar.get(String(c.t) + ">" + String(c.f)), "pos");
     conexiones.push([nombre(c.f), grupoDe(c.f), nombre(c.t), grupoDe(c.t), TIPO[c.tp] || c.tp, (c.counts || {}).pos ?? (c.tp === "pos" ? c.s : 0), (c.counts || {}).neu ?? (c.tp === "neu" ? c.s : 0), (c.counts || {}).neg ?? (c.tp === "neg" ? c.s : 0), c.s, mutua ? "Sí" : "No"]);
   }
 
   // ── Matriz ──
   const matriz = [["De \\ Para", ...scopeStudents.map((s) => s.name), "Elige (+)", "Rechaza (−)"]];
-  for (const from of scopeStudents) {
+  const matrizGrande = scopeStudents.length > MATRIZ_MAX_EXCEL;
+  if (matrizGrande) matriz.splice(0, matriz.length, ["Matriz omitida"], [`Con ${scopeStudents.length} estudiantes la matriz sería demasiado grande (máximo ${MATRIZ_MAX_EXCEL}). Descarga el Excel de un solo grupo para ver su matriz; las hojas «Conexiones» y «Respuestas» traen toda la información.`]);
+  for (const from of matrizGrande ? [] : scopeStudents) {
     let pos = 0, neg = 0;
     const celdas = scopeStudents.map((to) => {
       if (sameId(from.id, to.id)) return "";
-      const c = conns.find((x) => sameId(x.f, from.id) && sameId(x.t, to.id));
+      const c = porPar.get(String(from.id) + ">" + String(to.id));
       if (!c) return "";
       if (hasType(c, "pos")) pos++; if (hasType(c, "neg")) neg++;
       const counts = c.counts || { pos: c.tp === "pos" ? c.s : 0, neg: c.tp === "neg" ? c.s : 0 };
@@ -102,7 +107,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
       { name: "Léeme", rows: leeme, widths: w(30, 100) },
       { name: "Índices", header: true, rows: indices, widths: w(24, 18, 8, 8, 16, 14, 14, 12, 12, 10, 11, 14, 12) },
       { name: "Conexiones", header: true, rows: conexiones, widths: w(24, 18, 24, 18, 14, 11, 11, 11, 11, 15) },
-      { name: "Matriz", header: true, rows: matriz, widths: [24, ...scopeStudents.map(() => 12), 11, 12] },
+      { name: "Matriz", header: true, rows: matriz, widths: matrizGrande ? [30, 120] : [24, ...scopeStudents.map(() => 12), 11, 12] },
       { name: "Respuestas", header: true, rows: respuestas, widths: w(26, 52, 15, 24, 18, 24, 18, 18) },
       { name: "Por pregunta", header: true, rows: preguntas, widths: w(26, 56, 12, 16, 12, 18) },
     ],
