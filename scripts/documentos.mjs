@@ -8,6 +8,7 @@ const docs = [
   ["docs/manuales/manual-psicologo.html", "docs/manuales/Manual-RedNexo-Orientacion.pdf"],
   ["docs/manuales/guia-estudiante.html", "docs/manuales/Guia-RedNexo-Estudiantes.pdf"],
   ["docs/comercial/licencias-y-precios.html", "docs/comercial/RedNexo-Licencias-y-Precios.pdf"],
+  ["docs/comercial/lista-piloto.html", "docs/comercial/RedNexo-Lista-Piloto.pdf"],
 ];
 const b = await chromium.launch();
 for (const [src, out] of docs) {

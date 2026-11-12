@@ -1,0 +1,93 @@
+<!doctype html><html lang="es"><head><meta charset="utf-8"><title>RedNexo — Lista de comprobación del piloto</title><link rel="stylesheet" href="estilo.css">
+<style>li.c{list-style:none;margin-left:-14pt}li.c::before{content:"☐ ";font-size:12pt}td.k{width:26%}</style></head><body>
+<h1>Piloto de RedNexo · Lista de comprobación</h1>
+<p>Para un colegio real, con pocos usuarios, durante 1 a 2 semanas. Objetivo: encontrar lo que las pruebas con datos de ejemplo no encuentran, sin riesgo para los estudiantes.</p>
+<div class="nota"><b>Regla de oro:</b> cualquier cosa rara se reporta con el botón <b>❓ Soporte</b> de la aplicación. Llega como ticket con el rol y el colegio. Pida que <b>no escriban nombres de estudiantes</b> en los mensajes.</div>
+
+<h2>0. Antes de empezar (Iskonex)</h2>
+<ul>
+<li class="c">Mergeados y publicados los PR pendientes: reglas de Firestore (<code>npx firebase deploy --only firestore</code>) y la aplicación (hosting).</li>
+<li class="c">Elegir un colegio <b>amigo</b>, de confianza, con una persona de orientación dispuesta a dar retroalimentación.</li>
+<li class="c">Que el colegio tenga <b>autorización de acudientes</b> para la actividad (su política de datos). Iskonex no lo reemplaza.</li>
+<li class="c">Plan <b>Piloto</b> (45 días, 60 estudiantes) o un plan con vigencia suficiente; confirmar que no se bloquee a mitad del piloto.</li>
+<li class="c">Un <b>solo grupo</b> para empezar (25–40 estudiantes). No todo el colegio.</li>
+<li class="c">Crear el colegio en «Elige tu colegio», con el correo de la persona administradora, y completar sus datos legales (se usan después en el contrato).</li>
+<li class="c">Probar <b>uno mismo</b> un ticket desde la app real y comprobar que llega a Telegram y al panel de Soporte con el ✓.</li>
+<li class="c">Entregar el <b>Manual del equipo de orientación</b> y la <b>Guía del estudiante</b> (PDF).</li>
+<li class="c">Acordar con el colegio: quién es el contacto, cómo se reportan problemas y el horario de respuesta.</li>
+</ul>
+
+<h2>1. Día 1 — Puesta en marcha (con el colegio)</h2>
+<ul>
+<li class="c">La persona administradora entra con su cuenta de Google y ve el Dashboard del colegio.</li>
+<li class="c">Autorizar a 1–2 psicólogos/as en <b>Usuarios</b> y comprobar que entran.</li>
+<li class="c">Descargar la <b>plantilla</b> en Grupos, llenarla con el grupo real, importarla y revisar la vista previa antes de confirmar.</li>
+<li class="c">Revisar nombres: sin repetidos, con tildes correctas, todos en su grupo.</li>
+<li class="c">Subir el <b>logo</b> del colegio en Config; ver que aparece en la cabecera y en la encuesta.</li>
+<li class="c">Crear la encuesta (plantilla de preguntas o propia), <b>activarla</b> y copiar el enlace.</li>
+<li class="c">Probar el enlace en <b>un celular real</b> (Android y, si se puede, iPhone) antes de aplicarlo al grupo.</li>
+</ul>
+
+<h2>2. Aplicación a los estudiantes</h2>
+<ul>
+<li class="c">Aplicar en el aula, con una persona adulta presente. Explicar que es <b>confidencial</b> y que no es un examen.</li>
+<li class="c">Cada estudiante encuentra su nombre y responde desde su celular o un computador.</li>
+<li class="c">Anotar: ¿alguien no encontró su nombre? ¿se equivocó de nombre? ¿el celular iba lento o con poca señal?</li>
+<li class="c">Seguir el avance en <b>Encuestas</b> (quién falta) y recordar a los pendientes.</li>
+<li class="c">Al terminar, desactivar la encuesta (pasarla a Borrador) para no recibir más respuestas.</li>
+</ul>
+
+<h2>3. Lectura de resultados (con el equipo de orientación)</h2>
+<ul>
+<li class="c">Dashboard: ¿el mapa y el ranking coinciden con lo que la persona de orientación conoce del grupo?</li>
+<li class="c">Matriz y Reportes (individual, grupal, completo): ¿se entienden? ¿falta algún dato útil?</li>
+<li class="c">Descargar el <b>Excel de resultados</b> y el reporte en PDF; verificar que abren bien y que no contienen datos de otros grupos.</li>
+<li class="c">Preguntar a la persona de orientación: <b>¿qué decisión podría tomar con esto?</b> Si no hay respuesta, el reporte necesita mejorar.</li>
+<li class="c">Probar <b>Duplicar</b> la encuesta para una segunda aplicación y comprobar que no mezcla con la primera.</li>
+</ul>
+
+<h2>4. Semana 2 — Uso real y bordes</h2>
+<ul>
+<li class="c">Probar un usuario de <b>solo lectura</b> (no debe poder crear ni cambiar nada).</li>
+<li class="c">Agregar un estudiante nuevo a un grupo ya aplicado y comprobar qué ocurre en la encuesta activa.</li>
+<li class="c">Revisar la pestaña <b>Actividad</b>: debe registrar lo que hicieron, sin nombres de estudiantes.</li>
+<li class="c">Probar <b>Exportar datos del colegio</b> (Config) y guardar el archivo en un lugar seguro.</li>
+<li class="c">Probar entrar desde otro navegador/celular y cerrar sesión.</li>
+<li class="c">Con el colegio: ¿necesitan algo que hoy no existe? (anotar, no prometer).</li>
+</ul>
+
+<h2>5. Qué anotar durante el piloto</h2>
+<table><tr><th class="k">Tema</th><th>Preguntas</th></tr>
+<tr><td>Facilidad</td><td>¿Cuánto tardó cada paso? ¿En qué se confundieron? ¿Qué preguntaron más de una vez?</td></tr>
+<tr><td>Estudiantes</td><td>¿Entendieron la encuesta? ¿Cuántos tuvieron problemas con el nombre o el celular?</td></tr>
+<tr><td>Resultados</td><td>¿Les parecieron creíbles y útiles? ¿Qué reporte usaron realmente?</td></tr>
+<tr><td>Rendimiento</td><td>¿Algo cargó lento? ¿Qué dispositivo, qué red?</td></tr>
+<tr><td>Confianza</td><td>¿Hubo dudas sobre la privacidad de los datos de los estudiantes?</td></tr>
+<tr><td>Valor</td><td>¿Lo volverían a usar el próximo periodo? ¿Pagarían? ¿Cuánto les parece razonable?</td></tr></table>
+
+<h2>6. Si algo sale mal</h2>
+<table><tr><th class="k">Situación</th><th>Qué hacer</th></tr>
+<tr><td>Un estudiante respondió con el nombre equivocado</td><td>Anotar el caso; si afecta los resultados, duplicar la encuesta y repetir la aplicación para esa persona.</td></tr>
+<tr><td>Un dato apareció donde no debía (otro colegio, otro grupo)</td><td><b>Suspender el colegio</b> desde «Elige tu colegio» (⏸ Suspender), no borrar nada, y revisarlo de inmediato.</td></tr>
+<tr><td>La app no abre o da error</td><td>Recarga forzada (Cmd/Ctrl+Shift+R). Si persiste, ticket de soporte con captura (sin nombres).</td></tr>
+<tr><td>Se necesita un respaldo</td><td>Config → <b>Exportar datos del colegio</b> (JSON) antes de cualquier cambio grande.</td></tr>
+<tr><td>El colegio quiere salir del piloto</td><td>Entregar el Excel y la exportación; eliminar el colegio solo cuando lo pida por escrito.</td></tr></table>
+
+<h2>7. Criterios para dar el piloto por exitoso</h2>
+<ul>
+<li class="c">Al menos <b>90 %</b> de los estudiantes respondió sin ayuda técnica.</li>
+<li class="c">Cero casos de datos mezclados entre grupos o colegios.</li>
+<li class="c">La persona de orientación pudo tomar <b>al menos una decisión</b> concreta con los resultados.</li>
+<li class="c">Menos de 3 problemas graves (que impidan trabajar) y todos resueltos.</li>
+<li class="c">El colegio dice que <b>lo usaría de nuevo</b> y da una idea clara de cuánto pagaría.</li>
+</ul>
+
+<h2>8. Al cerrar el piloto</h2>
+<ul>
+<li class="c">Reunión de 30 minutos con el colegio: qué funcionó, qué no, qué falta.</li>
+<li class="c">Lista priorizada de mejoras (graves → molestas → deseos).</li>
+<li class="c">Propuesta de plan y precio (con el Contrato generado desde Gestión; revisado por un abogado antes de firmar).</li>
+<li class="c">Pedir permiso, si lo dan, para usarlos como referencia.</li>
+</ul>
+<p style="margin-top:14pt;color:#64748b">Soporte: botón ❓ Soporte en la aplicación · Iskonex.</p>
+</body></html>
