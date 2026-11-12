@@ -23,7 +23,7 @@ await env.withSecurityRulesDisabled(async (c) => {
   await setDoc(doc(db, "colegios/col-sp/miembros/psi@sp.co"), { email: "psi@sp.co", role: "psychologist", status: "active" });
   await setDoc(doc(db, "colegios/col-sp/students/1"), { id: "1", name: "Estudiante Secreto", group: "5A", av: "ES" });
 });
-const vite = spawn("npx", ["vite", "--port", "5188", "--strictPort"], { env: { ...process.env, VITE_USE_EMULATORS: "true", VITE_SOPORTE_URL: "http://localhost:5170" }, stdio: "ignore" });
+const vite = spawn("npx", ["vite", "--port", "5160", "--strictPort"], { env: { ...process.env, VITE_USE_EMULATORS: "true", VITE_SOPORTE_URL: "http://localhost:5170" }, stdio: "ignore" });
 await new Promise((r) => setTimeout(r, 4000));
 let failed = 0;
 const check = (ok, msg) => { console.log((ok ? "ok     " : "FALLÓ  ") + msg); if (!ok) failed++; };
@@ -32,7 +32,7 @@ const b = await chromium.launch();
 try {
   // 1) Encuesta pública: ni script ni botón
   const pub = await (await b.newContext()).newPage();
-  await pub.goto("http://localhost:5188/?c=col-sp&survey=no-existe"); await pub.waitForTimeout(2500);
+  await pub.goto("http://localhost:5160/?c=col-sp&survey=no-existe"); await pub.waitForTimeout(2500);
   check(pedidos.length === 0, "en la encuesta pública (?survey=) no se descarga el script de soporte");
   check(!(await pub.evaluate(() => !!window.IskonexSoporte)) && (await pub.locator("button:has-text('Soporte')").count()) === 0, "…y no hay botón «Soporte»");
   await pub.close();
@@ -40,7 +40,7 @@ try {
   // 2) Pantalla de inicio de sesión: sin token
   const ctx = await b.newContext({ viewport: { width: 1280, height: 900 } }); const p = await ctx.newPage();
   const errs = []; p.on("pageerror", (e) => errs.push(e.message));
-  await p.goto("http://localhost:5188/"); await p.waitForSelector("text=Continuar con Google");
+  await p.goto("http://localhost:5160/"); await p.waitForSelector("text=Continuar con Google");
   await until(() => p.evaluate(() => window.__soporte?.configs.length > 0));
   let cfg = await p.evaluate(() => { const c = window.__soporte.configs.at(-1); return { user: c.user, token: c.getIdToken, notice: c.notice, ctx: c.context(), version: c.version }; });
   check(cfg.user === null && cfg.token === null, "en el login se configura sin usuario y sin token");

@@ -179,14 +179,15 @@ service cloud.firestore {
         // El superadmin también puede crear (copia de respuestas históricas al migrar); nadie más sin cumplir el formato.
         allow create: if cValidSubmission(cid, rid) || isSuper();
         allow update: if isSuper();   // solo para repetir la migración; el público nunca actualiza
-        allow delete: if cAdminW(cid);
+        // Borrar una encuesta para siempre borra sus respuestas: lo puede hacer quien puede editar (admin o psicólogo).
+        allow delete: if cWrite(cid);
       }
       match /responseMarks/{rid} {
         allow get: if true;
         allow list: if cRead(cid);
         allow create: if cValidMark(cid, rid) || isSuper();
         allow update: if isSuper();
-        allow delete: if cAdminW(cid);
+        allow delete: if cWrite(cid);
       }
       match /activity/{id} {
         allow read, delete: if cAdmin(cid);

@@ -12,7 +12,7 @@ import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID 
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
 import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
 import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
-import { sumarMeses, aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
+import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
 import { CAMPOS_EMPRESA, CAMPOS_COLEGIO, faltantes, precioConDescuento, numeroContrato, generarContratoHTML, CONTRATO_VERSION } from "./lib/contrato";
 import { MEDIOS_PAGO, validarPago, resumenPagos, carteraGeneral, entradaHistorial } from "./lib/gestion";
 import { COLEGIO_GESTION, COLEGIO_SUBCOLLECTIONS, buildExport, exportFileName, confirmaEliminar, etiquetaEstado } from "./lib/export";
@@ -801,14 +801,19 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
 
 // ════════ REGISTRATION PAGE ════════
 
-function RegistrationPage({ onSubmit, onBack }) {
+function RegistrationPage({ onBack }) {
   const [formData, setFormData] = useState({ name: "", email: "", role: "psychologist" });
   const [submitted, setSubmitted] = useState(false);
 
-  const handleSubmit = () => {
+  // La solicitud viaja por el formulario de Soporte (la app no puede escribir en la base sin una sesión).
+  const handleSubmit = async () => {
     if (!formData.name.trim() || !formData.email.trim()) return;
-    onSubmit({ ...formData, status: "pending", submitDate: new Date().toLocaleString() });
-    setSubmitted(true);
+    const rol = formData.role === "readonly" ? "Solo lectura" : "Psicólogo escolar";
+    const ok = await abrirSoporte({
+      type: "acceso", subject: `Solicitud de acceso a RedNexo: ${formData.name.trim()}`.slice(0, 120), email: formData.email.trim(),
+      description: `Solicito acceso a RedNexo.\nNombre: ${formData.name.trim()}\nCorreo de Google: ${formData.email.trim()}\nRol: ${rol}\nColegio: (escríbalo aquí)`,
+    });
+    if (ok) setSubmitted(true);
   };
 
   if (submitted)
@@ -816,14 +821,15 @@ function RegistrationPage({ onSubmit, onBack }) {
       <div style={{ fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif", minHeight: "100vh", background: C.bg, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
         <div style={{ textAlign: "center", maxWidth: 420 }}>
           <div style={{ width: 80, height: 80, borderRadius: 20, background: tint(C.amber, "20"), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 40, marginBottom: 20 }}>⏳</div>
-          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: C.text }}>Solicitud enviada</div>
+          <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: C.text }}>Solicitud preparada</div>
           <div style={{ fontSize: 13, color: C.t2, marginBottom: 24, lineHeight: 1.6 }}>
-            Tu registro fue enviado para revisión. El Super Admin aprobará tu acceso en breve.
+            Se abrió el formulario de soporte con tus datos. Escribe el nombre de tu colegio y pulsa <b>Enviar</b> allí para que la solicitud llegue. También puedes pedirle a la persona administradora de tu colegio que te autorice desde «Usuarios» con tu correo de Google.
           </div>
           <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: 16, marginBottom: 20, textAlign: "left" }}>
-            <div style={{ fontSize: 11, color: C.t3, marginBottom: 2 }}>Correo registrado:</div>
+            <div style={{ fontSize: 11, color: C.t3, marginBottom: 2 }}>Correo de la solicitud:</div>
             <div style={{ fontSize: 13, fontWeight: 600, color: C.teal }}>{formData.email}</div>
           </div>
+          <Btn v="ghost" onClick={handleSubmit} style={{ width: "100%", justifyContent: "center", marginBottom: 8 }}>Abrir el formulario de nuevo</Btn>
           <Btn v="pri" onClick={onBack} style={{ width: "100%", justifyContent: "center" }}>Volver al inicio</Btn>
         </div>
       </div>
@@ -847,11 +853,11 @@ function RegistrationPage({ onSubmit, onBack }) {
             <Inp label="Correo institucional" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="tu@institucion.edu" />
             <Sel label="Rol solicitado" value={formData.role} onChange={(v) => setFormData({ ...formData, role: v })} options={[{ v: "psychologist", l: "Psicólogo Escolar" }, { v: "readonly", l: "Solo Lectura" }]} />
             <div style={{ fontSize: 11, color: C.t3, background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 8, padding: 11, lineHeight: 1.55 }}>
-              ℹ️ Tu solicitud será revisada por el Super Admin. No podrás ingresar hasta ser aprobado.
+              ℹ️ La solicitud se envía por el formulario de soporte de Iskonex. No podrás ingresar hasta que el administrador de tu colegio te autorice.
             </div>
           </div>
           <Btn v="pri" onClick={handleSubmit} disabled={!formData.name.trim() || !formData.email.trim()} style={{ width: "100%", justifyContent: "center", marginTop: 16 }}>
-            Enviar solicitud
+            Continuar con la solicitud
           </Btn>
           <Btn v="ghost" onClick={onBack} style={{ width: "100%", justifyContent: "center", marginTop: 8 }}>
             ← Volver al login
@@ -922,7 +928,7 @@ function UsersPanel({ authorizeUser, revokeUser, reactivateUser, deleteUser, me 
           {msg}
         </div>
       )}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14, marginBottom: 14 }}>
         <Card glow={C.violet}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: C.violet }}>➕ Autorizar usuario</div>
           <div style={{ fontSize: 11, color: C.t2, marginBottom: 14 }}>Ingresa el correo Google del usuario y asigna su rol</div>
@@ -1443,29 +1449,36 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
 
 // ════════ SOCIOMETRIC MATRIX — Neural Edition ════════
 
+// Con muchos estudiantes la tabla (n × n celdas) se vuelve imposible de dibujar: se empieza por un solo grupo y
+// por encima de MATRIZ_MAX no se dibuja, se pide elegir menos grupos.
+const MATRIZ_AUTO = 80, MATRIZ_MAX = 120;
 function SocioMatrix({ students, conns }) {
-  const [selGroups, setSelGroups] = useState(GROUPS.slice());
+  const [selSel, setSelGroups] = useState(null);   // null = automático
+  const selGroups = selSel ?? (students.length > MATRIZ_AUTO ? GROUPS.slice(0, 1) : GROUPS.slice());
   const [hovRow, setHovRow] = useState(null);
   const [hovCol, setHovCol] = useState(null);
   const [selCell, setSelCell] = useState(null);
   const [tick, setTick] = useState(0);
 
-  const toggleG = (g) => setSelGroups(p => p.includes(g) ? (p.length > 1 ? p.filter(x => x !== g) : p) : [...p, g]);
+  const toggleG = (g) => setSelGroups(selGroups.includes(g) ? (selGroups.length > 1 ? selGroups.filter(x => x !== g) : selGroups) : [...selGroups, g]);
   const allSel = selGroups.length === GROUPS.length;
   const fs = students.filter(s => selGroups.includes(s.group));
 
   // Ticker para animaciones CSS (pulsos cada 2s)
+  // Solo con matrices pequeñas: redibujar cientos de celdas cada 2 s haría lenta la página.
+  const animar = fs.length <= 60;
   useEffect(() => {
+    if (!animar) return;
     const id = setInterval(() => setTick(t => t + 1), 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [animar]);
 
+  const demasiado = fs.length > MATRIZ_MAX;
   const cellSize = 36;
 
   // Conexiones activas para el efecto de "pulso" animado
-  const activeConns = conns.filter(c =>
-    fs.some(s => s.id === c.f) && fs.some(s => s.id === c.t)
-  );
+  const idsFs = new Set(fs.map((s) => String(s.id)));
+  const activeConns = conns.filter(c => idsFs.has(String(c.f)) && idsFs.has(String(c.t)));
 
   return (
     <div>
@@ -1517,8 +1530,14 @@ function SocioMatrix({ students, conns }) {
         </div>
       </div>
 
+      {demasiado && (
+        <div style={{ padding: 18, borderRadius: 12, border: `1px solid ${tint(C.amber, "50")}`, background: tint(C.amber, "12"), fontSize: 13, lineHeight: 1.6, color: C.text }}>
+          ⚠ Con <b>{fs.length}</b> estudiantes la matriz es demasiado grande para mostrarse (máximo {MATRIZ_MAX}). Elige uno o varios grupos con los botones de arriba. Para ver a todo el colegio usa el Dashboard o descarga el Excel de resultados en Reportes.
+        </div>
+      )}
+
       {/* Tabla */}
-      <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, width: "fit-content", maxWidth: "100%" }}>
+      {!demasiado && <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, width: "fit-content", maxWidth: "100%" }}>
         <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, width: "max-content" }}>
           <thead>
             <tr>
@@ -1648,7 +1667,7 @@ function SocioMatrix({ students, conns }) {
             </tr>
           </tbody>
         </table>
-      </div>
+      </div>}
 
       {/* Detalle de celda seleccionada */}
       {selCell && (
@@ -1772,9 +1791,9 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
         <div><PageHeader title="Gestión de Grupos" subtitle="Administra grupos y participantes" /></div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_NOMBRE, plantillaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por estudiante con su grupo">⬇ Plantilla</Btn>
           {canEdit && <Btn v="ghost" onClick={() => impRef.current?.click()} title="Sube la plantilla diligenciada (CSV)">⬆ Importar estudiantes</Btn>}
           {canEdit && <input ref={impRef} type="file" accept=".csv,.txt,text/csv" onChange={onPickImport} style={{ display: "none" }} data-testid="import-grupos" />}
@@ -1897,7 +1916,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
         );
       })()}
 
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,300px),1fr))", gap: 14 }}>
         {names.length === 0 && (
           <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "36px 12px", color: C.t2, fontSize: 13 }}>
             <div style={{ fontSize: 34, marginBottom: 8 }}>👥</div>
@@ -2258,7 +2277,14 @@ function SurveyBuilder({ role, students, GROUPS }) {
   };
   const deletePermanent = async (id) => {
     logActivity("survey", "eliminó definitivamente la encuesta", tituloDe(id));
-    try { await deleteDoc(cdoc("surveys", id)); } catch (e) { setSurveys((s) => s.filter((x) => x.id !== id)); }
+    try {
+      // Eliminar «para siempre» también borra lo que los estudiantes respondieron en esa encuesta (son datos de menores).
+      for (const col of ["responses", "responseMarks"]) {
+        const snap = await getDocs(query(ccol(col), where("surveyId", "==", id)));
+        for (const part of chunk(snap.docs, 400)) { const b = writeBatch(db); part.forEach((d) => b.delete(d.ref)); await b.commit(); }
+      }
+      await deleteDoc(cdoc("surveys", id));
+    } catch (e) { console.error(e); alert("No se pudo eliminar por completo la encuesta. Inténtalo de nuevo."); }
   };
   // Cambia los grupos de una encuesta: guarda la lista y el primero JUNTOS y, si está activa, renueva la lista de nombres de la encuesta pública.
   const updateSurveyGroups = async (id, groups) => {
@@ -2288,7 +2314,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
         <Btn v="ghost" onClick={() => setCreating(false)}>← Volver</Btn>
         <div style={{ fontSize: 20, fontWeight: 800 }}>Crear Nueva Encuesta</div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,320px),1fr))", gap: 16 }}>
         <Card>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>⚙ Configuración</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -2356,9 +2382,9 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
   return (
     <div>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
         <div><PageHeader title="Gestión de Encuestas" subtitle="Crea, edita, ejecuta encuestas sociométricas" /></div>
-        {canEdit && <div style={{ display: "flex", gap: 8 }}>
+        {canEdit && <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <Btn v="ghost" onClick={() => setShowTrash(!showTrash)} style={{ position: "relative" }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
             Papelera
@@ -2479,8 +2505,10 @@ function SurveyBuilder({ role, students, GROUPS }) {
               <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)">⬇ CSV</Btn>
               {canEdit && <Btn sm v="ghost" onClick={() => duplicateSurvey(sv)} title="Crea una copia sin respuestas para aplicarla a otro grupo o en otro periodo">⧉ Duplicar</Btn>}
               {canEdit && <Btn sm v="teal" disabled={!responses.some((r) => r.surveyId === sv.id)} onClick={() => exportResults(sv)} title={responses.some((r) => r.surveyId === sv.id) ? "Descarga los resultados en Excel (.xlsx) para hacer tus propios gráficos" : "Aún no hay respuestas para exportar"}>⬇ Resultados (Excel)</Btn>}
+              {canEdit && (<>
               <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); logActivity("survey", "abrió para aplicar la encuesta", sv.title); }}>▶ Aplicar</Btn>
               <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
+              </>)}
               {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
             </div>
           </div>
@@ -2589,7 +2617,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
       <PageHeader title="Reportes y Análisis" subtitle="Genera reportes del análisis sociométrico filtrados por grupo" />
       <Card style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: C.t2, marginBottom: 12, textTransform: "uppercase", letterSpacing: ".5px" }}>Configurar reporte</div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14 }}>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Grupo a analizar</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
@@ -2704,7 +2732,7 @@ function SettingsPanel({ licencia, nEstudiantes }) {
         </div>
       </div>
       <LicenciaCard licencia={licencia} nEstudiantes={nEstudiantes} />
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14 }}>
         <Card glow={C.rx}>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>🏫 Institución</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2714,17 +2742,17 @@ function SettingsPanel({ licencia, nEstudiantes }) {
           </div>
         </Card>
         <Card glow={C.teal}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.teal }}>🔐 Seguridad</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.teal }}>🔐 Seguridad <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Sel label="Dominio Google permitido" value={cfg.dominio} onChange={(v) => upd("dominio", v)} options={[{ v: "all", l: "Cualquier correo" }, { v: "edu.co", l: "@edu.co" }]} />
-            <Sel label="Registro de nuevos usuarios" value={cfg.registro} onChange={(v) => upd("registro", v)} options={[{ v: "no", l: "Solo invitación (recomendado)" }, { v: "approval", l: "Libre con aprobación admin" }, { v: "yes", l: "Completamente abierto" }]} />
+            <Sel disabled label="Dominio Google permitido (próximamente)" value={cfg.dominio} onChange={(v) => upd("dominio", v)} options={[{ v: "all", l: "Cualquier correo" }, { v: "edu.co", l: "@edu.co" }]} />
+            <Sel disabled label="Registro de nuevos usuarios (próximamente)" value={cfg.registro} onChange={(v) => upd("registro", v)} options={[{ v: "no", l: "Solo invitación (recomendado)" }, { v: "approval", l: "Libre con aprobación admin" }, { v: "yes", l: "Completamente abierto" }]} />
           </div>
         </Card>
         <Card glow={C.amber}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.amber }}>📧 Notificaciones</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.amber }}>📧 Notificaciones <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <Sel label="Notificar encuestas nuevas" value={cfg.notifEncuesta} onChange={(v) => upd("notifEncuesta", v)} options={[{ v: "yes", l: "Sí" }, { v: "no", l: "No" }]} />
-            <Sel label="Enviar resultados a" value={cfg.notifResultados} onChange={(v) => upd("notifResultados", v)} options={[{ v: "psy", l: "Solo psicólogos" }, { v: "all", l: "Todos los usuarios" }, { v: "admin", l: "Solo administradores" }]} />
+            <Sel disabled label="Notificar encuestas nuevas (próximamente)" value={cfg.notifEncuesta} onChange={(v) => upd("notifEncuesta", v)} options={[{ v: "yes", l: "Sí" }, { v: "no", l: "No" }]} />
+            <Sel disabled label="Enviar resultados a (próximamente)" value={cfg.notifResultados} onChange={(v) => upd("notifResultados", v)} options={[{ v: "psy", l: "Solo psicólogos" }, { v: "all", l: "Todos los usuarios" }, { v: "admin", l: "Solo administradores" }]} />
           </div>
         </Card>
         <Card glow={C.violet}>
@@ -2739,7 +2767,7 @@ function SettingsPanel({ licencia, nEstudiantes }) {
               </div>
               <div style={{ fontSize: 10, color: C.t3, marginTop: 6 }}>Se redimensiona automáticamente. Aparece en la cabecera y en las encuestas de este colegio.</div>
             </div>
-            <Sel label="Idioma de la interfaz" value={cfg.idioma} onChange={(v) => upd("idioma", v)} options={[{ v: "es", l: "Español" }, { v: "en", l: "English" }]} />
+            <Sel disabled label="Idioma de la interfaz (próximamente)" value={cfg.idioma} onChange={(v) => upd("idioma", v)} options={[{ v: "es", l: "Español" }, { v: "en", l: "English" }]} />
           </div>
         </Card>
       </div>
@@ -3102,10 +3130,11 @@ function PublicSurvey({ surveyId, colegioId }) {
 const SOPORTE_BASE = urlSoporte({ override: import.meta.env.VITE_SOPORTE_URL, emuladores: import.meta.env.VITE_USE_EMULATORS === "true" });
 const VERSION_APP = typeof __APP_VERSION__ === "string" ? __APP_VERSION__ : "";
 async function abrirSoporte(prefill) {
-  if (esEncuestaPublica(window.location.search)) return;   // nunca en la encuesta de los estudiantes
+  if (esEncuestaPublica(window.location.search)) return false;   // nunca en la encuesta de los estudiantes
   const w = await cargarWidget({ base: SOPORTE_BASE });
-  if (w) w.open(prefill);
-  else alert("No se pudo abrir el soporte. Revisa tu conexión e inténtalo de nuevo.");
+  if (w) { w.open(prefill); return true; }
+  alert("No se pudo abrir el soporte. Revisa tu conexión e inténtalo de nuevo.");
+  return false;
 }
 const BtnSoporte = ({ prefill, label = "❓ Soporte" }) => (
   <Btn sm v="ghost" onClick={() => abrirSoporte(prefill)} title="Contactar a soporte (no escribas datos de estudiantes)">{label}</Btn>
@@ -3570,11 +3599,13 @@ export default function App() {
 
   // Las conexiones del sociograma, la matriz y los reportes salen de las respuestas de TODAS las encuestas o de una sola.
   const activeFilter = surveyFilter !== "all" && surveys.some((sv) => sv.id === surveyFilter && !sv.deleted) ? surveyFilter : "all";
+  // Las encuestas en la papelera (o ya eliminadas) no cuentan: sus respuestas no entran al mapa ni a los reportes.
+  const responsesVivas = useMemo(() => { const ok = new Set(surveys.filter((sv) => !sv.deleted).map((sv) => sv.id)); return responsesRaw.filter((r) => ok.has(r.surveyId)); }, [responsesRaw, surveys]);
   useEffect(() => {
-    const rs = activeFilter === "all" ? responsesRaw : responsesRaw.filter((r) => r.surveyId === activeFilter);
+    const rs = activeFilter === "all" ? responsesVivas : responsesVivas.filter((r) => r.surveyId === activeFilter);
     const built = buildConnections(rs, surveys);
     setConns(built.length > 0 || !IS_DEMO ? built : initConns);
-  }, [responsesRaw, surveys, activeFilter]);
+  }, [responsesVivas, surveys, activeFilter]);
 
   // Al cambiar de colegio no deben quedar datos del anterior en pantalla.
   useEffect(() => {
@@ -3593,7 +3624,7 @@ export default function App() {
 
   // Ingreso al colegio: una sola entrada por sesión del navegador (no una por cada recarga).
   useEffect(() => {
-    if (!user || !colegioId) return;
+    if (!user || !colegioId || user.role === "readonly") return;   // solo lectura no puede escribir en la bitácora
     const key = `rn_ingreso_${colegioId}_${user.email}`;
     try { if (sessionStorage.getItem(key)) return; sessionStorage.setItem(key, "1"); } catch (e) {}
     logActivity("user", "ingresó a RedNexo", "");
@@ -3879,7 +3910,7 @@ export default function App() {
   if (session && !user) return <SchoolPicker session={session} colegios={colegios} supers={supers} onPick={chooseColegio} onCreate={createColegio} onMigrate={migrateLegacy} onLogout={doLogout} onSuspend={suspendColegio} onRenew={renovarColegio} onPlan={cambiarPlan} onGuardarPlanes={guardarPlanes} onRecordar={recordarColegio} onRefrescar={reloadColegios} onExport={exportFromPicker} onDelete={deleteFromPicker} onAddSuper={addSuper} onToggleSuper={toggleSuper} busy={pickerBusy} msg={pickerMsg} />;
 
   if (!user) {
-    if (authView === "register") return (<RegistrationPage onSubmit={() => {}} onBack={() => setAuthView("login")} />);
+    if (authView === "register") return (<RegistrationPage onBack={() => setAuthView("login")} />);
     return (<LoginPage onGoogleLogin={handleGoogleLogin} onRegister={() => setAuthView("register")} loading={loginLoading} error={loginError} />);
   }
 
@@ -3919,22 +3950,20 @@ export default function App() {
         select option{background:var(--c-bgSub);color:var(--c-text)}
       `}</style>
 
-      <header style={{ padding: "12px 22px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", gap: 14, background: `${tint(C.bg, "ee")}`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
+      <header style={{ padding: "10px clamp(12px, 3vw, 22px)", borderBottom: `1px solid ${C.border}`, display: "flex", flexWrap: "wrap", alignItems: "center", gap: "8px 14px", background: `${tint(C.bg, "ee")}`, backdropFilter: "blur(20px)", position: "sticky", top: 0, zIndex: 50, boxShadow: `0 1px 24px rgba(0,0,0,0.25)` }}>
         <Logo size="md" />
         <div style={{ width: 1, height: 36, background: `linear-gradient(to bottom, transparent, ${tint(C.rx, "50")}, transparent)`, flexShrink: 0 }} />
         <SchoolLogo src={school.logo} name={school.nombre} size={44} style={{ boxShadow: `0 0 16px rgba(59,130,246,0.2)` }} />
         {school.nombre && <span style={{ fontSize: 13, fontWeight: 700, color: C.text, maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{school.nombre}</span>}
         {(session.isSuper || colegios.length > 1) && <Btn sm v="ghost" onClick={() => chooseColegio(null)}>⇄ Cambiar colegio</Btn>}
         <div style={{ flex: 1 }} />
-        <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 9, padding: 3, border: `1px solid ${C.border}`, overflowX: "auto" }}>
+        <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 9, padding: 3, border: `1px solid ${C.border}`, overflowX: "auto", order: 10, flex: "1 1 100%", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "5px 12px", borderRadius: 7, border: "none", fontFamily: "inherit", background: tab === t.id ? `linear-gradient(135deg,${C.rx},#a78bfa)` : "transparent", color: tab === t.id ? "#fff" : C.t2, fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, transition: "all .2s", whiteSpace: "nowrap" }}>
               <span style={{ fontSize: 11 }}>{t.icon}</span>{t.label}
             </button>
           ))}
         </div>
-        <div style={{ flex: 1 }} />
-
         <BtnSoporte />
 
         {/* ── TOGGLE MODO CLARO/OSCURO ── */}
@@ -3977,7 +4006,7 @@ export default function App() {
         </div>
       )}
 
-      <main style={{ padding: 22, animation: "slideIn .3s ease" }}>
+      <main style={{ padding: "clamp(12px, 3vw, 22px)", animation: "slideIn .3s ease" }}>
         {students.length > 0 && ["dashboard", "matrix", "reports"].includes(tab) && surveys.filter((sv) => !sv.deleted).length > 1 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
             <label htmlFor="rn-fuente" style={{ fontSize: 12, fontWeight: 600, color: C.t2 }}>Datos de:</label>
@@ -4001,7 +4030,7 @@ export default function App() {
           const ns = nodeStats(selNode, visConns, n);
 
           return (<>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 10, marginBottom: 14 }}>
               {[
                 { i: "👥", v: visStudents.length, l: "Participantes", c: C.rx },
                 { i: "🔗", v: visConns.length,    l: "Conexiones",    c: C.teal },
@@ -4017,7 +4046,7 @@ export default function App() {
                 </Card>
               ))}
             </div>
-            <div style={{ display: "grid", gridTemplateColumns: "2.2fr .8fr", gap: 12 }}>
+            <div className="rn-dash" style={{ display: "grid", gridTemplateColumns: "2.2fr .8fr", gap: 12, alignItems: "start" }}>
               <Card style={{ padding: 0, overflow: "hidden" }}>
                 <div style={{ padding: "10px 14px", borderBottom: `1px solid ${C.border}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
@@ -4182,7 +4211,7 @@ export default function App() {
           <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
         ))}
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
-        {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesRaw} surveys={surveys} surveyFilter={activeFilter} />}
+        {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesVivas} surveys={surveys} surveyFilter={activeFilter} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel licencia={licencia} nEstudiantes={students.length} />}
       </main>

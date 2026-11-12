@@ -95,3 +95,18 @@ test("gestión comercial (legal, pagos, historial, contratos) y datos de la empr
   await assertFails(getDoc(doc(as("admin@vigente.co"), "plataforma/empresa")));
   await assertFails(setDoc(doc(as("admin@vigente.co"), "plataforma/empresa"), { nit: "2" }));
 });
+test("eliminar una encuesta para siempre: admin y psicólogo borran sus respuestas y marcas; en gracia ya no", async () => {
+  await env.withSecurityRulesDisabled(async (c) => {
+    const db = c.firestore();
+    for (const cid of ["vigente", "gracia"]) {
+      await setDoc(doc(db, `colegios/${cid}/responses/sv1_1`), { surveyId: "sv1", respondentId: "1", respondentName: "Ana", answers: {} });
+      await setDoc(doc(db, `colegios/${cid}/responseMarks/sv1_1`), { surveyId: "sv1", respondentId: "1" });
+      await setDoc(doc(db, `colegios/${cid}/miembros/ro@${cid}.co`), { email: `ro@${cid}.co`, role: "readonly", status: "active" });
+    }
+  });
+  await assertFails(deleteDoc(doc(as("ro@vigente.co"), "colegios/vigente/responses/sv1_1")));
+  await assertFails(deleteDoc(doc(anon(), "colegios/vigente/responseMarks/sv1_1")));
+  await assertFails(deleteDoc(doc(as("psi@gracia.co"), "colegios/gracia/responses/sv1_1")));
+  await assertSucceeds(deleteDoc(doc(as("psi@vigente.co"), "colegios/vigente/responses/sv1_1")));
+  await assertSucceeds(deleteDoc(doc(as("psi@vigente.co"), "colegios/vigente/responseMarks/sv1_1")));
+});
