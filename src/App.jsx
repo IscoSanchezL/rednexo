@@ -103,6 +103,10 @@ const THEME_CSS = `
   --c-text:#0d0f1a;--c-t2:#444666;--c-t3:#888aaa;
   --c-ok:#1a9e72;--c-err:#d63c3c;
 }
+
+.rx-logo-light{display:none!important}
+:root.light .rx-logo-light{display:block!important}
+:root.light .rx-logo-dark{display:none!important}
 `;
 
 // Inyecta las variables de tema una sola vez, para que registro, carga y encuesta pública también tengan colores
@@ -420,61 +424,33 @@ const Sel = ({ label, value, onChange, options, disabled }) => (
 // size = alto del emblema; el ancho sale de su proporción real (1.4:1)
 const LogoIcon = ({ size = 40 }) => (
   <img
-    src="/rednexo-icon.webp"
-    alt="RedNexo"
+    src="/iskonex-isotipo.png"
+    alt="ISKONEX"
     height={size}
-    width={Math.round(size * 1.4)}
-    style={{ display: "block", flexShrink: 0, objectFit: "contain", filter: "drop-shadow(0 0 8px rgba(59,130,246,0.30))" }}
+    width={Math.round(size * 1.26)}
+    style={{ display: "block", flexShrink: 0, objectFit: "contain" }}
   />
 );
 
+// Logo ISKONEX RedNexo: versión de texto blanco (modo oscuro) y de texto oscuro (modo claro);
+// el CSS del tema muestra solo la que corresponde.
+const LogoFull = ({ width, style }) => (
+  <>
+    <img className="rx-logo-dark" src="/rednexo-logo-blanco.png" alt="ISKONEX RedNexo" style={{ display: "block", width, height: "auto", userSelect: "none", ...style }} />
+    <img className="rx-logo-light" src="/rednexo-logo-color.png" alt="" aria-hidden="true" style={{ width, height: "auto", userSelect: "none", ...style }} />
+  </>
+);
+
 const Logo = ({ size = "md" }) => {
-  const cfg = {
-    lg: { iconSize: 76, title: 30, sub: 11, gap: 16, subSpacing: "2.5px" },
-    md: { iconSize: 46, title: 17, sub: 9, gap: 8, subSpacing: "1.8px" },
-    sm: { iconSize: 32, title: 13, sub: 0, gap: 6, subSpacing: "1.5px" },
-  }[size] || { iconSize: 40, title: 17, sub: 9, gap: 8, subSpacing: "1.8px" };
-
-  // Versión grande (registro, pantalla de carga): logo completo con el nombre
-  if (size === "lg") {
-    return (
-      <img
-        src="/rednexo-logo.webp"
-        alt="RedNexo"
-        style={{ display: "block", width: "min(300px, 80vw)", height: "auto", filter: "drop-shadow(0 0 24px rgba(59,130,246,0.28))", userSelect: "none" }}
-      />
-    );
-  }
-
+  const width = { lg: "min(420px, 84vw)", md: 210, sm: 150 }[size] || 210;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: cfg.gap }}>
-      <LogoIcon size={cfg.iconSize} />
-      <div>
-        <div
-          style={{
-            fontSize: cfg.title,
-            fontWeight: 800,
-            letterSpacing: "-0.5px",
-            lineHeight: 1.1,
-            color: C.text,
-          }}
-        >
-          <span style={{ color: C.rx }}>Red</span>Nexo
+    <div style={{ maxWidth: "100%" }}>
+      <LogoFull width={width} />
+      {size === "md" && (
+        <div style={{ fontSize: 9, color: C.t3, letterSpacing: "1.8px", textTransform: "uppercase", marginTop: 4 }}>
+          Inteligencia Sociométrica
         </div>
-        {cfg.sub > 0 && (
-          <div
-            style={{
-              fontSize: cfg.sub,
-              color: C.t3,
-              letterSpacing: cfg.subSpacing,
-              textTransform: "uppercase",
-              marginTop: 2,
-            }}
-          >
-            Inteligencia Sociométrica
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };
@@ -612,19 +588,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
         zIndex: 1,
       }}>
         <div style={{ animation: "fadeUp .5s ease both" }}>
-          <img
-            src="/rednexo-logo.webp"
-            alt="RedNexo"
-            style={{
-              display: "block",
-              width: "min(500px, 100%)",
-              height: "auto",
-              marginLeft: -16,
-              filter: "drop-shadow(0 0 28px rgba(59,130,246,0.30))",
-              userSelect: "none",
-              pointerEvents: "none",
-            }}
-          />
+          <LogoFull width="min(560px, 100%)" style={{ pointerEvents: "none" }} />
           <div style={{ marginTop: 8, fontSize: 48, fontWeight: 900, lineHeight: 1.1, color: "#fff", letterSpacing: "-2px" }}>
             Entiende<br/>
             <span style={{ background: "linear-gradient(90deg,#38bdf8 0%,#3b82f6 50%,#a78bfa 100%)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "#3b82f6" }}>las conexiones</span><br/>

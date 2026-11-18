@@ -1,7 +1,7 @@
 /* Service worker mínimo: hace la app instalable y la abre aunque la red esté lenta.
    Estrategia: red primero para lo propio (siempre la versión nueva); copia guardada solo si falla la red.
    No intercepta Firebase, Google ni otros dominios, ni rutas /__/ (inicio de sesión). */
-const CACHE = 'iskonex-pwa-v1';
+const CACHE = 'iskonex-pwa-v2';
 self.addEventListener('install', (e) => { e.waitUntil(caches.open(CACHE).then((c) => c.add('./')).catch(() => {})); self.skipWaiting(); });
 self.addEventListener('activate', (e) => {
   e.waitUntil((async () => { for (const k of await caches.keys()) if (k !== CACHE) await caches.delete(k); await self.clients.claim(); })());
