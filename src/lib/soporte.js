@@ -24,6 +24,19 @@ export function contextoSoporte(datos) {
   return { rol: corto(datos?.rol, 30) || "sin sesión", colegio: corto(datos?.colegio, 80) };
 }
 
+/**
+ * El widget trae su propio botón flotante «Soporte». Con data-button="false" solo le pone el atributo `hidden`, pero su CSS
+ * (`.fab{display:inline-flex}`) lo pisa y el botón sigue viéndose, tapando el contenido. Como el botón de RedNexo está en la cabecera,
+ * lo ocultamos nosotros (el widget abre su sombra, así que se puede llegar a él).
+ */
+export function ocultarBotonFlotante(doc = globalThis.document) {
+  for (const el of Array.from((doc && doc.body && doc.body.children) || [])) {
+    const fab = el.shadowRoot && el.shadowRoot.querySelector && el.shadowRoot.querySelector(".fab");
+    if (fab) { fab.style.setProperty("display", "none", "important"); return true; }
+  }
+  return false;
+}
+
 /** Carga el script una sola vez. Devuelve window.IskonexSoporte o null si no se pudo (sin red, bloqueado…). */
 export function cargarWidget({ base, app = SOPORTE_APP, doc = globalThis.document, win = globalThis.window } = {}) {
   if (!base) return Promise.resolve(null);
@@ -33,7 +46,7 @@ export function cargarWidget({ base, app = SOPORTE_APP, doc = globalThis.documen
     const s = doc.createElement("script");
     s.src = `${base}/widget.js`; s.async = true;
     s.dataset.app = app; s.dataset.button = "false";   // el botón lo ponemos nosotros, en la cabecera
-    s.onload = () => resolve(win.IskonexSoporte || null);
+    s.onload = () => { ocultarBotonFlotante(doc); resolve(win.IskonexSoporte || null); };
     s.onerror = () => { win.__soporteCarga = null; s.remove(); resolve(null); };
     doc.head.appendChild(s);
   });
