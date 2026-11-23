@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { esEncuestaPublica, urlSoporte, contextoSoporte, configuracionSoporte, cargarWidget, SOPORTE_AVISO } from "../src/lib/soporte.js";
+import { ocultarBotonFlotante, esEncuestaPublica, urlSoporte, contextoSoporte, configuracionSoporte, cargarWidget, SOPORTE_AVISO } from "../src/lib/soporte.js";
 
 test("la encuesta pública se reconoce por ?survey=", () => {
   assert.equal(esEncuestaPublica("?c=col&survey=abc"), true);
@@ -54,4 +54,22 @@ test("cargarWidget: inserta un solo script con data-app y sin botón flotante; s
   assert.equal(await p1, win.IskonexSoporte); assert.equal(await p2, win.IskonexSoporte);
   const win2 = {}; const p3 = cargarWidget({ base: "http://x", win: win2, doc }); hijos.at(-1).onerror();
   assert.equal(await p3, null); assert.equal(win2.__soporteCarga, null);
+});
+
+test("botón flotante del widget: se oculta con !important (su CSS pisa el atributo hidden)", () => {
+  const llamadas = [];
+  const fab = { style: { setProperty: (k, v, prio) => llamadas.push([k, v, prio]) } };
+  const doc = { body: { children: [{}, { shadowRoot: { querySelector: (q) => (q === ".fab" ? fab : null) } }] } };
+  assert.equal(ocultarBotonFlotante(doc), true);
+  assert.deepEqual(llamadas, [["display", "none", "important"]]);
+  assert.equal(ocultarBotonFlotante({ body: { children: [{}, { shadowRoot: { querySelector: () => null } }] } }), false);
+  assert.equal(ocultarBotonFlotante({ body: null }), false);
+});
+test("al cargar el widget se oculta su botón flotante", async () => {
+  const llamadas = [];
+  const fab = { style: { setProperty: (...a) => llamadas.push(a) } };
+  const hijos = []; const doc = { createElement: () => ({ dataset: {}, remove() {} }), head: { appendChild: (x) => hijos.push(x) }, body: { children: [{ shadowRoot: { querySelector: () => fab } }] } };
+  const win = {}; const p = cargarWidget({ base: "https://x", win, doc });
+  win.IskonexSoporte = { configure() {} }; hijos[0].onload();
+  await p; assert.equal(llamadas.length, 1);
 });
