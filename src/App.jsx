@@ -12,6 +12,7 @@ import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID 
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
 import { MAX_JUST, MIN_JUST, MAX_ABIERTA, KIND_LABELS, kindOf, esJustificable, esAbierta, justKey, buildJustificaciones, buildAbiertas, justificacionesFaltantes } from "./lib/justificacion";
 import { listarAbiertas } from "./lib/abiertas";
+import { buildStudentReport, renderStudentReportHTML, informeEstudianteNombre } from "./lib/informeEstudiante";
 import { validarNombreGrupo, renombrarEnEncuesta, resumenEliminar, textoEliminar } from "./lib/grupos";
 import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
 import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -1428,6 +1429,9 @@ function SociogramCanvas({ filter, selNode, setSelNode, students, conns }) {
 // Con muchos estudiantes la tabla (n × n celdas) se vuelve imposible de dibujar: se empieza por un solo grupo y
 // por encima de MATRIZ_MAX no se dibuja, se pide elegir menos grupos.
 const MATRIZ_AUTO = 80, MATRIZ_MAX = 120;
+const LABEL_W = 200;   // ancho de la columna de nombres de la matriz
+// Filas de «recibidas» al pie: positivas, rechazos y neutrales (alto en px; las dos primeras llevan barras).
+const RESUMEN_FILAS = [{ k: "pos", l: "▲ RECIBIDAS +", c: C.teal, barras: true, h: 48 }, { k: "neg", l: "▼ RECIBIDAS −", c: C.err, barras: true, h: 48 }, { k: "neu", l: "◯ NEUTRALES", c: C.amber, barras: false, h: 26 }];
 function SocioMatrix({ students, conns }) {
   const [selSel, setSelGroups] = useState(null);   // null = automático
   const selGroups = selSel ?? (students.length > MATRIZ_AUTO ? GROUPS.slice(0, 1) : GROUPS.slice());
@@ -1455,6 +1459,9 @@ function SocioMatrix({ students, conns }) {
   // Conexiones activas para el efecto de "pulso" animado
   const idsFs = new Set(fs.map((s) => String(s.id)));
   const activeConns = conns.filter(c => idsFs.has(String(c.f)) && idsFs.has(String(c.t)));
+  // Lo que recibió cada estudiante, por tipo (solo de quienes están en la matriz, igual que Σ+ y Σ−)
+  const recibidas = {};
+  for (const c of activeConns) { const r = (recibidas[c.t] ||= { pos: 0, neg: 0, neu: 0 }); for (const t of ["pos", "neg", "neu"]) if (hasType(c, t)) r[t]++; }
 
   return (
     <div>
@@ -1513,11 +1520,11 @@ function SocioMatrix({ students, conns }) {
       )}
 
       {/* Tabla */}
-      {!demasiado && <div style={{ overflowX: "auto", borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, width: "fit-content", maxWidth: "100%" }}>
+      {!demasiado && <div data-testid="matriz-scroll" style={{ overflow: "auto", maxHeight: "calc(100vh - 230px)", minHeight: 320, borderRadius: 12, border: `1px solid ${C.border}`, background: C.surface, width: "fit-content", maxWidth: "100%" }}>
         <table style={{ borderCollapse: "separate", borderSpacing: 0, fontSize: 10, width: "max-content" }}>
           <thead>
             <tr>
-              <th style={{ width: 120, minWidth: 120, padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, position: "sticky", left: 0, zIndex: 4 }}>
+              <th style={{ width: LABEL_W, minWidth: LABEL_W, padding: "8px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, position: "sticky", left: 0, top: 0, zIndex: 6 }}>
                 <div style={{ fontSize: 10, fontWeight: 600, color: C.t2, textAlign: "center", lineHeight: 1.5 }}>De ↓<br/>Para →</div>
               </th>
               {fs.map(s => {
@@ -1527,14 +1534,15 @@ function SocioMatrix({ students, conns }) {
                   <th key={s.id}
                     onMouseEnter={() => setHovCol(s.id)}
                     onMouseLeave={() => setHovCol(null)}
-                    style={{ width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? mixOn(gc, 16) : C.cardAlt, border: `1px solid ${isHov ? tint(gc, "80") : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
+                    style={{ position: "sticky", top: 0, zIndex: 5, width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? mixOn(gc, 16) : C.cardAlt, border: `1px solid ${isHov ? tint(gc, "80") : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: mixOn(gc, 20, "var(--c-surface)"), border: `1.5px solid ${tint(gc, "99")}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: C.text, margin: "0 auto" }}>{s.av}</div>
                     <div style={{ fontSize: 8, fontWeight: 600, lineHeight: 1.15, color: C.t2, marginTop: 3 }}>{s.group}</div>
+                    <div title={s.name} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 9, fontWeight: 700, color: C.text, margin: "4px auto 0", maxHeight: 84, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{s.name.split(" ").slice(0, 2).join(" ")}</div>
                   </th>
                 );
               })}
-              <th style={{ width: 52, minWidth: 52, padding: "6px 8px", background: tint(C.teal, "26"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.teal), fontWeight: 800, textAlign: "center" }}>Σ+</th>
-              <th style={{ width: 52, minWidth: 52, padding: "6px 8px", background: tint(C.err, "26"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.err), fontWeight: 800, textAlign: "center" }}>Σ−</th>
+              <th style={{ position: "sticky", top: 0, zIndex: 5, width: 52, minWidth: 52, padding: "6px 8px", background: mixOn(C.teal, 18, "var(--c-cardAlt)"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.teal), fontWeight: 800, textAlign: "center" }}>Σ+</th>
+              <th style={{ position: "sticky", top: 0, zIndex: 5, width: 52, minWidth: 52, padding: "6px 8px", background: mixOn(C.err, 18, "var(--c-cardAlt)"), border: `1px solid ${C.border}`, fontSize: 12, color: ink(C.err), fontWeight: 800, textAlign: "center" }}>Σ−</th>
             </tr>
           </thead>
           <tbody>
@@ -1549,7 +1557,7 @@ function SocioMatrix({ students, conns }) {
                   <td style={{ padding: "5px 10px", background: isHovRow ? mixOn(gcFrom, 14) : C.cardAlt, border: `1px solid ${isHovRow ? tint(gcFrom, "80") : C.border}`, fontWeight: 700, color: C.text, position: "sticky", left: 0, zIndex: 3, fontSize: 11, whiteSpace: "nowrap", transition: "background .15s, border-color .15s" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <div style={{ width: 22, height: 22, borderRadius: 5, background: mixOn(gcFrom, 20, "var(--c-surface)"), border: `1px solid ${tint(gcFrom, "99")}`, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 8, flexShrink: 0 }}>{from.av}</div>
-                      <span title={from.name} style={{ fontSize: 11, color: C.text, fontWeight: 600 }}>{from.name.split(" ")[0]}</span>
+                      <span title={from.name} style={{ fontSize: 11, color: C.text, fontWeight: 600, maxWidth: LABEL_W - 50, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{from.name}</span>
                     </div>
                   </td>
                   {fs.map((to, ci) => {
@@ -1622,25 +1630,29 @@ function SocioMatrix({ students, conns }) {
               );
             })}
 
-            {/* Fila de recibidas con barras */}
-            <tr>
-              <td style={{ padding: "6px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, fontWeight: 800, fontSize: 10, color: C.t2, position: "sticky", left: 0, zIndex: 3, letterSpacing: ".6px" }}>RECIBIDAS</td>
-              {fs.map(to => {
-                const rec  = conns.filter(c => c.t === to.id && hasType(c, "pos")).length;
-                const maxR = Math.max(...fs.map(s => conns.filter(c => c.t === s.id && hasType(c, "pos")).length), 1);
-                const pct  = rec / maxR;
-                const gc   = GC[to.group] || C.teal;
-                return (
-                  <td key={to.id} style={{ padding: "3px 2px", background: "transparent", border: `1px solid ${C.border}`, textAlign: "center" }}>
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: cellSize - 6, gap: 1 }}>
-                      <div style={{ width: "65%", height: `${Math.max(pct * 100, 4)}%`, background: rec > 0 ? `linear-gradient(to top, ${gc}, ${tint(gc, "88")})` : C.borderLit, borderRadius: "2px 2px 0 0", minHeight: 3, boxShadow: pct > 0.5 ? `0 0 6px ${tint(gc, "60")}` : "none", transition: "height .4s" }} />
-                      <span style={{ fontSize: 10, fontWeight: 800, color: rec > 0 ? ink(gc) : C.t2 }}>{rec}</span>
-                    </div>
-                  </td>
-                );
-              })}
-              <td colSpan={2} style={{ background: C.cardAlt, border: `1px solid ${C.border}` }} />
-            </tr>
+            {/* Recibidas por tipo (positivas, rechazos y neutrales). Quedan fijas abajo al deslizar. */}
+            {RESUMEN_FILAS.map((f, i) => {
+              const bottom = RESUMEN_FILAS.slice(i + 1).reduce((a, x) => a + x.h, 0);
+              const maxR = Math.max(...fs.map((x) => recibidas[x.id]?.[f.k] || 0), 1);
+              const fijo = { position: "sticky", bottom, height: f.h, boxSizing: "border-box" };
+              return (
+                <tr key={f.k}>
+                  <td style={{ ...fijo, left: 0, zIndex: 4, padding: "4px 10px", background: C.cardAlt, border: `1px solid ${C.border}`, fontWeight: 800, fontSize: 10, color: ink(f.c), letterSpacing: ".6px" }}>{f.l}</td>
+                  {fs.map((to) => {
+                    const rec = recibidas[to.id]?.[f.k] || 0;
+                    return (
+                      <td key={to.id} style={{ ...fijo, zIndex: 2, padding: "2px", background: C.surface, border: `1px solid ${C.border}`, textAlign: "center" }}>
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "flex-end", height: "100%", gap: 1 }}>
+                          {f.barras && <div style={{ width: "65%", height: `${Math.max((rec / maxR) * 100, 4)}%`, background: rec > 0 ? `linear-gradient(to top, ${f.c}, ${tint(f.c, "88")})` : C.borderLit, borderRadius: "2px 2px 0 0", minHeight: 3 }} />}
+                          <span style={{ fontSize: 10, fontWeight: 800, color: rec > 0 ? ink(f.c) : C.t3 }}>{rec}</span>
+                        </div>
+                      </td>
+                    );
+                  })}
+                  <td colSpan={2} style={{ ...fijo, zIndex: 2, background: C.cardAlt, border: `1px solid ${C.border}` }} />
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>}
@@ -2604,6 +2616,8 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
   const [selectedGroup, setSelectedGroup] = useState("Todos");
   const [reportType, setReportType] = useState("individual");
   const [active, setActive] = useState(null);
+  const [estId, setEstId] = useState("");            // informe de un solo estudiante
+  const [versionEst, setVersionEst] = useState("equipo");   // "equipo" (con nombres) o "familias" (sin nombres de otros niños)
 
   const filteredStudents = selectedGroup === "Todos" ? students : students.filter((s) => s.group === selectedGroup);
   const filteredConns = conns.filter((c) => {
@@ -2626,8 +2640,14 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
   const report = useMemo(() => computeReport(filteredStudents, filteredConns, { abiertas: abiertasLista }), [filteredStudents, filteredConns, abiertasLista]);
   const groupLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
   const dateStr = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
-  const build = (mode) => renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC });
-  const exportHTML = () => { dl(build("html"), reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;"); logActivity("report", `descargó el reporte ${REPORT_TYPES[reportType]} (HTML)`, groupLabel); };
+  const estSel = students.find((x) => String(x.id) === String(estId));
+  const buildEst = (mode) => estSel
+    ? renderStudentReportHTML(buildStudentReport({ student: estSel, students, responses, surveys, surveyId: surveyFilter }), { version: versionEst, colegio: SCHOOL.nombre, date: dateStr, mode, color: GC[estSel.group] })
+    : `<!DOCTYPE html><html><body style="font-family:Segoe UI,Arial;padding:40px;color:#444">Elige un estudiante en «Configurar reporte» para ver su informe.</body></html>`;
+  const build = (mode) => (reportType === "estudiante" ? buildEst(mode) : renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC }));
+  // El nombre del estudiante no se guarda en la actividad (solo su grupo y la versión).
+  const faltaEst = () => { if (reportType === "estudiante" && !estSel) { alert("Elige primero un estudiante."); return true; } return false; };
+  const exportHTML = () => { if (faltaEst()) return; dl(build("html"), reportType === "estudiante" ? informeEstudianteNombre(estSel.name, versionEst, "html") : reportFileName(groupLabel, reportType, "html"), "text/html;charset=utf-8;"); logActivity("report", reportType === "estudiante" ? `descargó el informe de un estudiante (${versionEst === "familias" ? "familias" : "equipo"}, HTML)` : `descargó el reporte ${REPORT_TYPES[reportType]} (HTML)`, reportType === "estudiante" ? estSel.group : groupLabel); };
   const sinRespuestas = !(surveyFilter === "all" ? responses : responses.filter((r) => r.surveyId === surveyFilter)).some((r) => filteredStudents.some((s) => String(s.id) === String(r.respondentId)));
   const exportExcel = () => {
     const titulo = surveyFilter === "all" ? "" : (surveys.find((x) => x.id === surveyFilter) || {}).title || "";
@@ -2636,16 +2656,18 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
     logActivity("export", "exportó los resultados a Excel", `${groupLabel}${titulo ? " · " + titulo : " · todas las encuestas"}`);
   };
   const exportPDF = () => {
+    if (faltaEst()) return;
     const win = window.open("", "_blank", "width=900,height=700");
     if (!win) { alert("El navegador bloqueó la ventana del PDF. Permite las ventanas emergentes para este sitio e inténtalo de nuevo."); return; }
     win.document.write(build("pdf"));
     win.document.close();
-    logActivity("report", `abrió el reporte ${REPORT_TYPES[reportType]} para imprimir (PDF)`, groupLabel);
+    logActivity("report", reportType === "estudiante" ? `abrió el informe de un estudiante (${versionEst === "familias" ? "familias" : "equipo"}) para imprimir` : `abrió el reporte ${REPORT_TYPES[reportType]} para imprimir (PDF)`, reportType === "estudiante" ? estSel.group : groupLabel);
   };
   const TYPE_HELP = {
     individual: "Índices de cada estudiante y una ficha por persona: quién la eligió, quién la rechazó y a quién eligió. Incluye nombres.",
     grupal: "Solo cifras del grupo: densidad, roles en conteos y tabla de grupos. Sin nombres de estudiantes ni quién eligió a quién.",
     ambos: "Todo: resumen, índices, grupos, matriz sociométrica con nombres y fichas por estudiante.",
+    estudiante: "Informe amplio de UNA persona (por ejemplo para una reunión con su familia): su perfil, cómo se compara con el grupo, a quién eligió y quién la eligió en cada pregunta, con sus explicaciones. Hay una versión para el equipo (con nombres) y otra para familias (sin nombres de otros niños).",
   };
 
   const renderPreview = () => (
@@ -2676,13 +2698,31 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Tipo de reporte</label>
             <div style={{ display: "flex", gap: 6 }}>
-              {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
+              {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }, { v: "estudiante", l: "🎓 Un estudiante" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
             </div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginTop: 7 }}>{TYPE_HELP[reportType]}</div>
+            {reportType === "estudiante" && (
+              <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div>
+                  <label htmlFor="rn-est" style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 4 }}>Estudiante</label>
+                  <select id="rn-est" value={estId} onChange={(e) => setEstId(e.target.value)} style={{ width: "100%", background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", color: C.text, fontSize: 13, fontFamily: "inherit" }}>
+                    <option value="">— Elige un estudiante —</option>
+                    {grupos.filter((g) => g !== "Todos").map((g) => (<optgroup key={g} label={g}>{students.filter((x) => x.group === g).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "es")).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</optgroup>))}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 4 }}>Versión</label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                    {[{ v: "equipo", l: "🔒 Para el equipo (con nombres)" }, { v: "familias", l: "👪 Para familias (sin nombres de otros niños)" }].map((o) => { const on = versionEst === o.v; return (<button key={o.v} onClick={() => setVersionEst(o.v)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.rx, "80") : C.border}`, background: on ? tint(C.rx, "18") : "transparent", color: on ? C.rx : C.t2 }}>{o.l}</button>); })}
+                  </div>
+                  {versionEst === "equipo" && <div style={{ fontSize: 10, color: C.amber, marginTop: 5, lineHeight: 1.4 }}>⚠ Incluye nombres de otros estudiantes y lo que escribieron. No lo entregues a familias.</div>}
+                </div>
+              </div>
+            )}
           </div>
         </div>
         <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}`, fontSize: 11, color: C.t2 }}>
-          📌 {filteredStudents.length} participantes · {filteredConns.length} conexiones{selectedGroup !== "Todos" && <span style={{ color: GC[selectedGroup] || C.rx, fontWeight: 700, marginLeft: 6 }}>· {selectedGroup}</span>}
+          📌 {reportType === "estudiante" ? (estSel ? `${estSel.name} · ${estSel.group}` : "Elige un estudiante") : `${filteredStudents.length} participantes · ${filteredConns.length} conexiones`}{reportType !== "estudiante" && selectedGroup !== "Todos" && <span style={{ color: GC[selectedGroup] || C.rx, fontWeight: 700, marginLeft: 6 }}>· {selectedGroup}</span>}
         </div>
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
