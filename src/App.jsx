@@ -2863,7 +2863,7 @@ function SchoolLogo({ src, name = "", size = 40, style = {} }) {
   );
 }
 
-function PublicSurvey({ surveyId, colegioId }) {
+function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
   const [survey, setSurvey] = useState(null);
   const [students, setStudents] = useState([]);
   const [step, setStep] = useState("loading");
@@ -2906,6 +2906,7 @@ function PublicSurvey({ surveyId, colegioId }) {
   );
 
   const selectRespondent = async (student) => {
+    setCurrentColegio(colegioId);
     try {
       const respDoc = await getDoc(cdoc("responseMarks", `${surveyId}_${student.id}`));
       if (respDoc.exists()) { setRespondent(student); setAlreadyDone(true); setStep("done"); return; }
@@ -2926,6 +2927,7 @@ function PublicSurvey({ surveyId, colegioId }) {
   const submitSurvey = async () => {
     setSaving(true);
     try {
+      setCurrentColegio(colegioId);
       const rid = `${surveyId}_${respondent.id}`;
       const justificaciones = buildJustificaciones(answers, textos, survey?.questions);
       await setDoc(cdoc("responses", rid), {
@@ -2934,26 +2936,34 @@ function PublicSurvey({ surveyId, colegioId }) {
       });
       try { await setDoc(cdoc("responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
-    } catch (e) { alert("Error al guardar. Intenta de nuevo."); }
+    } catch (e) { console.error("No se pudo guardar la respuesta:", e && e.code, e && e.message); alert("Error al guardar. Intenta de nuevo."); }
     setSaving(false);
   };
 
+  // Tema claro/oscuro: lo elige el estudiante con el botón (y se recuerda en su navegador). Todos los colores salen de las variables de tema.
+  const tema = (
+    <button type="button" onClick={onToggleTheme} aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} title={isDark ? "Tema claro" : "Tema oscuro"}
+      style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", fontSize: 17, lineHeight: 1, fontFamily: "inherit", flexShrink: 0 }}>{isDark ? "☀️" : "🌙"}</button>
+  );
+  const temaFijo = <div style={{ position: "fixed", top: 12, right: 12, zIndex: 5 }}>{tema}</div>;
   const bg = (
-    <div style={{ position: "fixed", inset: 0, background: "#07070f", zIndex: 0 }}>
-      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 25% 20%, #3b82f60a, transparent 55%), radial-gradient(ellipse at 75% 80%, #a78bfa08, transparent 55%)" }} />
-      <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(rgba(255,255,255,0.025) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
+    <div style={{ position: "fixed", inset: 0, background: C.bg, zIndex: 0 }}>
+      <style>{`:root{color-scheme:${isDark ? "dark" : "light"}} button{-webkit-tap-highlight-color:transparent}`}</style>
+      <div style={{ position: "absolute", inset: 0, background: "radial-gradient(ellipse at 25% 20%, var(--c-rxDim), transparent 55%), radial-gradient(ellipse at 75% 80%, var(--c-violetDim), transparent 55%)" }} />
+      <div style={{ position: "absolute", inset: 0, backgroundImage: "radial-gradient(color-mix(in srgb, var(--c-text) 5%, transparent) 1px, transparent 1px)", backgroundSize: "28px 28px" }} />
     </div>
   );
 
   if (step === "loading") return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 16, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       {bg}
+      {temaFijo}
       <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 14 }}>
         <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={44} />
         <Logo size="md" />
       </div>
-      <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, color: "#9498ae", fontSize: 13 }}>
-        <div style={{ width: 16, height: 16, border: "2px solid #252637", borderTopColor: "#3b82f6", borderRadius: "50%", animation: "spin .7s linear infinite" }} />
+      <div style={{ position: "relative", zIndex: 1, display: "flex", alignItems: "center", gap: 10, color: C.t2, fontSize: 13 }}>
+        <div style={{ width: 16, height: 16, border: `2px solid ${C.border}`, borderTopColor: C.rx, borderRadius: "50%", animation: "spin .7s linear infinite" }} />
         Cargando encuesta...
       </div>
       <style>{`@keyframes spin{to{transform:rotate(360deg)}} *{box-sizing:border-box}`}</style>
@@ -2963,10 +2973,11 @@ function PublicSurvey({ surveyId, colegioId }) {
   if (step === "error") return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       {bg}
+      {temaFijo}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 380 }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: "#eaedf6" }}>Encuesta no disponible</div>
-        <div style={{ fontSize: 13, color: "#9498ae", lineHeight: 1.6 }}>Este link no es válido o la encuesta no está activa. Contacta a tu psicólogo o profesor.</div>
+        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: C.text }}>Encuesta no disponible</div>
+        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>Este link no es válido o la encuesta no está activa. Contacta a tu psicólogo o profesor.</div>
       </div>
       <style>{`*{box-sizing:border-box}`}</style>
     </div>
@@ -2975,19 +2986,20 @@ function PublicSurvey({ surveyId, colegioId }) {
   if (step === "done") return (
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       {bg}
+      {temaFijo}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 400 }}>
-        <div style={{ width: 80, height: 80, borderRadius: 20, background: alreadyDone ? "#fbbf2420" : "#34d39920", display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 20 }}>
+        <div style={{ width: 80, height: 80, borderRadius: 20, background: alreadyDone ? tint(C.amber, "20") : tint(C.ok, "20"), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 20 }}>
           {alreadyDone ? "⚠️" : "✅"}
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: alreadyDone ? "#fbbf24" : "#34d399" }}>
+        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: alreadyDone ? C.amber : C.ok }}>
           {alreadyDone ? "Ya respondiste esta encuesta" : "¡Gracias por responder!"}
         </div>
-        <div style={{ fontSize: 13, color: "#9498ae", lineHeight: 1.7, marginBottom: 6 }}>
+        <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.7, marginBottom: 6 }}>
           {alreadyDone ? `${respondent?.name}, ya registraste tus respuestas anteriormente.` : `${respondent?.name}, tus respuestas fueron registradas correctamente.`}
         </div>
-        <div style={{ fontSize: 11, color: "#555770" }}>Puedes cerrar esta ventana.</div>
+        <div style={{ fontSize: 11, color: C.t3 }}>Puedes cerrar esta ventana.</div>
         {alreadyDone && (
-          <button onClick={() => setStep("select")} style={{ marginTop: 20, padding: "9px 20px", borderRadius: 9, border: "1px solid #252637", background: "#16171f", color: "#9498ae", fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
+          <button onClick={() => setStep("select")} style={{ marginTop: 20, padding: "9px 20px", borderRadius: 9, border: `1px solid ${C.border}`, background: C.card, color: C.t2, fontSize: 13, cursor: "pointer", fontFamily: "inherit" }}>
             Seleccionar otro estudiante
           </button>
         )}
@@ -3009,28 +3021,28 @@ function PublicSurvey({ surveyId, colegioId }) {
         <div style={{ position: "relative", zIndex: 1, maxWidth: 600, margin: "0 auto" }}>
 
           {/* Header con logos */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, padding: "12px 16px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 14, border: "1px solid rgba(59,130,246,0.15)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 24, padding: "12px 16px", background: C.card, backdropFilter: "blur(12px)", borderRadius: 14, border: `1px solid ${tint(C.rx, "26")}` }}>
             <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={48} />
-            <Logo size="md" />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flex: 1 }}><Logo size="md" />{tema}</div>
           </div>
 
           {/* Info de la encuesta */}
-          <div style={{ background: "rgba(22,23,31,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(59,130,246,0.2)", borderRadius: 14, padding: 20, marginBottom: 14 }}>
-            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: "#eaedf6" }}>{survey?.title}</div>
-            <div style={{ display: "flex", gap: 14, fontSize: 11, color: "#9498ae" }}>
+          <div style={{ background: C.card, backdropFilter: "blur(12px)", border: `1px solid ${tint(C.rx, "33")}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
+            <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: C.text }}>{survey?.title}</div>
+            <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
               <span>📋 {survey?.questions?.length} preguntas</span>
               <span>🎯 Máx. {survey?.maxSel} selecciones</span>
               <span>👥 {filtered.length} participantes</span>
             </div>
-            <div style={{ fontSize: 11, color: "#9498ae", marginTop: 10, lineHeight: 1.5 }}>
+            <div style={{ fontSize: 11, color: C.t2, marginTop: 10, lineHeight: 1.5 }}>
               🔒 Tus respuestas son confidenciales: solo las ve el equipo del colegio. Tus compañeros no ven lo que respondes.
             </div>
           </div>
 
           {/* Selector de grupo — solo si hay más de 1 grupo disponible */}
           {allAvailGroups.length > 1 && (
-            <div style={{ background: "rgba(22,23,31,0.85)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 14, padding: 16, marginBottom: 14 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "#9498ae", marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px" }}>
+            <div style={{ background: C.card, backdropFilter: "blur(12px)", border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: C.t2, marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px" }}>
                 🏫 Filtrar por grupo
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -3041,9 +3053,9 @@ function PublicSurvey({ surveyId, colegioId }) {
                     <button key={g} onClick={() => toggleGroup(g)} style={{
                       padding: "6px 16px", borderRadius: 8, fontSize: 12, fontWeight: 700,
                       cursor: "pointer", fontFamily: "inherit", transition: "all .2s",
-                      border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.1)"}`,
+                      border: `1.5px solid ${on ? gc : C.border}`,
                       background: on ? tint(gc, "22") : "transparent",
-                      color: on ? gc : "#555770",
+                      color: on ? gc : C.t3,
                     }}>
                       {g} <span style={{ opacity: .6, fontSize: 10 }}>({students.filter(s => s.group === g).length})</span>
                     </button>
@@ -3053,23 +3065,23 @@ function PublicSurvey({ surveyId, colegioId }) {
             </div>
           )}
 
-          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: "#9498ae" }}>¿Quién eres tú?</div>
+          <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 12, color: C.t2 }}>¿Quién eres tú?</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             {filtered.map(s => {
               const gc = GC[s.group] || "#3b82f6";
               return (
                 <button key={s.id} onClick={() => selectRespondent(s)} style={{
-                  background: "rgba(22,23,31,0.85)", border: "1px solid rgba(255,255,255,0.08)",
+                  background: C.card, border: `1px solid ${C.border}`,
                   borderRadius: 12, padding: "12px 14px", cursor: "pointer",
                   display: "flex", alignItems: "center", gap: 10,
                   transition: "all .2s", fontFamily: "inherit", textAlign: "left",
                 }}
                 onMouseEnter={e => { e.currentTarget.style.borderColor = gc; e.currentTarget.style.transform = "translateY(-1px)"; e.currentTarget.style.background = tint(gc, "10"); }}
-                onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.08)"; e.currentTarget.style.transform = "none"; e.currentTarget.style.background = "rgba(22,23,31,0.85)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.transform = "none"; e.currentTarget.style.background = C.card; }}
                 >
                   <div style={{ width: 38, height: 38, borderRadius: 10, background: tint(gc, "20"), border: `1.5px solid ${tint(gc, "40")}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 13, color: gc, flexShrink: 0 }}>{s.av}</div>
                   <div>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: "#eaedf6" }}>{s.name}</div>
+                    <div style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{s.name}</div>
                     <div style={{ fontSize: 10, color: gc }}>{s.group}</div>
                   </div>
                 </button>
@@ -3098,32 +3110,32 @@ function PublicSurvey({ surveyId, colegioId }) {
         <div style={{ position: "relative", zIndex: 1, maxWidth: 560, margin: "0 auto" }}>
 
           {/* Header mini con logos */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "8px 14px", background: "rgba(22,23,31,0.8)", backdropFilter: "blur(12px)", borderRadius: 12, border: "1px solid rgba(59,130,246,0.12)" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18, padding: "8px 14px", background: C.card, backdropFilter: "blur(12px)", borderRadius: 12, border: `1px solid ${tint(C.rx, "1f")}` }}>
             <SchoolLogo src={survey?.logo} name={survey?.colegioNombre} size={34} />
-            <Logo size="sm" />
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, flex: 1 }}><Logo size="sm" />{tema}</div>
           </div>
 
           {/* Barra de progreso */}
           <div style={{ display: "flex", gap: 3, marginBottom: 6 }}>
             {survey.questions.map((_, i) => (
-              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < qIdx ? "#34d399" : i === qIdx ? "#3b82f6" : "rgba(255,255,255,0.1)", transition: "all .4s", boxShadow: i === qIdx ? "0 0 8px #3b82f660" : undefined }} />
+              <div key={i} style={{ flex: 1, height: 5, borderRadius: 3, background: i < qIdx ? C.ok : i === qIdx ? C.rx : C.border, transition: "all .4s", boxShadow: i === qIdx ? "0 0 8px #3b82f660" : undefined }} />
             ))}
           </div>
-          <div style={{ fontSize: 11, color: "#eaedf6", marginBottom: 16, textAlign: "center", fontWeight: 600 }}>
-            <span style={{ color: "#3b82f6" }}>Pregunta {qIdx + 1}</span>
-            <span style={{ color: "#555770" }}> de {survey.questions.length}</span>
+          <div style={{ fontSize: 11, color: C.text, marginBottom: 16, textAlign: "center", fontWeight: 600 }}>
+            <span style={{ color: C.rx }}>Pregunta {qIdx + 1}</span>
+            <span style={{ color: C.t3 }}> de {survey.questions.length}</span>
           </div>
 
           {/* Card de pregunta */}
-          <div style={{ background: "rgba(22,23,31,0.9)", backdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 16, padding: 20, marginBottom: 14 }}>
+          <div style={{ background: C.card, backdropFilter: "blur(12px)", border: `1px solid ${C.border}`, borderRadius: 16, padding: 20, marginBottom: 14 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
               <div style={{ width: 28, height: 28, borderRadius: 7, background: (GC[respondent.group] || "#3b82f6") + "20", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: GC[respondent.group] || "#3b82f6" }}>{respondent.av}</div>
-              <span style={{ fontSize: 12, color: "#9498ae" }}>{respondent.name}</span>
-              <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: "#555770", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
+              <span style={{ fontSize: 12, color: C.t2 }}>{respondent.name}</span>
+              <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: C.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? "#f87171" : "#eaedf6", lineHeight: 1.4 }}>{q.text}</div>
-            <div style={{ fontSize: 11, color: "#555770", marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>
-            {esJ && <div style={{ fontSize: 11, color: "#9498ae", marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? C.err : C.text, lineHeight: 1.4 }}>{q.text}</div>
+            <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>
+            {esJ && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
                 const on = sel.includes(s.id);
@@ -3132,23 +3144,23 @@ function PublicSurvey({ surveyId, colegioId }) {
                 return (
                   <div key={s.id}>
                   <button onClick={() => toggleSel(q.id, s.id)} style={{
-                    background: on ? tint(gc, "12") : "rgba(18,19,26,0.8)", border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.08)"}`,
+                    background: on ? tint(gc, "12") : C.surface, border: `1.5px solid ${on ? gc : C.border}`,
                     borderRadius: 10, padding: "10px 14px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 10,
                     transition: "all .2s", fontFamily: "inherit",
                   }}>
-                    <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${on ? gc : "rgba(255,255,255,0.15)"}`, background: on ? gc : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }}>
+                    <div style={{ width: 20, height: 20, borderRadius: 5, border: `2px solid ${on ? gc : C.borderLit}`, background: on ? gc : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "all .2s" }}>
                       {on && <span style={{ color: "#fff", fontSize: 11, fontWeight: 800 }}>✓</span>}
                     </div>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: tint(gc, "18"), display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 10, color: gc }}>{s.av}</div>
-                    <span style={{ fontSize: 13, color: "#eaedf6", flex: 1, textAlign: "left" }}>{s.name}</span>
+                    <span style={{ fontSize: 13, color: C.text, flex: 1, textAlign: "left" }}>{s.name}</span>
                     <span style={{ fontSize: 10, color: gc }}>{s.group}</span>
                   </button>
                   {on && esJ && (
                     <div style={{ margin: "6px 0 4px 12px", paddingLeft: 12, borderLeft: `2px solid ${tint(gc, "60")}` }}>
-                      <label htmlFor={`j-${q.id}-${s.id}`} style={{ display: "block", fontSize: 11, color: "#9498ae", marginBottom: 4 }}>¿Por qué elegiste a {s.name.split(" ")[0]}? <span style={{ color: "#f59e0b" }}>(obligatorio)</span></label>
-                      <textarea id={`j-${q.id}-${s.id}`} value={texto} maxLength={MAX_JUST} rows={2} onChange={(e) => setTextos((t) => ({ ...t, [justKey(q.id, s.id)]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: "rgba(10,11,16,0.9)", border: `1px solid ${texto.trim().length < MIN_JUST ? "#f59e0b80" : "rgba(255,255,255,0.12)"}`, borderRadius: 8, padding: "8px 10px", color: "#eaedf6", fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
-                      <div style={{ fontSize: 10, color: "#555770", textAlign: "right" }}>{texto.length}/{MAX_JUST}</div>
+                      <label htmlFor={`j-${q.id}-${s.id}`} style={{ display: "block", fontSize: 11, color: C.t2, marginBottom: 4 }}>¿Por qué elegiste a {s.name.split(" ")[0]}? <span style={{ color: "#f59e0b" }}>(obligatorio)</span></label>
+                      <textarea id={`j-${q.id}-${s.id}`} value={texto} maxLength={MAX_JUST} rows={2} onChange={(e) => setTextos((t) => ({ ...t, [justKey(q.id, s.id)]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: C.bgSub, border: `1px solid ${texto.trim().length < MIN_JUST ? "#f59e0b80" : C.border}`, borderRadius: 8, padding: "8px 10px", color: C.text, fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
+                      <div style={{ fontSize: 10, color: C.t3, textAlign: "right" }}>{texto.length}/{MAX_JUST}</div>
                     </div>
                   )}
                   </div>
@@ -3161,18 +3173,18 @@ function PublicSurvey({ surveyId, colegioId }) {
           <div style={{ display: "flex", gap: 8 }}>
             {qIdx > 0 && (
               <button onClick={() => { setQIdx(i => i - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "1px solid rgba(255,255,255,0.1)", background: "transparent", color: "#9498ae", fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: `1px solid ${C.border}`, background: "transparent", color: C.t2, fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
                 ← Anterior
               </button>
             )}
             {!isLast ? (
               <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={faltanJ.length > 0}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: faltanJ.length ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: faltanJ.length ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
                 Siguiente →
               </button>
             ) : (
               <button onClick={submitSurvey} disabled={saving || faltanJ.length > 0}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || faltanJ.length ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || faltanJ.length ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
                 {saving ? "Guardando..." : "✅ Enviar respuestas"}
               </button>
             )}
@@ -3590,14 +3602,20 @@ export default function App() {
   const [publicSurvey] = useState(() => (new URLSearchParams(window.location.search).has("survey") ? (parsePublicSurveyUrl(window.location.search) || { invalid: true }) : null));
 
   // ── TEMA ──────────────────────────────────────────────────
+  const temaTocado = useRef(false);
   const [isDark, setIsDark] = useState(() => {
-    const saved = localStorage.getItem("rednexo-theme");
-    return saved ? saved === "dark" : true;
+    let saved = null; try { saved = localStorage.getItem("rednexo-theme"); } catch (e) {}
+    if (saved) return saved === "dark";
+    // Estudiantes (encuesta pública): sin preferencia guardada, el tema del celular. El panel del colegio sigue empezando oscuro.
+    if (publicSurvey && typeof window.matchMedia === "function") return !window.matchMedia("(prefers-color-scheme: light)").matches;
+    return true;
   });
 
   useEffect(() => {
-    if (isDark) { document.documentElement.classList.remove("light"); localStorage.setItem("rednexo-theme", "dark"); }
-    else { document.documentElement.classList.add("light"); localStorage.setItem("rednexo-theme", "light"); }
+    // En la encuesta pública solo se guarda si el estudiante lo cambia con el botón; así, mientras no elija, sigue el tema de su celular.
+    const guardar = (v) => { try { localStorage.setItem("rednexo-theme", v); } catch (e) {} };
+    if (isDark) { document.documentElement.classList.remove("light"); if (!publicSurvey || temaTocado.current) guardar("dark"); }
+    else { document.documentElement.classList.add("light"); if (!publicSurvey || temaTocado.current) guardar("light"); }
   }, [isDark]);
 
   // session: quién es (Google) y a qué colegios pertenece. user: sesión + colegio elegido + rol en ese colegio.
@@ -3614,7 +3632,8 @@ export default function App() {
   const current = colegios.find((c) => c.id === colegioId);
   const userRole = session ? (session.isSuper ? "superadmin" : current?.role) : null;
   const user = useMemo(() => (session && colegioId && userRole ? { role: userRole, email: session.email, name: session.name, photo: session.photo } : null), [session, colegioId, userRole]);
-  setCurrentColegio(colegioId);
+  // En la encuesta pública el colegio lo fija la propia encuesta; el estado del panel (sin sesión = null) no debe borrarlo en cada renderizado.
+  if (!publicSurvey) setCurrentColegio(colegioId);
   const [authView, setAuthView] = useState("login");
   const [tab, setTab] = useState("dashboard");
   const [filter, setFilter] = useState("all");
@@ -3961,7 +3980,7 @@ export default function App() {
   );
 
   // ── Encuesta pública — no requiere login ──
-  if (publicSurvey) return <PublicSurvey surveyId={publicSurvey.surveyId} colegioId={publicSurvey.colegioId} />;
+  if (publicSurvey) return <PublicSurvey surveyId={publicSurvey.surveyId} colegioId={publicSurvey.colegioId} isDark={isDark} onToggleTheme={() => { temaTocado.current = true; setIsDark((d) => !d); }} />;
 
   const estLic = estadoLicencia(licencia);
   const licBloqueada = estLic.fase === "bloqueada";
