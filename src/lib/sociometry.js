@@ -36,9 +36,12 @@ export function buildConnections(responses, surveys) {
       const tp = q?.tp || "pos";
       for (const toId of selected || []) {
         const key = `${r.respondentId}_${toId}`;
-        if (!acc[key]) acc[key] = { f: r.respondentId, t: toId, tpCounts: { pos: 0, neg: 0, neu: 0 }, count: 0 };
+        if (!acc[key]) acc[key] = { f: r.respondentId, t: toId, tpCounts: { pos: 0, neg: 0, neu: 0 }, count: 0, notas: [] };
         acc[key].tpCounts[tp] = (acc[key].tpCounts[tp] || 0) + 1;
         acc[key].count++;
+        // Si el estudiante explicó por qué eligió a este compañero, la explicación viaja con la conexión (informes y detalle del mapa).
+        const nota = r.justificaciones && r.justificaciones[`${qId}|${toId}`];
+        if (typeof nota === "string" && nota.trim()) acc[key].notas.push({ q: q?.text || "", tp, text: nota.trim() });
       }
     }
   }
@@ -47,7 +50,7 @@ export function buildConnections(responses, surveys) {
     // `tp` es el tipo dominante (el que se dibuja con «Todas»); `types` y `counts` conservan TODOS los tipos que
     // esa persona marcó para ese compañero, para que ninguno desaparezca al filtrar o al contar.
     const types = TYPE_ORDER.filter((t) => c.tpCounts[t] > 0);
-    return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp, types, counts: { pos: c.tpCounts.pos, neu: c.tpCounts.neu, neg: c.tpCounts.neg } };
+    return { f: c.f, t: c.t, s: Math.min(c.count, 3), tp, types, counts: { pos: c.tpCounts.pos, neu: c.tpCounts.neu, neg: c.tpCounts.neg }, ...(c.notas.length ? { notas: c.notas } : {}) };
   });
 }
 
