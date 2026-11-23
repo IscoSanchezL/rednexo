@@ -41,7 +41,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
     ["Índices", "Una fila por estudiante: cuántas elecciones hizo y recibió, aceptación, rechazo, expansión y rol."],
     ["Conexiones", "Una fila por pareja (quién → a quién) con cuántas veces se marcó cada tipo."],
     ["Matriz", "Quién (filas) marcó a quién (columnas). Valor = elecciones positivas − rechazos (positivo = aceptación; negativo = rechazo; vacío = sin conexión)."],
-    ["Respuestas", "Una fila por elección individual. Es la hoja ideal para tablas dinámicas y gráficos."],
+    ["Respuestas", "Una fila por elección individual (con la justificación escrita, si la hubo). Es la hoja ideal para tablas dinámicas y gráficos."],
     ["Por pregunta", "Resumen de cada pregunta: cuántos respondieron y cuántas elecciones recibió."], [],
     [{ v: "Definiciones", s: "bold" }],
     ["Aceptación", "Compañeros que lo eligieron positivamente ÷ (participantes − 1). De 0 % a 100 %."],
@@ -58,11 +58,11 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
 
   // ── Conexiones ──
   const porPar = new Map(conns.map((x) => [String(x.f) + ">" + String(x.t), x]));   // búsqueda directa: con 1.500 estudiantes recorrer la lista por cada celda tardaba más de un minuto
-  const conexiones = [["De", "Grupo (de)", "Para", "Grupo (para)", "Tipo dominante", "Positivas", "Neutrales", "Negativas", "Fuerza (1-3)", "¿Mutua positiva?"]];
+  const conexiones = [["De", "Grupo (de)", "Para", "Grupo (para)", "Tipo dominante", "Positivas", "Neutrales", "Negativas", "Fuerza (1-3)", "¿Mutua positiva?", "Justificaciones"]];
   const sorted = conns.slice().sort((a, b) => nombre(a.f).localeCompare(nombre(b.f), "es") || nombre(a.t).localeCompare(nombre(b.t), "es"));
   for (const c of sorted) {
     const mutua = hasType(c, "pos") && hasType(porPar.get(String(c.t) + ">" + String(c.f)), "pos");
-    conexiones.push([nombre(c.f), grupoDe(c.f), nombre(c.t), grupoDe(c.t), TIPO[c.tp] || c.tp, (c.counts || {}).pos ?? (c.tp === "pos" ? c.s : 0), (c.counts || {}).neu ?? (c.tp === "neu" ? c.s : 0), (c.counts || {}).neg ?? (c.tp === "neg" ? c.s : 0), c.s, mutua ? "Sí" : "No"]);
+    conexiones.push([nombre(c.f), grupoDe(c.f), nombre(c.t), grupoDe(c.t), TIPO[c.tp] || c.tp, (c.counts || {}).pos ?? (c.tp === "pos" ? c.s : 0), (c.counts || {}).neu ?? (c.tp === "neu" ? c.s : 0), (c.counts || {}).neg ?? (c.tp === "neg" ? c.s : 0), c.s, mutua ? "Sí" : "No", (c.notas || []).map((n) => n.text).join(" | ")]);
   }
 
   // ── Matriz ──
@@ -83,7 +83,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
   }
 
   // ── Respuestas (una fila por elección) y Por pregunta ──
-  const respuestas = [["Encuesta", "Pregunta", "Tipo de pregunta", "De", "Grupo (de)", "Elegido(a)", "Grupo (elegido)", "Fecha de respuesta"]];
+  const respuestas = [["Encuesta", "Pregunta", "Tipo de pregunta", "De", "Grupo (de)", "Elegido(a)", "Grupo (elegido)", "Fecha de respuesta", "Justificación (lo que escribió)"]];
   const porPregunta = new Map();
   const orden = (a, b) => nombre(a.respondentId).localeCompare(nombre(b.respondentId), "es");
   for (const sv of surveyList) {
@@ -93,7 +93,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
         const chosen = (r.answers && r.answers[q.id]) || [];
         if (!chosen.length) continue;
         const acc = porPregunta.get(`${sv.id}|${q.id}`); acc.respondieron.add(String(r.respondentId));
-        for (const to of chosen) { acc.elecciones++; respuestas.push([sv.title, q.text, TIPO[q.tp] || q.tp, nombre(r.respondentId), grupoDe(r.respondentId), nombre(to), grupoDe(to), when(r.submittedAt)]); }
+        for (const to of chosen) { acc.elecciones++; respuestas.push([sv.title, q.text, TIPO[q.tp] || q.tp, nombre(r.respondentId), grupoDe(r.respondentId), nombre(to), grupoDe(to), when(r.submittedAt), (r.justificaciones && r.justificaciones[`${q.id}|${to}`]) || ""]); }
       }
     }
   }
@@ -106,9 +106,9 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
     sheets: [
       { name: "Léeme", rows: leeme, widths: w(30, 100) },
       { name: "Índices", header: true, rows: indices, widths: w(24, 18, 8, 8, 16, 14, 14, 12, 12, 10, 11, 14, 12) },
-      { name: "Conexiones", header: true, rows: conexiones, widths: w(24, 18, 24, 18, 14, 11, 11, 11, 11, 15) },
+      { name: "Conexiones", header: true, rows: conexiones, widths: w(24, 18, 24, 18, 14, 11, 11, 11, 11, 15, 50) },
       { name: "Matriz", header: true, rows: matriz, widths: matrizGrande ? [30, 120] : [24, ...scopeStudents.map(() => 12), 11, 12] },
-      { name: "Respuestas", header: true, rows: respuestas, widths: w(26, 52, 15, 24, 18, 24, 18, 18) },
+      { name: "Respuestas", header: true, rows: respuestas, widths: w(26, 52, 15, 24, 18, 24, 18, 18, 60) },
       { name: "Por pregunta", header: true, rows: preguntas, widths: w(26, 56, 12, 16, 12, 18) },
     ],
   };

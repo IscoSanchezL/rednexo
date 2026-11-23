@@ -10,6 +10,8 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
+import { MAX_JUST, MIN_JUST, KIND_LABELS, kindOf, esJustificable, justKey, buildJustificaciones, justificacionesFaltantes } from "./lib/justificacion";
+import { validarNombreGrupo, renombrarEnEncuesta, resumenEliminar, textoEliminar } from "./lib/grupos";
 import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
 import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
 import { aMs, estadoLicencia, mensajeLicencia, renovar, licenciaNueva, excedeTope, PLANES, etiquetaPlan, aplicarPlan, validarPlanes, aplicarPlanes, porAvisar, recordatorio } from "./lib/licencia";
@@ -1719,6 +1721,59 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     setImp(null); setImporting(false);
   };
 
+  // ── Editar y eliminar un grupo ──
+  const [editG, setEditG] = useState(null);   // { old, name, color }
+  const [busyG, setBusyG] = useState(false);
+  const enTandas = async (lista, fn, n = 20) => { const res = []; for (let i = 0; i < lista.length; i += n) res.push(...(await Promise.all(lista.slice(i, i + n).map(fn)))); return res; };
+  const encuestasDelColegio = async () => { try { return (await getDocs(ccol("surveys"))).docs.map((d) => ({ id: d.id, ...d.data() })); } catch (e) { return []; } };
+  const guardarEdicion = async () => {
+    if (!editG || busyG) return;
+    const v = validarNombreGrupo(editG.name, names, editG.old);
+    if (!v.ok) { setNotice("❌ " + v.error); return; }
+    const viejo = editG.old, nuevo = v.nombre, color = editG.color;
+    const docViejo = groups.find((x) => x.name === viejo);
+    setBusyG(true);
+    try {
+      const docNuevo = { id: nuevo === viejo && docViejo ? docViejo.id : groupIdFor(nuevo), name: nuevo, color };
+      const miembros = students.filter((x) => x.group === viejo);
+      if (nuevo !== viejo) {
+        // Los estudiantes se guardan primero: si algo falla, el grupo viejo sigue existiendo y nada queda a medias.
+        const res = await enTandas(miembros, (x) => saveStudentFS({ ...x, group: nuevo }));
+        if (res.some((ok) => !ok)) { setNotice("❌ No se pudieron mover todos los estudiantes al nombre nuevo. Revisa tu conexión e inténtalo de nuevo."); setBusyG(false); return; }
+      }
+      const okG = await saveGroupFS(docNuevo);
+      if (!okG) { setNotice("❌ No se pudo guardar el grupo. Inténtalo de nuevo."); setBusyG(false); return; }
+      if (docViejo && docViejo.id !== docNuevo.id) await deleteGroupFS(docViejo.id);
+      setGroups((p) => [...p.filter((x) => x.id !== docNuevo.id && x.id !== docViejo?.id), docNuevo]);
+      if (nuevo !== viejo) {
+        setStudents((p) => p.map((x) => (x.group === viejo ? { ...x, group: nuevo } : x)));
+        // Las encuestas que usaban el nombre viejo pasan a usar el nuevo (si no, quedarían apuntando a un grupo que ya no existe).
+        for (const sv of await encuestasDelColegio()) { const patch = renombrarEnEncuesta(sv, viejo, nuevo); if (patch) { try { await updateDoc(cdoc("surveys", sv.id), patch); } catch (e) { console.error(e); } } }
+        logActivity("group", "renombró el grupo", `${viejo} → ${nuevo}`);
+      } else logActivity("group", "cambió el color del grupo", nuevo);
+      setNotice(nuevo !== viejo ? `✅ Grupo renombrado a «${nuevo}».` : "✅ Grupo actualizado.");
+      setEditG(null);
+    } catch (e) { console.error(e); setNotice("❌ No se pudo editar el grupo."); }
+    setBusyG(false);
+  };
+  const eliminarGrupo = async (g) => {
+    if (busyG) return;
+    const r = resumenEliminar(g, students, await encuestasDelColegio());
+    if (!window.confirm(textoEliminar(g, r))) return;
+    if (r.estudiantes > 0 && !window.confirm(`Última confirmación: se eliminarán ${r.estudiantes} estudiante${r.estudiantes === 1 ? "" : "s"} de «${g}». ¿Continuar?`)) return;
+    setBusyG(true);
+    try {
+      const miembros = students.filter((x) => x.group === g);
+      await enTandas(miembros, (x) => deleteStudentFS(x.id));
+      for (const gd of groups.filter((x) => x.name === g)) await deleteGroupFS(gd.id);
+      setStudents((p) => p.filter((x) => x.group !== g));
+      setGroups((p) => p.filter((x) => x.name !== g));
+      logActivity("group", `eliminó el grupo${r.estudiantes ? ` y sus ${r.estudiantes} estudiante(s)` : ""}`, g);
+      setNotice(`✅ Grupo «${g}» eliminado.`);
+    } catch (e) { console.error(e); setNotice("❌ No se pudo eliminar el grupo."); }
+    setBusyG(false);
+  };
+
   const createGroup = async () => {
     const name = newGroup.trim();
     if (!name) return;
@@ -1906,14 +1961,24 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                   <div style={{ width: 10, height: 10, borderRadius: 3, background: gc }} />
-                  <span style={{ fontSize: 15, fontWeight: 700 }}>{g}</span>
+                  {editG?.old === g ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                      <input autoFocus value={editG.name} onChange={(e) => setEditG({ ...editG, name: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") guardarEdicion(); if (e.key === "Escape") setEditG(null); }} maxLength={60} aria-label="Nombre del grupo" style={{ background: C.bgSub, border: `1px solid ${C.borderLit}`, borderRadius: 7, padding: "5px 9px", color: C.text, fontSize: 14, fontWeight: 700, fontFamily: "inherit", outline: "none", width: 150 }} />
+                      <div style={{ display: "flex", gap: 4 }}>{GROUP_COLORS.map((c) => <button key={c} type="button" onClick={() => setEditG({ ...editG, color: c })} aria-label={"Color " + c} style={{ width: 16, height: 16, borderRadius: 4, background: c, cursor: "pointer", border: editG.color === c ? `2px solid ${C.text}` : "2px solid transparent", padding: 0 }} />)}</div>
+                    </div>
+                  ) : <span style={{ fontSize: 15, fontWeight: 700 }}>{g}</span>}
                   <Badge color={gc}>
                     {search.trim() && visibleMembers.length !== members.length
                       ? `${visibleMembers.length}/${members.length}`
                       : members.length}
                   </Badge>
                 </div>
-                <Btn sm onClick={() => setAddingTo(addingTo === g ? null : g)}>+ Agregar</Btn>
+                <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  {canEdit && (editG?.old === g
+                    ? (<><Btn sm v="pri" disabled={busyG} onClick={guardarEdicion}>{busyG ? "Guardando…" : "✓ Guardar"}</Btn><Btn sm v="ghost" disabled={busyG} onClick={() => setEditG(null)}>Cancelar</Btn></>)
+                    : (<><Btn sm v="ghost" title="Cambiar el nombre o el color del grupo" onClick={() => setEditG({ old: g, name: g, color: GC[g] || GROUP_COLORS[0] })}>✎ Editar</Btn><Btn sm v="dan" disabled={busyG} title="Eliminar el grupo" onClick={() => eliminarGrupo(g)}>🗑</Btn></>))}
+                  <Btn sm onClick={() => setAddingTo(addingTo === g ? null : g)}>+ Agregar</Btn>
+                </div>
               </div>
               {addingTo === g && (
                 <div style={{ marginBottom: 10, padding: 10, borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}` }}>
@@ -2095,7 +2160,8 @@ function ActivityLog() {
 function AddQToSurvey({ onAdd }) {
   const [text, setText] = useState("");
   const [tp, setTp] = useState("pos");
-  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp }); setText(""); setTp("pos"); };
+  const [kind, setKind] = useState("seleccion");
+  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp, ...(kind !== "seleccion" ? { kind } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); };
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: C.card, border: `1px dashed ${C.borderLit}` }}>
       <div style={{ fontSize: 10, color: C.t3, marginBottom: 7, fontWeight: 600 }}>➕ NUEVA PREGUNTA</div>
@@ -2105,6 +2171,9 @@ function AddQToSurvey({ onAdd }) {
           <option value="pos">+ Positiva</option>
           <option value="neg">− Negativa</option>
           <option value="neu">○ Neutral</option>
+        </select>
+        <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de pregunta" title="Tipo de pregunta: selección múltiple, o selección con justificación (el estudiante escribe por qué eligió a cada compañero)" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: kind === "seleccion" ? C.t2 : C.sky, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+          {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
         <Btn v="pri" sm onClick={add} disabled={!text.trim()}>+ Agregar</Btn>
       </div>
@@ -2142,7 +2211,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const [nS, setNS] = useState(blankSurvey);
   const [importPreview, setImportPreview] = useState(null);
   const fileInputRef = useRef(null);
-  const [nQ, setNQ] = useState({ text: "", tp: "pos" });
+  const [nQ, setNQ] = useState({ text: "", tp: "pos", kind: "seleccion" });
 
   useEffect(() => {
     const q = query(ccol("surveys"), orderBy("createdAt", "desc"));
@@ -2156,7 +2225,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     return () => unsub();
   }, []);
 
-  const addQ = () => { if (!nQ.text.trim()) return; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...nQ }] })); setNQ({ text: "", tp: "pos" }); };
+  const addQ = () => { if (!nQ.text.trim()) return; const { kind, ...resto } = nQ; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...resto, text: nQ.text.trim(), ...(kind !== "seleccion" ? { kind } : {}) }] })); setNQ({ text: "", tp: "pos", kind: "seleccion" }); };
 
   const flash = (m, ms = 4500) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
 
@@ -2331,6 +2400,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
               <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 22 }}>#{i + 1}</span>
                 <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{q.text}</span>
+                {esJustificable(q) && <span title={KIND_LABELS.justificable} style={{ fontSize: 11 }}>💬</span>}
                 <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>
                 <button onClick={() => setNS((s) => ({ ...s, questions: s.questions.filter((x) => x.id !== q.id) }))} style={{ background: "none", border: "none", color: C.err, cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
@@ -2341,6 +2411,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <Inp placeholder="Escribe la pregunta..." value={nQ.text} onChange={(v) => setNQ((q) => ({ ...q, text: v }))} />
             <div style={{ display: "flex", gap: 8 }}>
               <Sel value={nQ.tp} onChange={(v) => setNQ((q) => ({ ...q, tp: v }))} options={[{ v: "pos", l: "+ Positiva" }, { v: "neg", l: "− Negativa" }, { v: "neu", l: "○ Neutral" }]} />
+              <Sel value={nQ.kind} onChange={(v) => setNQ((q) => ({ ...q, kind: v }))} options={Object.entries(KIND_LABELS).map(([v, l]) => ({ v, l }))} />
               <Btn v="pri" onClick={addQ} disabled={!nQ.text.trim()}>+ Agregar</Btn>
             </div>
           </div>
@@ -2467,7 +2538,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
-                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()})</span>
+                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()}){sv.questions.some(esJustificable) ? ` · 💬 ${sv.questions.filter(esJustificable).length} con justificación` : ""}</span>
                 <span title="Grupos a los que se aplica">👥 {surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
                 <span>🎯 Máx: {sv.maxSel}</span>
                 <span title="Los estudiantes no ven las respuestas de los demás; solo el equipo del colegio las ve. Se guarda quién respondió.">🔒 Confidencial</span>
@@ -2509,6 +2580,9 @@ function SurveyBuilder({ role, students, GROUPS }) {
                   <input value={q.text} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, text: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 12, outline: "none", fontFamily: "inherit", padding: "2px 0" }} />
                   <select value={q.tp} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, tp: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
                     <option value="pos">+ Positiva</option><option value="neg">− Negativa</option><option value="neu">○ Neutral</option>
+                  </select>
+                  <select value={kindOf(q)} aria-label="Tipo de pregunta" onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => { if (qq.id !== q.id) return qq; const { kind: _k, ...resto } = qq; return val === "seleccion" ? resto : { ...resto, kind: val }; }); updateSurveyQuestions(sv.id, newQs); }} title="Tipo de pregunta: selección múltiple, o selección con justificación" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: kindOf(q) === "seleccion" ? C.t3 : C.sky, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+                    {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                   <button onClick={() => { const newQs = sv.questions.filter((qq) => qq.id !== q.id); updateSurveyQuestions(sv.id, newQs); }} style={{ background: "none", border: "none", color: tint(C.err, "80"), cursor: "pointer", fontSize: 12, padding: "0 3px" }}>✕</button>
                 </div>
@@ -2796,6 +2870,7 @@ function PublicSurvey({ surveyId, colegioId }) {
   const [respondent, setRespondent] = useState(null);
   const [qIdx, setQIdx] = useState(0);
   const [answers, setAnswers] = useState({});
+  const [textos, setTextos] = useState({});   // explicaciones escritas: { "preguntaId|estudianteId": "texto" }
   const [saving, setSaving] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
   // Grupos que el respondente puede ver al seleccionar su nombre
@@ -2835,14 +2910,14 @@ function PublicSurvey({ surveyId, colegioId }) {
       const respDoc = await getDoc(cdoc("responseMarks", `${surveyId}_${student.id}`));
       if (respDoc.exists()) { setRespondent(student); setAlreadyDone(true); setStep("done"); return; }
     } catch (e) { console.log("Verificación omitida"); }
-    setRespondent(student); setAnswers({}); setQIdx(0); setStep("answering");
+    setRespondent(student); setAnswers({}); setTextos({}); setQIdx(0); setStep("answering");
   };
 
   const toggleSel = (qId, studentId) => {
     setAnswers(prev => {
       const curr = prev[qId] || [];
       const max = survey?.maxSel || 3;
-      if (curr.includes(studentId)) return { ...prev, [qId]: curr.filter(x => x !== studentId) };
+      if (curr.includes(studentId)) { setTextos((t) => { const { [justKey(qId, studentId)]: _quitada, ...resto } = t; return resto; }); return { ...prev, [qId]: curr.filter(x => x !== studentId) }; }
       if (curr.length >= max) return prev;
       return { ...prev, [qId]: [...curr, studentId] };
     });
@@ -2852,9 +2927,10 @@ function PublicSurvey({ surveyId, colegioId }) {
     setSaving(true);
     try {
       const rid = `${surveyId}_${respondent.id}`;
+      const justificaciones = buildJustificaciones(answers, textos, survey?.questions);
       await setDoc(cdoc("responses", rid), {
         surveyId, respondentId: respondent.id, respondentName: respondent.name,
-        answers, submittedAt: serverTimestamp(),
+        answers, ...(Object.keys(justificaciones).length ? { justificaciones } : {}), submittedAt: serverTimestamp(),
       });
       try { await setDoc(cdoc("responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
@@ -3008,6 +3084,8 @@ function PublicSurvey({ surveyId, colegioId }) {
   if (step === "answering") {
     const q = survey.questions[qIdx];
     const sel = answers[q.id] || [];
+    const esJ = esJustificable(q);
+    const faltanJ = justificacionesFaltantes(q, sel, textos);
     const isLast = qIdx === survey.questions.length - 1;
     // Los estudiantes que puede elegir: los de los grupos disponibles, excluyendo al respondente
     const surveyGs = surveyGroups(survey || {}).length > 0 ? surveyGroups(survey || {}) : null;
@@ -3044,13 +3122,16 @@ function PublicSurvey({ surveyId, colegioId }) {
               <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: "#555770", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? "#f87171" : "#eaedf6", lineHeight: 1.4 }}>{q.text}</div>
-            <div style={{ fontSize: 11, color: "#555770", marginBottom: 14 }}>Selecciona hasta {survey.maxSel} personas</div>
+            <div style={{ fontSize: 11, color: "#555770", marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>
+            {esJ && <div style={{ fontSize: 11, color: "#9498ae", marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
                 const on = sel.includes(s.id);
                 const gc = GC[s.group] || "#3b82f6";
+                const texto = textos[justKey(q.id, s.id)] || "";
                 return (
-                  <button key={s.id} onClick={() => toggleSel(q.id, s.id)} style={{
+                  <div key={s.id}>
+                  <button onClick={() => toggleSel(q.id, s.id)} style={{
                     background: on ? tint(gc, "12") : "rgba(18,19,26,0.8)", border: `1.5px solid ${on ? gc : "rgba(255,255,255,0.08)"}`,
                     borderRadius: 10, padding: "10px 14px", cursor: "pointer",
                     display: "flex", alignItems: "center", gap: 10,
@@ -3063,11 +3144,20 @@ function PublicSurvey({ surveyId, colegioId }) {
                     <span style={{ fontSize: 13, color: "#eaedf6", flex: 1, textAlign: "left" }}>{s.name}</span>
                     <span style={{ fontSize: 10, color: gc }}>{s.group}</span>
                   </button>
+                  {on && esJ && (
+                    <div style={{ margin: "6px 0 4px 12px", paddingLeft: 12, borderLeft: `2px solid ${tint(gc, "60")}` }}>
+                      <label htmlFor={`j-${q.id}-${s.id}`} style={{ display: "block", fontSize: 11, color: "#9498ae", marginBottom: 4 }}>¿Por qué elegiste a {s.name.split(" ")[0]}? <span style={{ color: "#f59e0b" }}>(obligatorio)</span></label>
+                      <textarea id={`j-${q.id}-${s.id}`} value={texto} maxLength={MAX_JUST} rows={2} onChange={(e) => setTextos((t) => ({ ...t, [justKey(q.id, s.id)]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: "rgba(10,11,16,0.9)", border: `1px solid ${texto.trim().length < MIN_JUST ? "#f59e0b80" : "rgba(255,255,255,0.12)"}`, borderRadius: 8, padding: "8px 10px", color: "#eaedf6", fontSize: 13, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
+                      <div style={{ fontSize: 10, color: "#555770", textAlign: "right" }}>{texto.length}/{MAX_JUST}</div>
+                    </div>
+                  )}
+                  </div>
                 );
               })}
             </div>
           </div>
 
+          {faltanJ.length > 0 && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>Escribe por qué elegiste a: {faltanJ.map((id) => (students.find((x) => x.id === id) || {}).name).filter(Boolean).join(", ")}.</div>}
           <div style={{ display: "flex", gap: 8 }}>
             {qIdx > 0 && (
               <button onClick={() => { setQIdx(i => i - 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
@@ -3076,13 +3166,13 @@ function PublicSurvey({ surveyId, colegioId }) {
               </button>
             )}
             {!isLast ? (
-              <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>
+              <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={faltanJ.length > 0}
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: faltanJ.length ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
                 Siguiente →
               </button>
             ) : (
-              <button onClick={submitSurvey} disabled={saving}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
+              <button onClick={submitSurvey} disabled={saving || faltanJ.length > 0}
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || faltanJ.length ? "#333" : "#3b82f6", color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
                 {saving ? "Guardando..." : "✅ Enviar respuestas"}
               </button>
             )}
@@ -4124,10 +4214,14 @@ export default function App() {
                       {(expandedNode === selNode ? pC : pC.slice(0, 5)).map((c, i) => {
                         const o = students.find((p) => p.id === (c.f === selNode ? c.t : c.f));
                         return (
-                          <div key={i} style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 7px", borderRadius: 6, background: C.bgSub, fontSize: 11, marginBottom: 2 }}>
+                          <div key={i} style={{ marginBottom: 2 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 7px", borderRadius: 6, background: C.bgSub, fontSize: 11 }}>
                             <span style={{ color: C.rx, fontFamily: "monospace" }}>{c.f === selNode ? "→" : "←"}</span>
                             <span style={{ flex: 1 }}>{o?.name}</span>
+                            {c.notas?.length > 0 && <span title="Explicó por qué" style={{ fontSize: 10 }}>💬</span>}
                             {(c.counts ? ["pos", "neu", "neg"].flatMap((t) => Array(Math.min(c.counts[t] || 0, 3)).fill(t)) : Array(c.s).fill(c.tp)).map((t, j) => (<span key={j} style={{ color: t === "pos" ? C.teal : t === "neg" ? C.err : C.amber, fontSize: 7 }}>●</span>))}
+                          </div>
+                          {(c.notas || []).map((n, k) => <div key={k} style={{ fontSize: 10, color: C.t2, fontStyle: "italic", padding: "2px 8px 3px 24px", lineHeight: 1.4 }}>«{n.text}»{n.q ? <span style={{ color: C.t3, fontStyle: "normal" }}> · {n.q}</span> : null}</div>)}
                           </div>
                         );
                       })}

@@ -110,3 +110,19 @@ test("eliminar una encuesta para siempre: admin y psicólogo borran sus respuest
   await assertSucceeds(deleteDoc(doc(as("psi@vigente.co"), "colegios/vigente/responses/sv1_1")));
   await assertSucceeds(deleteDoc(doc(as("psi@vigente.co"), "colegios/vigente/responseMarks/sv1_1")));
 });
+test("explicaciones de las elecciones: se aceptan dentro del límite y se rechazan fuera de él", async () => {
+  const con = (j) => ({ ...sub(), ...(j === undefined ? {} : { justificaciones: j }) });
+  const pub = (id) => doc(anon(), `colegios/vigente/responses/sv1_${id}`);
+  await assertSucceeds(setDoc(pub("2"), con({ "q|1": "Siempre me ayuda en clase" })));
+  // máximo permitido: 60 explicaciones de 280 caracteres
+  const maximo = Object.fromEntries(Array.from({ length: 60 }, (_, i) => [`q${i}|1`, "x".repeat(280)]));
+  await env.withSecurityRulesDisabled(async (c) => { await setDoc(doc(c.firestore(), "colegios/vigente/surveys/sv1"), { id: "sv1", status: "active", questions: [], rosterIds: ["1", "2", "3", "4", "5", "6"] }); });
+  await assertSucceeds(setDoc(pub("3"), { ...sub(), respondentId: "3", justificaciones: maximo }));
+  await assertFails(setDoc(pub("4"), { ...sub(), respondentId: "4", justificaciones: { ...maximo, extra: "y" } }));                       // 61 entradas
+  await assertFails(setDoc(pub("5"), { ...sub(), respondentId: "5", justificaciones: { "q|1": "z".repeat(20000) } }));                    // un texto enorme
+  await assertFails(setDoc(pub("6"), { ...sub(), respondentId: "6", justificaciones: "no soy un mapa" }));
+  await assertFails(setDoc(pub("6"), { ...sub(), respondentId: "6", justificaciones: { "q|1": { a: 1 } } }));                               // valor que no es texto (el lector además ignora todo lo que no sea texto)
+  await assertFails(setDoc(pub("6"), { ...sub(), respondentId: "6", otroCampo: "x" }));                                                    // sigue sin aceptar campos extra
+  // lo de siempre sigue funcionando sin el campo
+  await assertSucceeds(setDoc(pub("6"), { ...sub(), respondentId: "6" }));
+});

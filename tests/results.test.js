@@ -41,8 +41,8 @@ test("Conexiones: una fila por pareja con sus tipos y si es mutua positiva", () 
   const rows = body(hoja(buildResultsSheets({ ...ctx, surveyId: "s1", group: "Grupo Prueba" }), "Conexiones"));
   assert.equal(rows.length, 9);
   const par = (de, para) => rows.find((r) => r[0] === de && r[2] === para);
-  assert.deepEqual(par("Isco", "Isco1").slice(4), ["Positiva", 1, 1, 0, 2, "Sí"]);                 // positiva + neutral, mutua
-  assert.deepEqual(par("Isco", "Isco2").slice(4), ["Negativa", 0, 1, 1, 2, "No"]);                 // neutral + negativa
+  assert.deepEqual(par("Isco", "Isco1").slice(4), ["Positiva", 1, 1, 0, 2, "Sí", ""]);                 // positiva + neutral, mutua
+  assert.deepEqual(par("Isco", "Isco2").slice(4), ["Negativa", 0, 1, 1, 2, "No", ""]);                 // neutral + negativa
   assert.deepEqual(par("Milena", "Isco2").slice(4, 5), ["Negativa"]);
 });
 test("Matriz: puntaje positivas − rechazos, vacío sin conexión y totales por fila", () => {
@@ -123,4 +123,21 @@ test("colegio grande: la hoja «Matriz» se reemplaza por un aviso y el libro se
   assert.equal(chico.sheets.find((h) => h.name === "Matriz").rows.length, 4);
   const con = chico.sheets.find((h) => h.name === "Conexiones").rows;
   assert.ok(con.slice(1).every((f) => f[9] === "Sí"), "las dos conexiones son mutuas");
+});
+
+test("justificaciones: salen en «Respuestas» (junto a la elección) y en «Conexiones» (todas las de la pareja)", () => {
+  const st = [{ id: "1", name: "Ana", group: "G" }, { id: "2", name: "Beto", group: "G" }];
+  const sv = [{ id: "s1", title: "T", groups: ["G"], questions: [{ id: "p", text: "¿Con quién trabajarías?", tp: "pos", kind: "justificable" }, { id: "n", text: "¿Con quién NO?", tp: "neg", kind: "justificable" }] }];
+  const rs = [{ surveyId: "s1", respondentId: "1", answers: { p: ["2"], n: ["2"] }, justificaciones: { "p|2": "Siempre me ayuda", "n|2": "Me grita en el recreo" } },
+              { surveyId: "s1", respondentId: "2", answers: { p: ["1"] } }];
+  const r = buildResultsSheets({ students: st, surveys: sv, responses: rs });
+  const resp = r.sheets.find((h) => h.name === "Respuestas").rows;
+  assert.equal(resp[0][8], "Justificación (lo que escribió)");
+  const f = resp.find((x) => x[3] === "Ana" && x[1] === "¿Con quién trabajarías?");
+  assert.equal(f[8], "Siempre me ayuda");
+  assert.equal(resp.find((x) => x[3] === "Beto")[8], "");
+  const con = r.sheets.find((h) => h.name === "Conexiones").rows;
+  assert.equal(con[0][10], "Justificaciones");
+  assert.equal(con.find((x) => x[0] === "Ana" && x[2] === "Beto")[10], "Siempre me ayuda | Me grita en el recreo");
+  assert.equal(con.find((x) => x[0] === "Beto")[10], "");
 });

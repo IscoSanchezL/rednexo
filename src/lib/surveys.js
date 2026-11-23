@@ -1,4 +1,5 @@
 // Plantilla, importación y exportación de encuestas (lógica pura, sin Firebase ni React).
+import { kindOf, kindToText, parseKind } from "./justificacion.js";
 
 export const TIPOS = { pos: "positiva", neu: "neutral", neg: "negativa" };
 const LIMITS = { maxQuestions: 40, maxQuestionLen: 300, maxTitleLen: 120, maxBytes: 200000 };
@@ -44,18 +45,21 @@ export function exportSurveyJSON(sv) {
     formato: "rednexo-encuesta-v1",
     titulo: sv.title,
     maxSel: sv.maxSel || 3,
-    preguntas: (sv.questions || []).map((q) => ({ texto: q.text, tipo: TIPOS[q.tp] || "positiva" })),
+    preguntas: (sv.questions || []).map((q) => ({ texto: q.text, tipo: TIPOS[q.tp] || "positiva", ...(kindOf(q) !== "seleccion" ? { formato: kindToText(kindOf(q)) } : {}) })),
   };
 }
 const csvCell = (s, d) => { const v = guard(String(s)); return /["\n\r]/.test(v) || v.includes(d) ? `"${v.replace(/"/g, '""')}"` : v; };
 /** CSV con «;» (Excel en español) y marca BOM para que respete tildes y ñ. */
 export function surveyToCSV(sv, d = ";") {
-  const rows = [["pregunta", "tipo"], ...(sv.questions || []).map((q) => [q.text, TIPOS[q.tp] || "positiva"])];
+  // La columna «formato» solo aparece si alguna pregunta es justificable (así los archivos de siempre no cambian).
+  const conJust = (sv.questions || []).some((q) => kindOf(q) !== "seleccion");
+  const rows = [conJust ? ["pregunta", "tipo", "formato"] : ["pregunta", "tipo"], ...(sv.questions || []).map((q) => (conJust ? [q.text, TIPOS[q.tp] || "positiva", kindToText(kindOf(q))] : [q.text, TIPOS[q.tp] || "positiva"]))];
   return "﻿" + rows.map((r) => r.map((c) => csvCell(c, d)).join(d)).join("\r\n") + "\r\n";
 }
 /** Plantilla para diligenciar en Excel: encabezado, tipos permitidos y preguntas de ejemplo que se pueden cambiar. */
 export function plantillaEncuestaCSV(d = ";") {
-  const rows = [["pregunta", "tipo"], ["¿Con quién te gustaría trabajar en un proyecto en equipo?", "positiva"], ["¿A quién invitarías a tu cumpleaños?", "positiva"], ["¿Quién consideras que es el líder del grupo?", "neutral"], ["¿Con quién NO te gustaría trabajar en equipo?", "negativa"]];
+  // «formato»: seleccion (la de siempre) · justificable (elige compañeros y escribe por qué).
+  const rows = [["pregunta", "tipo", "formato"], ["¿Con quién te gustaría trabajar en un proyecto en equipo?", "positiva", "justificable"], ["¿A quién invitarías a tu cumpleaños?", "positiva", "seleccion"], ["¿Quién consideras que es el líder del grupo?", "neutral", "seleccion"], ["¿Con quién NO te gustaría trabajar en equipo?", "negativa", "justificable"]];
   return "\uFEFF" + rows.map((r) => r.map((c) => csvCell(c, d)).join(d)).join("\r\n") + "\r\n";
 }
 export const PLANTILLA_ENCUESTA_NOMBRE = "plantilla-encuesta.csv";
@@ -103,13 +107,13 @@ export function parseSurveyImport(text, fileName = "") {
     if (!Array.isArray(list)) return fail("No se encontró la lista de preguntas (campo «preguntas»).");
     title = clean(Array.isArray(data) ? "" : (data.titulo || data.title || ""));
     if (!Array.isArray(data)) { if (data.maxSel != null) maxSel = data.maxSel; /* «anonima» de archivos antiguos se ignora: toda encuesta es confidencial */ }
-    items = list.map((q, i) => ({ n: i + 1, text: typeof q === "string" ? q : (q && (q.texto ?? q.text ?? q.pregunta)), tipo: typeof q === "string" ? "" : (q && (q.tipo ?? q.tp ?? q.type)) }));
+    items = list.map((q, i) => ({ n: i + 1, text: typeof q === "string" ? q : (q && (q.texto ?? q.text ?? q.pregunta)), tipo: typeof q === "string" ? "" : (q && (q.tipo ?? q.tp ?? q.type)), formato: typeof q === "string" ? "" : (q && (q.formato ?? q.kind ?? "")) }));
   } else {
     const rows = parseCSV(raw);
     if (rows.length === 0) return fail("El archivo no tiene filas.");
     const h0 = parseTipo(rows[0][1]) === null ? clean(rows[0][0]).toLowerCase() : "";
     const hasHeader = ["pregunta", "preguntas", "texto", "question", "questions"].includes(h0.normalize("NFD").replace(/[̀-ͯ]/g, "")) || ["tipo", "type", "tp"].includes(clean(rows[0][1] || "").toLowerCase());
-    items = rows.slice(hasHeader ? 1 : 0).map((r, i) => ({ n: i + (hasHeader ? 2 : 1), text: r[0], tipo: r[1] }));
+    items = rows.slice(hasHeader ? 1 : 0).map((r, i) => ({ n: i + (hasHeader ? 2 : 1), text: r[0], tipo: r[1], formato: r[2] }));
   }
   title = (title || fromName || "Encuesta importada").slice(0, LIMITS.maxTitleLen);
   maxSel = Number.isInteger(+maxSel) && +maxSel >= 1 && +maxSel <= 10 ? +maxSel : 3;
@@ -123,7 +127,8 @@ export function parseSurveyImport(text, fileName = "") {
     if (!tp) { errors.push(`${where}: el tipo «${clean(it.tipo)}» no es válido (usa positiva, neutral o negativa).`); continue; }
     const key = text.toLowerCase() + "|" + tp;
     if (seen.has(key)) { warnings.push(`${where}: repetida, se omitió.`); continue; }
-    seen.add(key); questions.push({ text, tp });
+    seen.add(key); const kind = parseKind(it.formato);
+    questions.push(kind === "seleccion" ? { text, tp } : { text, tp, kind });
   }
   if (questions.length > LIMITS.maxQuestions) { errors.push(`Hay ${questions.length} preguntas; el máximo es ${LIMITS.maxQuestions}.`); }
   if (questions.length === 0 && errors.length === 0) errors.push("El archivo no tiene preguntas.");
