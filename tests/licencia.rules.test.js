@@ -126,3 +126,15 @@ test("explicaciones de las elecciones: se aceptan dentro del límite y se rechaz
   // lo de siempre sigue funcionando sin el campo
   await assertSucceeds(setDoc(pub("6"), { ...sub(), respondentId: "6" }));
 });
+test("preguntas abiertas: el texto libre se acepta dentro del límite y se rechaza fuera de él", async () => {
+  const pub = (id) => doc(anon(), `colegios/vigente/responses/sv1_${id}`);
+  await env.withSecurityRulesDisabled(async (c) => { await setDoc(doc(c.firestore(), "colegios/vigente/surveys/sv1"), { id: "sv1", status: "active", questions: [], rosterIds: ["1", "2", "3", "4", "5", "6"] }); });
+  const base = (id) => ({ ...sub(), respondentId: id });
+  await assertSucceeds(setDoc(pub("2"), { ...base("2"), answers: {}, abiertas: { q9: "Sugiero más tiempo de recreo" } }));
+  const maximo = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`q${i}`, "x".repeat(500)]));
+  await assertSucceeds(setDoc(pub("3"), { ...base("3"), abiertas: maximo }));
+  await assertFails(setDoc(pub("4"), { ...base("4"), abiertas: { ...maximo, extra: "y" } }));          // 31 respuestas
+  await assertFails(setDoc(pub("5"), { ...base("5"), abiertas: { q1: "z".repeat(20000) } }));          // un texto enorme
+  await assertFails(setDoc(pub("6"), { ...base("6"), abiertas: "no soy un mapa" }));
+  await assertSucceeds(setDoc(pub("6"), { ...base("6"), abiertas: { q1: "hola" }, justificaciones: { "q|1": "porque sí" } }));   // conviven con las explicaciones
+});

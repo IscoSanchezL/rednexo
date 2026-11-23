@@ -71,3 +71,77 @@ test("informe: sección de explicaciones, fichas, escape y nada en el grupal", (
   // sin explicaciones no aparece la sección
   assert.doesNotMatch(renderReportHTML(computeReport(st, buildConnections([{ surveyId: "s", respondentId: "1", answers: { q1: ["2"] } }], sv)), { type: "individual" }), /Explicaciones de las elecciones/);
 });
+
+// ── Preguntas abiertas ──
+import { esAbierta, buildAbiertas, cleanOpenText, MAX_ABIERTA } from "../src/lib/justificacion.js";
+import { listarAbiertas } from "../src/lib/abiertas.js";
+import { countTipos } from "../src/lib/surveys.js";
+import { buildResultsSheets } from "../src/lib/results.js";
+
+const QA = [{ id: "q1", text: "¿Con quién trabajarías?", tp: "pos" }, { id: "q2", text: "¿Qué mejorarías del salón?", tp: "neu", kind: "abierta" }, { id: "q3", text: "¿Alguna sugerencia?", tp: "neu", kind: "abierta" }, { id: "q4", text: "¿Por qué?", tp: "pos", kind: "justificable" }];
+
+test("tipos de pregunta: seleccion, justificable y abierta", () => {
+  assert.deepEqual(QA.map(kindOf), ["seleccion", "abierta", "abierta", "justificable"]);
+  assert.deepEqual(QA.map(esAbierta), [false, true, true, false]);
+  assert.equal(esJustificable(QA[1]), false);   // una abierta no pide elegir ni justificar
+});
+test("respuestas abiertas que se guardan: solo de preguntas abiertas, con texto, limpias y acotadas", () => {
+  const t = { q1: "no es abierta", q2: "  Más   luz  \u0000 ", q3: "   ", q4: "tampoco", qX: "inexistente" };
+  assert.deepEqual(buildAbiertas(t, QA), { q2: "Más luz" });
+  assert.equal(cleanOpenText("a".repeat(900)).length, MAX_ABIERTA);
+  assert.deepEqual(buildAbiertas({}, QA), {});
+});
+test("una pregunta abierta no cuenta como positiva/negativa/neutral en el resumen", () => {
+  assert.deepEqual(countTipos(QA), { pos: 2, neu: 0, neg: 0 });
+});
+test("archivos: el formato «abierta» se conserva y el tipo no hace falta", () => {
+  assert.equal(parseKind("Abierta"), "abierta"); assert.equal(parseKind("texto libre"), "abierta");
+  const j = exportSurveyJSON({ title: "T", maxSel: 3, questions: QA });
+  assert.equal(j.preguntas[1].formato, "abierta");
+  const csv = "pregunta;tipo;formato\n¿Con quién?;positiva;seleccion\n¿Qué mejorarías?;;abierta\n¿Y la sugerencia?;;abierta\n";
+  const r = parseSurveyImport(csv, "x.csv");
+  assert.equal(r.ok, true, JSON.stringify(r.errors));
+  assert.deepEqual(r.survey.questions.map((q) => [q.kind, q.tp]), [[undefined, "pos"], ["abierta", "neu"], ["abierta", "neu"]]);
+  assert.deepEqual(parseSurveyImport(JSON.stringify(j), "x.json").survey.questions.map((q) => q.kind), [undefined, "abierta", "abierta", "justificable"]);
+  // una pregunta de selección sigue exigiendo su tipo
+  assert.equal(parseSurveyImport("pregunta;tipo;formato\n¿Con quién?;;seleccion\n", "x.csv").ok, false);
+});
+test("lista de respuestas abiertas: por pregunta y estudiante, sin papelera ni estudiantes ajenos, filtrando por encuesta", () => {
+  const st = [{ id: "1", name: "Ana", group: "A" }, { id: "2", name: "Beto", group: "A" }];
+  const sv = [{ id: "s1", title: "E1", questions: QA }, { id: "s2", title: "E2", questions: QA }, { id: "s3", title: "Borrada", deleted: true, questions: QA }];
+  const rs = [{ surveyId: "s1", respondentId: "2", abiertas: { q2: "Más luz", q3: "" } }, { surveyId: "s1", respondentId: "1", abiertas: { q2: "Menos ruido", q3: "Un buzón" } },
+    { surveyId: "s2", respondentId: "1", abiertas: { q2: "Otra encuesta" } }, { surveyId: "s3", respondentId: "1", abiertas: { q2: "papelera" } }, { surveyId: "s1", respondentId: "9", abiertas: { q2: "ajeno" } }];
+  const todas = listarAbiertas(rs, sv, st);
+  assert.deepEqual(todas.map((f) => [f.pregunta, f.de, f.text]), [["¿Alguna sugerencia?", "Ana", "Un buzón"], ["¿Qué mejorarías del salón?", "Ana", "Menos ruido"], ["¿Qué mejorarías del salón?", "Ana", "Otra encuesta"], ["¿Qué mejorarías del salón?", "Beto", "Más luz"]]);
+  assert.equal(listarAbiertas(rs, sv, st, { surveyId: "s2" }).length, 1);
+});
+test("informe: sección «Respuestas abiertas» en individual y completo (con nombre); el grupal no la lleva", () => {
+  const st = [{ id: "1", name: "Ana", group: "A" }, { id: "2", name: "Beto", group: "A" }];
+  const sv = [{ id: "s1", title: "E1", questions: QA }];
+  const rs = [{ surveyId: "s1", respondentId: "1", abiertas: { q2: "Más <b>luz</b>" } }];
+  const rep = computeReport(st, [], { abiertas: listarAbiertas(rs, sv, st) });
+  assert.equal(rep.kpis.abiertas, 1);
+  const h = renderReportHTML(rep, { type: "individual" });
+  assert.match(h, /Respuestas abiertas/); assert.match(h, /<td>Ana<\/td><td>A<\/td><td><i>«Más &lt;b&gt;luz&lt;\/b&gt;»/);
+  assert.doesNotMatch(h, /<b>luz<\/b>/);
+  assert.doesNotMatch(renderReportHTML(rep, { type: "grupal" }), /Más |Respuestas abiertas/);
+  assert.doesNotMatch(renderReportHTML(computeReport(st, []), { type: "individual" }), /Respuestas abiertas/);
+});
+test("Excel: hoja «Abiertas» solo si hay preguntas abiertas, y «Por pregunta» las cuenta sin elecciones", () => {
+  const st = [{ id: "1", name: "Ana", group: "A" }, { id: "2", name: "Beto", group: "A" }];
+  const sv = [{ id: "s1", title: "E1", groups: ["A"], questions: QA }];
+  const rs = [{ surveyId: "s1", respondentId: "1", answers: { q1: ["2"] }, abiertas: { q2: "Más luz" } }, { surveyId: "s1", respondentId: "2", answers: {}, abiertas: { q2: "Menos ruido", q3: "Un buzón" } }];
+  const r = buildResultsSheets({ students: st, surveys: sv, responses: rs });
+  assert.ok(r.sheets.some((h) => h.name === "Abiertas"));
+  const ab = r.sheets.find((h) => h.name === "Abiertas").rows;
+  assert.deepEqual(ab[0], ["Encuesta", "Pregunta", "Estudiante", "Grupo", "Respuesta"]); assert.equal(ab.length, 4);
+  const pp = r.sheets.find((h) => h.name === "Por pregunta").rows;
+  const fila = pp.find((x) => x[1] === "¿Qué mejorarías del salón?");
+  assert.deepEqual([fila[2], fila[3], fila[4]], ["Abierta", 2, 0]);
+  const sinAb = buildResultsSheets({ students: st, surveys: [{ id: "s1", title: "E", groups: ["A"], questions: [QA[0]] }], responses: [{ surveyId: "s1", respondentId: "1", answers: { q1: ["2"] } }] });
+  assert.ok(!sinAb.sheets.some((h) => h.name === "Abiertas"));
+});
+test("las preguntas abiertas no generan conexiones", () => {
+  const c = buildConnections([{ surveyId: "s", respondentId: "1", answers: {}, abiertas: { q2: "hola" } }], [{ id: "s", questions: QA }]);
+  assert.deepEqual(c, []);
+});

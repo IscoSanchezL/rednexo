@@ -1,5 +1,5 @@
 // Plantilla, importación y exportación de encuestas (lógica pura, sin Firebase ni React).
-import { kindOf, kindToText, parseKind } from "./justificacion.js";
+import { kindOf, kindToText, parseKind, esAbierta } from "./justificacion.js";
 
 export const TIPOS = { pos: "positiva", neu: "neutral", neg: "negativa" };
 const LIMITS = { maxQuestions: 40, maxQuestionLen: 300, maxTitleLen: 120, maxBytes: 200000 };
@@ -35,7 +35,7 @@ const unguard = (s) => (/^'[=+\-@]/.test(s) ? s.slice(1) : s);
 /** Resumen de tipos: { pos: 3, neu: 2, neg: 2 }. */
 export function countTipos(questions) {
   const c = { pos: 0, neu: 0, neg: 0 };
-  for (const q of questions || []) if (c[q.tp] !== undefined) c[q.tp]++;
+  for (const q of questions || []) if (!esAbierta(q) && c[q.tp] !== undefined) c[q.tp]++;   // las abiertas no tienen carácter (+ / − / ○)
   return c;
 }
 
@@ -123,11 +123,12 @@ export function parseSurveyImport(text, fileName = "") {
     const text = unguard(clean(it.text));
     if (!text) { errors.push(`${where}: la pregunta está vacía.`); continue; }
     if (text.length > LIMITS.maxQuestionLen) { errors.push(`${where}: la pregunta pasa de ${LIMITS.maxQuestionLen} caracteres.`); continue; }
-    const tp = parseTipo(it.tipo);
+    const kind = parseKind(it.formato);
+    const tp = kind === "abierta" && !clean(it.tipo) ? "neu" : parseTipo(it.tipo);   // en una pregunta abierta el tipo no se usa
     if (!tp) { errors.push(`${where}: el tipo «${clean(it.tipo)}» no es válido (usa positiva, neutral o negativa).`); continue; }
     const key = text.toLowerCase() + "|" + tp;
     if (seen.has(key)) { warnings.push(`${where}: repetida, se omitió.`); continue; }
-    seen.add(key); const kind = parseKind(it.formato);
+    seen.add(key);
     questions.push(kind === "seleccion" ? { text, tp } : { text, tp, kind });
   }
   if (questions.length > LIMITS.maxQuestions) { errors.push(`Hay ${questions.length} preguntas; el máximo es ${LIMITS.maxQuestions}.`); }

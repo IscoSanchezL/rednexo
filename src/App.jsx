@@ -10,7 +10,8 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
-import { MAX_JUST, MIN_JUST, KIND_LABELS, kindOf, esJustificable, justKey, buildJustificaciones, justificacionesFaltantes } from "./lib/justificacion";
+import { MAX_JUST, MIN_JUST, MAX_ABIERTA, KIND_LABELS, kindOf, esJustificable, esAbierta, justKey, buildJustificaciones, buildAbiertas, justificacionesFaltantes } from "./lib/justificacion";
+import { listarAbiertas } from "./lib/abiertas";
 import { validarNombreGrupo, renombrarEnEncuesta, resumenEliminar, textoEliminar } from "./lib/grupos";
 import { plantillaCSV, PLANTILLA_NOMBRE, parsearImportacion, planImportacion } from "./lib/importar";
 import { plantillaEncuestaCSV, PLANTILLA_ENCUESTA_NOMBRE, buildTemplateSurvey, countTipos, exportSurveyJSON, surveyToCSV, surveyFileName, parseSurveyImport } from "./lib/surveys";
@@ -2161,17 +2162,17 @@ function AddQToSurvey({ onAdd }) {
   const [text, setText] = useState("");
   const [tp, setTp] = useState("pos");
   const [kind, setKind] = useState("seleccion");
-  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp, ...(kind !== "seleccion" ? { kind } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); };
+  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp: kind === "abierta" ? "neu" : tp, ...(kind !== "seleccion" ? { kind } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); };
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: C.card, border: `1px dashed ${C.borderLit}` }}>
       <div style={{ fontSize: 10, color: C.t3, marginBottom: 7, fontWeight: 600 }}>➕ NUEVA PREGUNTA</div>
       <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Escribe la pregunta y pulsa Enter..." style={{ flex: 1, background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 10px", color: C.text, fontSize: 12, outline: "none", fontFamily: "inherit" }} />
-        <select value={tp} onChange={(e) => setTp(e.target.value)} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: tp === "pos" ? C.teal : tp === "neg" ? C.err : C.amber, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+        {kind !== "abierta" && <select value={tp} onChange={(e) => setTp(e.target.value)} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: tp === "pos" ? C.teal : tp === "neg" ? C.err : C.amber, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
           <option value="pos">+ Positiva</option>
           <option value="neg">− Negativa</option>
           <option value="neu">○ Neutral</option>
-        </select>
+        </select>}
         <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de pregunta" title="Tipo de pregunta: selección múltiple, o selección con justificación (el estudiante escribe por qué eligió a cada compañero)" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: kind === "seleccion" ? C.t2 : C.sky, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
           {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
@@ -2225,7 +2226,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     return () => unsub();
   }, []);
 
-  const addQ = () => { if (!nQ.text.trim()) return; const { kind, ...resto } = nQ; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...resto, text: nQ.text.trim(), ...(kind !== "seleccion" ? { kind } : {}) }] })); setNQ({ text: "", tp: "pos", kind: "seleccion" }); };
+  const addQ = () => { if (!nQ.text.trim()) return; const { kind, ...resto } = nQ; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...resto, tp: kind === "abierta" ? "neu" : resto.tp, text: nQ.text.trim(), ...(kind !== "seleccion" ? { kind } : {}) }] })); setNQ({ text: "", tp: "pos", kind: "seleccion" }); };
 
   const flash = (m, ms = 4500) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
 
@@ -2401,7 +2402,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 22 }}>#{i + 1}</span>
                 <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{q.text}</span>
                 {esJustificable(q) && <span title={KIND_LABELS.justificable} style={{ fontSize: 11 }}>💬</span>}
-                <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>
+                {esAbierta(q) ? <Badge color={C.sky}>✎ abierta</Badge> : <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>}
                 <button onClick={() => setNS((s) => ({ ...s, questions: s.questions.filter((x) => x.id !== q.id) }))} style={{ background: "none", border: "none", color: C.err, cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
             ))}
@@ -2410,7 +2411,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 10, borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}` }}>
             <Inp placeholder="Escribe la pregunta..." value={nQ.text} onChange={(v) => setNQ((q) => ({ ...q, text: v }))} />
             <div style={{ display: "flex", gap: 8 }}>
-              <Sel value={nQ.tp} onChange={(v) => setNQ((q) => ({ ...q, tp: v }))} options={[{ v: "pos", l: "+ Positiva" }, { v: "neg", l: "− Negativa" }, { v: "neu", l: "○ Neutral" }]} />
+              {nQ.kind !== "abierta" && <Sel value={nQ.tp} onChange={(v) => setNQ((q) => ({ ...q, tp: v }))} options={[{ v: "pos", l: "+ Positiva" }, { v: "neg", l: "− Negativa" }, { v: "neu", l: "○ Neutral" }]} />}
               <Sel value={nQ.kind} onChange={(v) => setNQ((q) => ({ ...q, kind: v }))} options={Object.entries(KIND_LABELS).map(([v, l]) => ({ v, l }))} />
               <Btn v="pri" onClick={addQ} disabled={!nQ.text.trim()}>+ Agregar</Btn>
             </div>
@@ -2470,7 +2471,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                     <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "5px 8px", borderRadius: 7, background: C.surface, border: `1px solid ${C.border}` }}>
                       <span style={{ minWidth: 20, color: C.t3 }}>{i + 1}.</span>
                       <span style={{ flex: 1 }}>{q.text}</span>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: TIPO_INFO[q.tp].c() }}>{TIPO_INFO[q.tp].s} {TIPO_INFO[q.tp].l}</span>
+                      {esAbierta(q) ? <span style={{ fontSize: 10, fontWeight: 700, color: C.sky }}>✎ Abierta</span> : <span style={{ fontSize: 10, fontWeight: 700, color: TIPO_INFO[q.tp].c() }}>{TIPO_INFO[q.tp].s} {TIPO_INFO[q.tp].l}</span>}
                     </div>
                   ))}
                 </div>
@@ -2538,7 +2539,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
-                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()}){sv.questions.some(esJustificable) ? ` · 💬 ${sv.questions.filter(esJustificable).length} con justificación` : ""}</span>
+                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()}){sv.questions.some(esJustificable) ? ` · 💬 ${sv.questions.filter(esJustificable).length} con justificación` : ""}{sv.questions.some(esAbierta) ? ` · ✎ ${sv.questions.filter(esAbierta).length} abiertas` : ""}</span>
                 <span title="Grupos a los que se aplica">👥 {surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
                 <span>🎯 Máx: {sv.maxSel}</span>
                 <span title="Los estudiantes no ven las respuestas de los demás; solo el equipo del colegio las ve. Se guarda quién respondió.">🔒 Confidencial</span>
@@ -2578,10 +2579,10 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "7px 10px", borderRadius: 7, background: C.card, border: `1px solid ${C.border}` }}>
                   <span style={{ fontSize: 10, color: C.t3, width: 22, fontWeight: 700 }}>#{i + 1}</span>
                   <input value={q.text} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, text: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ flex: 1, background: "transparent", border: "none", borderBottom: `1px solid ${C.border}`, color: C.text, fontSize: 12, outline: "none", fontFamily: "inherit", padding: "2px 0" }} />
-                  <select value={q.tp} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, tp: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+                  {!esAbierta(q) && <select value={q.tp} onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => qq.id === q.id ? { ...qq, tp: val } : qq); updateSurveyQuestions(sv.id, newQs); }} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
                     <option value="pos">+ Positiva</option><option value="neg">− Negativa</option><option value="neu">○ Neutral</option>
-                  </select>
-                  <select value={kindOf(q)} aria-label="Tipo de pregunta" onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => { if (qq.id !== q.id) return qq; const { kind: _k, ...resto } = qq; return val === "seleccion" ? resto : { ...resto, kind: val }; }); updateSurveyQuestions(sv.id, newQs); }} title="Tipo de pregunta: selección múltiple, o selección con justificación" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: kindOf(q) === "seleccion" ? C.t3 : C.sky, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
+                  </select>}
+                  <select value={kindOf(q)} aria-label="Tipo de pregunta" onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => { if (qq.id !== q.id) return qq; const { kind: _k, ...resto } = qq; return { ...(val === "abierta" ? { ...resto, tp: "neu" } : resto), ...(val === "seleccion" ? {} : { kind: val }) }; }); updateSurveyQuestions(sv.id, newQs); }} title="Tipo de pregunta: selección múltiple, o selección con justificación" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: kindOf(q) === "seleccion" ? C.t3 : C.sky, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
                     {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
                   <button onClick={() => { const newQs = sv.questions.filter((qq) => qq.id !== q.id); updateSurveyQuestions(sv.id, newQs); }} style={{ background: "none", border: "none", color: tint(C.err, "80"), cursor: "pointer", fontSize: 12, padding: "0 3px" }}>✕</button>
@@ -2621,7 +2622,8 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
   };
 
   // Un único generador para la vista previa, el HTML descargado y el PDF: lo que ves es lo que se exporta.
-  const report = useMemo(() => computeReport(filteredStudents, filteredConns), [filteredStudents, filteredConns]);
+  const abiertasLista = useMemo(() => listarAbiertas(responses, surveys, filteredStudents, { surveyId: surveyFilter }), [responses, surveys, filteredStudents, surveyFilter]);
+  const report = useMemo(() => computeReport(filteredStudents, filteredConns, { abiertas: abiertasLista }), [filteredStudents, filteredConns, abiertasLista]);
   const groupLabel = selectedGroup === "Todos" ? "Todos los grupos" : selectedGroup;
   const dateStr = new Date().toLocaleDateString("es-CO", { year: "numeric", month: "long", day: "numeric" });
   const build = (mode) => renderReportHTML(report, { type: reportType, groupLabel, date: dateStr, mode, colors: GC });
@@ -2871,6 +2873,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
   const [qIdx, setQIdx] = useState(0);
   const [answers, setAnswers] = useState({});
   const [textos, setTextos] = useState({});   // explicaciones escritas: { "preguntaId|estudianteId": "texto" }
+  const [abiertasTxt, setAbiertasTxt] = useState({});   // respuestas a preguntas abiertas: { preguntaId: "texto" }
   const [saving, setSaving] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
   // Grupos que el respondente puede ver al seleccionar su nombre
@@ -2911,7 +2914,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
       const respDoc = await getDoc(cdoc("responseMarks", `${surveyId}_${student.id}`));
       if (respDoc.exists()) { setRespondent(student); setAlreadyDone(true); setStep("done"); return; }
     } catch (e) { console.log("Verificación omitida"); }
-    setRespondent(student); setAnswers({}); setTextos({}); setQIdx(0); setStep("answering");
+    setRespondent(student); setAnswers({}); setTextos({}); setAbiertasTxt({}); setQIdx(0); setStep("answering");
   };
 
   const toggleSel = (qId, studentId) => {
@@ -2930,9 +2933,10 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
       setCurrentColegio(colegioId);
       const rid = `${surveyId}_${respondent.id}`;
       const justificaciones = buildJustificaciones(answers, textos, survey?.questions);
+      const abiertas = buildAbiertas(abiertasTxt, survey?.questions);
       await setDoc(cdoc("responses", rid), {
         surveyId, respondentId: respondent.id, respondentName: respondent.name,
-        answers, ...(Object.keys(justificaciones).length ? { justificaciones } : {}), submittedAt: serverTimestamp(),
+        answers, ...(Object.keys(justificaciones).length ? { justificaciones } : {}), ...(Object.keys(abiertas).length ? { abiertas } : {}), submittedAt: serverTimestamp(),
       });
       try { await setDoc(cdoc("responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
@@ -3097,6 +3101,8 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
     const q = survey.questions[qIdx];
     const sel = answers[q.id] || [];
     const esJ = esJustificable(q);
+    const esAb = esAbierta(q);
+    const textoAb = abiertasTxt[q.id] || "";
     const faltanJ = justificacionesFaltantes(q, sel, textos);
     const isLast = qIdx === survey.questions.length - 1;
     // Los estudiantes que puede elegir: los de los grupos disponibles, excluyendo al respondente
@@ -3134,9 +3140,16 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
               <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: C.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
             </div>
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? C.err : C.text, lineHeight: 1.4 }}>{q.text}</div>
-            <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>
-            {esJ && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
-            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {esAb && (
+              <div>
+                <div style={{ fontSize: 11, color: C.t2, marginBottom: 10, lineHeight: 1.5 }}>✎ Esta pregunta es <b>abierta</b>: no tienes que elegir a nadie. Escribe lo que piensas (puedes dejarla en blanco). Solo lo lee el equipo del colegio. No escribas insultos ni datos personales.</div>
+                <textarea aria-label="Tu respuesta" value={textoAb} maxLength={MAX_ABIERTA} rows={5} onChange={(e) => setAbiertasTxt((t) => ({ ...t, [q.id]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 14, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
+                <div style={{ fontSize: 10, color: C.t3, textAlign: "right" }}>{textoAb.length}/{MAX_ABIERTA}</div>
+              </div>
+            )}
+            {!esAb && <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>}
+            {esJ && !esAb && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
+            {!esAb && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
                 const on = sel.includes(s.id);
                 const gc = GC[s.group] || "#3b82f6";
@@ -3166,7 +3179,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
                   </div>
                 );
               })}
-            </div>
+            </div>}
           </div>
 
           {faltanJ.length > 0 && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>Escribe por qué elegiste a: {faltanJ.map((id) => (students.find((x) => x.id === id) || {}).name).filter(Boolean).join(", ")}.</div>}

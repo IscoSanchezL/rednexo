@@ -64,7 +64,7 @@ export function studentStats(s, stList, cnList, ix = indexar(stList, cnList)) {
 }
 
 /** Todo lo que necesitan los reportes, ya calculado. */
-export function computeReport(stList, cnList) {
+export function computeReport(stList, cnList, extra = {}) {
   const n = stList.length;
   const ix = indexar(stList, cnList);
   const rows = stList.map((s) => ({ student: s, ...studentStats(s, stList, cnList, ix) }));
@@ -91,13 +91,14 @@ export function computeReport(stList, cnList) {
     return { row: r, eligieronPos: list(inn, "pos", "f"), rechazaron: list(inn, "neg", "f"), neutralDe: list(inn, "neu", "f"), eligioPos: list(out, "pos", "t"), rechazo: list(out, "neg", "t"), mutuas, notasRecibidas, notasHechas };
   });
   return {
-    n, rows, byRole, groups, fichas, conns: cnList, students: stList,
+    n, rows, byRole, groups, fichas, conns: cnList, students: stList, abiertas: extra.abiertas || [],
     kpis: {
       participantes: n, conexiones: cnList.length,
       positivas: cnList.filter((c) => hasType(c, "pos")).length, rechazos: cnList.filter((c) => hasType(c, "neg")).length,
       mutuasPos: Math.round(rows.reduce((a, r) => a + r.mutuasPos, 0) / 2), rechazosMutuos: Math.round(rows.reduce((a, r) => a + r.rechazosMutuos, 0) / 2),
       densidad: density(cnList.length, n),
       justificaciones: cnList.reduce((a, c) => a + (c.notas ? c.notas.length : 0), 0),
+      abiertas: (extra.abiertas || []).length,
     },
   };
 }
@@ -185,12 +186,16 @@ export function renderReportHTML(report, { type = "ambos", groupLabel = "Todos l
     porPregunta.get(k).filas.push({ de: nameOf2(c.f), para: nameOf2(c.t), text: n.text });
   }
   const explicaciones = porPregunta.size === 0 ? "" : `<div class="section"><h2>Explicaciones de las elecciones</h2><div class="sub">Lo que escribieron los estudiantes para justificar a quién eligieron. Confidencial: solo para el equipo del colegio.</div>${[...porPregunta.entries()].map(([q, g]) => `<h3 style="margin:14px 0 6px;font-size:13px">${esc(q)} <span class="role" style="background:${g.tp === "neg" ? "#fee2e2;color:#b91c1c" : g.tp === "neu" ? "#fef3c7;color:#92400e" : "#d1fae5;color:#065f46"}">${g.tp === "neg" ? "Negativa" : g.tp === "neu" ? "Neutral" : "Positiva"}</span></h3><table class="expl"><thead><tr><th>Estudiante</th><th>Eligió a</th><th>Explicación</th></tr></thead><tbody>${g.filas.sort((a, b) => a.de.localeCompare(b.de, "es") || a.para.localeCompare(b.para, "es")).map((f) => `<tr><td>${esc(f.de)}</td><td>${esc(f.para)}</td><td><i>«${esc(f.text)}»</i></td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
+  // Respuestas a preguntas abiertas (opiniones y sugerencias), agrupadas por pregunta. Solo para el equipo: llevan el nombre de quien escribió.
+  const porAbierta = new Map();
+  for (const a of report.abiertas || []) { if (!porAbierta.has(a.pregunta)) porAbierta.set(a.pregunta, []); porAbierta.get(a.pregunta).push(a); }
+  const abiertasHtml = porAbierta.size === 0 ? "" : `<div class="section"><h2>Respuestas abiertas</h2><div class="sub">Opiniones, sugerencias o datos que escribieron los estudiantes en preguntas de texto libre. Confidencial: solo para el equipo del colegio.</div>${[...porAbierta.entries()].map(([q, filas]) => `<h3 style="margin:14px 0 6px;font-size:13px">${esc(q)} <span class="role" style="background:#e0f2fe;color:#075985">${filas.length} respuesta${filas.length === 1 ? "" : "s"}</span></h3><table class="expl"><thead><tr><th>Estudiante</th><th>Grupo</th><th>Respuesta</th></tr></thead><tbody>${filas.map((f) => `<tr><td>${esc(f.de)}</td><td>${esc(f.grupo)}</td><td><i>«${esc(f.text)}»</i></td></tr>`).join("")}</tbody></table>`).join("")}</div>`;
   const fichas = `<div class="section"><h2>Fichas por estudiante</h2><div class="sub">Quién eligió o rechazó a cada estudiante y a quién eligió o rechazó. Información confidencial.</div><div class="fichas">${fichaHtml}</div></div>`;
 
   const toolbar = mode === "pdf"
     ? `<div class="no-print" style="position:fixed;top:0;left:0;right:0;background:#050a1a;color:#fff;padding:10px 16px;display:flex;align-items:center;gap:12px;z-index:999;font-family:'Segoe UI',Arial,sans-serif;font-size:13px"><span style="flex:1">RedNexo · Reporte ${REPORT_TYPES[type]} · ${esc(groupLabel)}</span><button onclick="window.print()" style="background:#3b82f6;color:#fff;border:none;padding:7px 18px;border-radius:7px;font-weight:700;cursor:pointer">Imprimir / PDF</button><button onclick="window.close()" style="background:transparent;color:#9498ae;border:1px solid #555;padding:7px 14px;border-radius:7px;cursor:pointer">Cerrar</button></div><div style="height:48px" class="no-print"></div>`
     : "";
-  const sections = [resumen, showIdx ? indices : "", showGrp ? grupos : "", matriz, showIdx ? explicaciones : "", showIdx ? fichas : ""].join("");
+  const sections = [resumen, showIdx ? indices : "", showGrp ? grupos : "", matriz, showIdx ? explicaciones : "", showIdx ? abiertasHtml : "", showIdx ? fichas : ""].join("");
   const empty = report.n === 0 ? `<div class="section"><div class="alert alert-warn">No hay participantes en este grupo.</div></div>` : "";
   const extraCss = mode === "pdf" ? `@page{size:A4;margin:15mm 12mm}body{background:#fff;font-size:11px}.no-print{display:none}@media print{.no-print{display:none}}` : "";
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Reporte RedNexo ${REPORT_TYPES[type]} — ${esc(groupLabel)}</title><style>${REPORT_CSS}${extraCss}</style></head><body>${toolbar}<div class="page"><div class="header"><div style="display:flex;align-items:center;gap:14px">${LOGO_SVG}<div><div style="font-size:10px;color:#9498ae;letter-spacing:2px;margin-bottom:3px">INTELIGENCIA SOCIOMÉTRICA</div><h1>Red<span>Nexo</span></h1><div style="font-size:12px;color:#9498ae;margin-top:3px">Reporte ${REPORT_TYPES[type]} · ${esc(groupLabel)}</div></div></div><div class="meta"><div>${esc(date)}</div><div>${k.participantes} participantes</div><div>${k.conexiones} conexiones</div></div></div>${kpis}${empty || sections}<div class="footer">RedNexo — ${esc(date)} · ${esc(groupLabel)} · Documento confidencial</div></div></body></html>`;
