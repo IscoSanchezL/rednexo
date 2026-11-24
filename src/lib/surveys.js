@@ -45,7 +45,7 @@ export function exportSurveyJSON(sv) {
     formato: "rednexo-encuesta-v1",
     titulo: sv.title,
     maxSel: sv.maxSel || 3,
-    preguntas: (sv.questions || []).map((q) => ({ texto: q.text, tipo: TIPOS[q.tp] || "positiva", ...(kindOf(q) !== "seleccion" ? { formato: kindToText(kindOf(q)) } : {}) })),
+    preguntas: (sv.questions || []).map((q) => ({ texto: q.text, tipo: TIPOS[q.tp] || "positiva", ...(kindOf(q) !== "seleccion" ? { formato: kindToText(kindOf(q)) } : {}), ...(q.obligatoria === true ? { obligatoria: true } : {}) })),
   };
 }
 const csvCell = (s, d) => { const v = guard(String(s)); return /["\n\r]/.test(v) || v.includes(d) ? `"${v.replace(/"/g, '""')}"` : v; };
@@ -107,13 +107,13 @@ export function parseSurveyImport(text, fileName = "") {
     if (!Array.isArray(list)) return fail("No se encontró la lista de preguntas (campo «preguntas»).");
     title = clean(Array.isArray(data) ? "" : (data.titulo || data.title || ""));
     if (!Array.isArray(data)) { if (data.maxSel != null) maxSel = data.maxSel; /* «anonima» de archivos antiguos se ignora: toda encuesta es confidencial */ }
-    items = list.map((q, i) => ({ n: i + 1, text: typeof q === "string" ? q : (q && (q.texto ?? q.text ?? q.pregunta)), tipo: typeof q === "string" ? "" : (q && (q.tipo ?? q.tp ?? q.type)), formato: typeof q === "string" ? "" : (q && (q.formato ?? q.kind ?? "")) }));
+    items = list.map((q, i) => ({ n: i + 1, text: typeof q === "string" ? q : (q && (q.texto ?? q.text ?? q.pregunta)), tipo: typeof q === "string" ? "" : (q && (q.tipo ?? q.tp ?? q.type)), formato: typeof q === "string" ? "" : (q && (q.formato ?? q.kind ?? "")), obligatoria: typeof q === "object" && q ? q.obligatoria === true : false }));
   } else {
     const rows = parseCSV(raw);
     if (rows.length === 0) return fail("El archivo no tiene filas.");
     const h0 = parseTipo(rows[0][1]) === null ? clean(rows[0][0]).toLowerCase() : "";
     const hasHeader = ["pregunta", "preguntas", "texto", "question", "questions"].includes(h0.normalize("NFD").replace(/[̀-ͯ]/g, "")) || ["tipo", "type", "tp"].includes(clean(rows[0][1] || "").toLowerCase());
-    items = rows.slice(hasHeader ? 1 : 0).map((r, i) => ({ n: i + (hasHeader ? 2 : 1), text: r[0], tipo: r[1], formato: r[2] }));
+    items = rows.slice(hasHeader ? 1 : 0).map((r, i) => ({ n: i + (hasHeader ? 2 : 1), text: r[0], tipo: r[1], formato: r[2], obligatoria: false }));
   }
   title = (title || fromName || "Encuesta importada").slice(0, LIMITS.maxTitleLen);
   maxSel = Number.isInteger(+maxSel) && +maxSel >= 1 && +maxSel <= 10 ? +maxSel : 3;
@@ -129,7 +129,7 @@ export function parseSurveyImport(text, fileName = "") {
     const key = text.toLowerCase() + "|" + tp;
     if (seen.has(key)) { warnings.push(`${where}: repetida, se omitió.`); continue; }
     seen.add(key);
-    questions.push(kind === "seleccion" ? { text, tp } : { text, tp, kind });
+    questions.push({ text, tp, ...(kind !== "seleccion" ? { kind } : {}), ...(it.obligatoria ? { obligatoria: true } : {}) });
   }
   if (questions.length > LIMITS.maxQuestions) { errors.push(`Hay ${questions.length} preguntas; el máximo es ${LIMITS.maxQuestions}.`); }
   if (questions.length === 0 && errors.length === 0) errors.push("El archivo no tiene preguntas.");

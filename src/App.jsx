@@ -9,8 +9,11 @@ import { buildXlsx, XLSX_MIME } from "./lib/xlsx";
 import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
+import { GraficosPanel } from "./Graficos.jsx";
+import { Ayuda } from "./Ayuda.jsx";
+import { GLOSARIO } from "./lib/glosario";
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
-import { MAX_JUST, MIN_JUST, MAX_ABIERTA, KIND_LABELS, kindOf, esJustificable, esAbierta, justKey, buildJustificaciones, buildAbiertas, justificacionesFaltantes } from "./lib/justificacion";
+import { esObligatoria, faltaRespuesta, MAX_JUST, MIN_JUST, MAX_ABIERTA, KIND_LABELS, kindOf, esJustificable, esAbierta, justKey, buildJustificaciones, buildAbiertas, justificacionesFaltantes } from "./lib/justificacion";
 import { listarAbiertas } from "./lib/abiertas";
 import { buildStudentReport, renderStudentReportHTML, informeEstudianteNombre } from "./lib/informeEstudiante";
 import { validarNombreGrupo, renombrarEnEncuesta, resumenEliminar, textoEliminar } from "./lib/grupos";
@@ -2174,7 +2177,8 @@ function AddQToSurvey({ onAdd }) {
   const [text, setText] = useState("");
   const [tp, setTp] = useState("pos");
   const [kind, setKind] = useState("seleccion");
-  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp: kind === "abierta" ? "neu" : tp, ...(kind !== "seleccion" ? { kind } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); };
+  const [obl, setObl] = useState(false);
+  const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp: kind === "abierta" ? "neu" : tp, ...(kind !== "seleccion" ? { kind } : {}), ...(obl ? { obligatoria: true } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); setObl(false); };
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: C.card, border: `1px dashed ${C.borderLit}` }}>
       <div style={{ fontSize: 10, color: C.t3, marginBottom: 7, fontWeight: 600 }}>➕ NUEVA PREGUNTA</div>
@@ -2188,6 +2192,7 @@ function AddQToSurvey({ onAdd }) {
         <select value={kind} onChange={(e) => setKind(e.target.value)} aria-label="Tipo de pregunta" title="Tipo de pregunta: selección múltiple, o selección con justificación (el estudiante escribe por qué eligió a cada compañero)" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: kind === "seleccion" ? C.t2 : C.sky, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
           {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
         </select>
+        <label title="Si está marcada, el estudiante debe responder esta pregunta para continuar" style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t2, whiteSpace: "nowrap", cursor: "pointer" }}><input type="checkbox" checked={obl} onChange={(e) => setObl(e.target.checked)} />Obligatoria</label>
         <Btn v="pri" sm onClick={add} disabled={!text.trim()}>+ Agregar</Btn>
       </div>
     </div>
@@ -2224,7 +2229,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const [nS, setNS] = useState(blankSurvey);
   const [importPreview, setImportPreview] = useState(null);
   const fileInputRef = useRef(null);
-  const [nQ, setNQ] = useState({ text: "", tp: "pos", kind: "seleccion" });
+  const [nQ, setNQ] = useState({ text: "", tp: "pos", kind: "seleccion", obligatoria: false });
 
   useEffect(() => {
     const q = query(ccol("surveys"), orderBy("createdAt", "desc"));
@@ -2238,7 +2243,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     return () => unsub();
   }, []);
 
-  const addQ = () => { if (!nQ.text.trim()) return; const { kind, ...resto } = nQ; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...resto, tp: kind === "abierta" ? "neu" : resto.tp, text: nQ.text.trim(), ...(kind !== "seleccion" ? { kind } : {}) }] })); setNQ({ text: "", tp: "pos", kind: "seleccion" }); };
+  const addQ = () => { if (!nQ.text.trim()) return; const { kind, obligatoria, ...resto } = nQ; setNS((s) => ({ ...s, questions: [...s.questions, { id: "q_" + Date.now(), ...resto, tp: kind === "abierta" ? "neu" : resto.tp, text: nQ.text.trim(), ...(kind !== "seleccion" ? { kind } : {}), ...(obligatoria ? { obligatoria: true } : {}) }] })); setNQ({ text: "", tp: "pos", kind: "seleccion", obligatoria: false }); };
 
   const flash = (m, ms = 4500) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
 
@@ -2289,7 +2294,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const confirmImport = async () => {
     const r = importPreview?.result; if (!r?.ok) return;
     const groups = (GROUPS || []).slice();
-    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp })) }, "importada");
+    const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp, ...(q.kind ? { kind: q.kind } : {}), ...(q.obligatoria ? { obligatoria: true } : {}) })) }, "importada");
     if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
     setImportPreview(null);
   };
@@ -2299,7 +2304,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const gs = surveyGroups(sv);
     const base = `Copia de ${sv.title}`;
     const n = surveys.filter((x) => !x.deleted && (x.title === base || x.title.startsWith(base + " ("))).length;
-    const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, questions: (sv.questions || []).map((q) => ({ text: q.text, tp: q.tp })) }, "duplicada");
+    const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, questions: (sv.questions || []).map((q) => ({ id: "q_" + Math.random().toString(36).slice(2, 9), text: q.text, tp: q.tp, ...(q.kind ? { kind: q.kind } : {}), ...(q.obligatoria === true ? { obligatoria: true } : {}) })) }, "duplicada");
     if (id) { setEditing(id); flash("✅ Copia creada en borrador, sin respuestas. Cambia el título y los grupos, y actívala cuando quieras aplicarla.", 8000); }
   };
 
@@ -2414,6 +2419,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 22 }}>#{i + 1}</span>
                 <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{q.text}</span>
                 {esJustificable(q) && <span title={KIND_LABELS.justificable} style={{ fontSize: 11 }}>💬</span>}
+                {esObligatoria(q) && <span title="Obligatoria" style={{ fontSize: 11, color: C.amber, fontWeight: 800 }}>*</span>}
                 {esAbierta(q) ? <Badge color={C.sky}>✎ abierta</Badge> : <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>}
                 <button onClick={() => setNS((s) => ({ ...s, questions: s.questions.filter((x) => x.id !== q.id) }))} style={{ background: "none", border: "none", color: C.err, cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
@@ -2425,6 +2431,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
             <div style={{ display: "flex", gap: 8 }}>
               {nQ.kind !== "abierta" && <Sel value={nQ.tp} onChange={(v) => setNQ((q) => ({ ...q, tp: v }))} options={[{ v: "pos", l: "+ Positiva" }, { v: "neg", l: "− Negativa" }, { v: "neu", l: "○ Neutral" }]} />}
               <Sel value={nQ.kind} onChange={(v) => setNQ((q) => ({ ...q, kind: v }))} options={Object.entries(KIND_LABELS).map(([v, l]) => ({ v, l }))} />
+              <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11, color: C.t2, whiteSpace: "nowrap", cursor: "pointer" }}><input type="checkbox" checked={!!nQ.obligatoria} onChange={(e) => setNQ((q) => ({ ...q, obligatoria: e.target.checked }))} />Obligatoria</label>
               <Btn v="pri" onClick={addQ} disabled={!nQ.text.trim()}>+ Agregar</Btn>
             </div>
           </div>
@@ -2597,6 +2604,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                   <select value={kindOf(q)} aria-label="Tipo de pregunta" onChange={(e) => { const val = e.target.value; const newQs = sv.questions.map((qq) => { if (qq.id !== q.id) return qq; const { kind: _k, ...resto } = qq; return { ...(val === "abierta" ? { ...resto, tp: "neu" } : resto), ...(val === "seleccion" ? {} : { kind: val }) }; }); updateSurveyQuestions(sv.id, newQs); }} title="Tipo de pregunta: selección múltiple, o selección con justificación" style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 5, padding: "3px 6px", color: kindOf(q) === "seleccion" ? C.t3 : C.sky, fontSize: 10, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
                     {Object.entries(KIND_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
                   </select>
+                  <label title="Si está marcada, el estudiante debe responder esta pregunta para continuar" style={{ display: "flex", alignItems: "center", gap: 3, fontSize: 10, color: esObligatoria(q) ? C.amber : C.t3, fontWeight: 700, cursor: "pointer", whiteSpace: "nowrap" }}><input type="checkbox" aria-label="Obligatoria" checked={esObligatoria(q)} onChange={(e) => { const on = e.target.checked; const newQs = sv.questions.map((qq) => { if (qq.id !== q.id) return qq; const { obligatoria: _o, ...resto } = qq; return on ? { ...resto, obligatoria: true } : resto; }); updateSurveyQuestions(sv.id, newQs); }} />Obligatoria</label>
                   <button onClick={() => { const newQs = sv.questions.filter((qq) => qq.id !== q.id); updateSurveyQuestions(sv.id, newQs); }} style={{ background: "none", border: "none", color: tint(C.err, "80"), cursor: "pointer", fontSize: 12, padding: "0 3px" }}>✕</button>
                 </div>
               ))}
@@ -2686,6 +2694,17 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
   return (
     <div>
       <PageHeader title="Reportes y Análisis" subtitle="Genera reportes del análisis sociométrico filtrados por grupo" />
+      <details style={{ marginBottom: 12 }}>
+        <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: C.t2 }}>ℹ Guía para leer los indicadores y los roles</summary>
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 8, marginTop: 8 }}>
+          {["aceptacion", "rechazo", "expansion", "densidad", "mutuas", "lider", "controvertido", "rechazado", "aislado", "integrado", "regular"].map((k) => (
+            <div key={k} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11, lineHeight: 1.5, color: C.t2, background: C.surface }}>
+              <b style={{ color: C.text, fontSize: 12 }}>{GLOSARIO[k].titulo}</b><br />{GLOSARIO[k].que}<br /><span style={{ color: C.amber }}>Vigilar: {GLOSARIO[k].vigilar}</span>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize: 10, color: C.t3, marginTop: 6 }}>Pautas orientativas: apoyan tu criterio profesional, no son un diagnóstico.</div>
+      </details>
       <Card style={{ marginBottom: 16 }}>
         <div style={{ fontSize: 12, fontWeight: 700, color: C.t2, marginBottom: 12, textTransform: "uppercase", letterSpacing: ".5px" }}>Configurar reporte</div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14 }}>
@@ -3144,6 +3163,9 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
     const esAb = esAbierta(q);
     const textoAb = abiertasTxt[q.id] || "";
     const faltanJ = justificacionesFaltantes(q, sel, textos);
+    const obl = esObligatoria(q);
+    const faltaObl = faltaRespuesta(q, sel, textoAb);
+    const bloqueado = faltanJ.length > 0 || faltaObl;
     const isLast = qIdx === survey.questions.length - 1;
     // Los estudiantes que puede elegir: los de los grupos disponibles, excluyendo al respondente
     const surveyGs = surveyGroups(survey || {}).length > 0 ? surveyGroups(survey || {}) : null;
@@ -3179,15 +3201,15 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
               <span style={{ fontSize: 12, color: C.t2 }}>{respondent.name}</span>
               <button onClick={() => setStep("select")} style={{ marginLeft: "auto", background: "none", border: "none", color: C.t3, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← Cambiar</button>
             </div>
-            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? C.err : C.text, lineHeight: 1.4 }}>{q.text}</div>
+            <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? C.err : C.text, lineHeight: 1.4 }}>{q.text}{obl && <span title="Obligatoria" aria-label="obligatoria" style={{ color: "#f59e0b" }}> *</span>}</div>
             {esAb && (
               <div>
-                <div style={{ fontSize: 11, color: C.t2, marginBottom: 10, lineHeight: 1.5 }}>✎ Esta pregunta es <b>abierta</b>: no tienes que elegir a nadie. Escribe lo que piensas (puedes dejarla en blanco). Solo lo lee el equipo del colegio. No escribas insultos ni datos personales.</div>
+                <div style={{ fontSize: 11, color: C.t2, marginBottom: 10, lineHeight: 1.5 }}>✎ Esta pregunta es <b>abierta</b>: no tienes que elegir a nadie. Escribe lo que piensas{obl ? "." : " (puedes dejarla en blanco)."} Solo lo lee el equipo del colegio. No escribas insultos ni datos personales.</div>
                 <textarea aria-label="Tu respuesta" value={textoAb} maxLength={MAX_ABIERTA} rows={5} onChange={(e) => setAbiertasTxt((t) => ({ ...t, [q.id]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 14, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
                 <div style={{ fontSize: 10, color: C.t3, textAlign: "right" }}>{textoAb.length}/{MAX_ABIERTA}</div>
               </div>
             )}
-            {!esAb && <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas</div>}
+            {!esAb && <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas{obl ? " (esta pregunta es obligatoria)" : " (puedes dejarla en blanco)"}</div>}
             {esJ && !esAb && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
             {!esAb && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
@@ -3222,6 +3244,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
             </div>}
           </div>
 
+          {faltaObl && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>{esAb ? "Esta pregunta es obligatoria: escribe tu respuesta para continuar." : "Esta pregunta es obligatoria: elige al menos a una persona para continuar."}</div>}
           {faltanJ.length > 0 && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>Escribe por qué elegiste a: {faltanJ.map((id) => (students.find((x) => x.id === id) || {}).name).filter(Boolean).join(", ")}.</div>}
           <div style={{ display: "flex", gap: 8 }}>
             {qIdx > 0 && (
@@ -3231,13 +3254,13 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
               </button>
             )}
             {!isLast ? (
-              <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={faltanJ.length > 0}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: faltanJ.length ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              <button onClick={() => { setQIdx(i => i + 1); window.scrollTo({ top: 0, behavior: "smooth" }); }} disabled={bloqueado}
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: bloqueado ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: bloqueado ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
                 Siguiente →
               </button>
             ) : (
-              <button onClick={submitSurvey} disabled={saving || faltanJ.length > 0}
-                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || faltanJ.length ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || faltanJ.length ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
+              <button onClick={submitSurvey} disabled={saving || bloqueado}
+                style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || bloqueado ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || bloqueado ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
                 {saving ? "Guardando..." : "✅ Enviar respuestas"}
               </button>
             )}
@@ -4068,6 +4091,7 @@ export default function App() {
     { id: "matrix", label: "Matriz", icon: "⊞" },
     { id: "groups", label: "Grupos", icon: "👥" },
     { id: "reports", label: "Reportes", icon: "📊" },
+    { id: "graphs", label: "Gráficos", icon: "📈" },
     ...(isAdmin ? [{ id: "users", label: "Usuarios", icon: "👤" }, { id: "activity", label: "Actividad", icon: "📜" }, { id: "settings", label: "Config", icon: "⚙" }] : []),
   ];
   const filters = [
@@ -4175,15 +4199,15 @@ export default function App() {
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 10, marginBottom: 14 }}>
               {[
                 { i: "👥", v: visStudents.length, l: "Participantes", c: C.rx },
-                { i: "🔗", v: visConns.length,    l: "Conexiones",    c: C.teal },
-                { i: "📊", v: `${densidad}%`,     l: "Densidad",      c: C.amber },
+                { i: "🔗", v: visConns.length,    l: "Conexiones",    c: C.teal, h: "conexiones" },
+                { i: "📊", v: `${densidad}%`,     l: "Densidad",      c: C.amber, h: "densidad" },
                 { i: "🎯", v: visibleGroups.length, l: "Grupos vis.", c: C.violet },
               ].map((s) => (
                 <Card key={s.l} glow={s.c} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: tint(s.c, "12"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{s.i}</div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
-                    <div style={{ fontSize: 9, color: C.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{s.l}</div>
+                    <div style={{ fontSize: 9, color: C.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{s.l}{s.h && <Ayuda clave={s.h} />}</div>
                   </div>
                 </Card>
               ))}
@@ -4357,6 +4381,7 @@ export default function App() {
           <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
         ))}
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
+        {students.length > 0 && tab === "graphs" && <GraficosPanel students={students} conns={conns} surveys={surveys.filter((sv) => !sv.deleted)} responses={responsesVivas} />}
         {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesVivas} surveys={surveys} surveyFilter={activeFilter} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel licencia={licencia} nEstudiantes={students.length} />}

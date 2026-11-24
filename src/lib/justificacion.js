@@ -63,6 +63,16 @@ export function justificacionesFaltantes(q, selected, textos) {
   return (selected || []).filter((id) => cleanJustText(textos && textos[justKey(q.id, id)]).length < MIN_JUST);
 }
 
+/** ¿La pregunta es obligatoria? Por defecto no (así se comportan las encuestas anteriores). */
+export const esObligatoria = (q) => !!q && q.obligatoria === true;
+
+/** Pregunta obligatoria sin responder: de selección, sin elegir a nadie; abierta, sin texto suficiente. */
+export function faltaRespuesta(q, selected, textoAbierto) {
+  if (!esObligatoria(q)) return false;
+  if (esAbierta(q)) return cleanOpenText(textoAbierto).length < MIN_JUST;
+  return (selected || []).length === 0;
+}
+
 /** Valor escrito en un archivo o en el JSON de una encuesta → tipo. Vacío o desconocido = selección. */
 export function parseKind(v) {
   const s = String(v == null ? "" : v).normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toLowerCase();
