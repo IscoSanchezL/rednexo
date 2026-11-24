@@ -26,6 +26,7 @@ function descargarPng(svg, nombre) {
     const g = c.getContext("2d"); g.fillStyle = fondo; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
     c.toBlob((b) => { const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = nombre + ".png"; document.body.appendChild(a); a.click(); document.body.removeChild(a); setTimeout(() => URL.revokeObjectURL(a.href), 4000); });
   };
+  img.onerror = () => alert("No se pudo generar la imagen. Inténtalo de nuevo.");
   img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(xml);
 }
 
@@ -141,7 +142,7 @@ function CalorGrupos({ students, conns }) {
   const n = m.grupos.length, c = Math.min(64, Math.floor(480 / Math.max(n, 1))), ml = 90, mt = 70, W = ml + n * c + 20, H = mt + n * c + 16;
   const color = tipo === "neg" ? "239,68,68" : "20,184,166";
   return (
-    <Marco titulo="Conexiones entre grupos" ayuda="conexiones" svgRef={ref} archivo="conexiones-entre-grupos" nota="Cada celda cuenta cuántas conexiones van del grupo de la fila (quien elige) al de la columna (quien es elegido). La diagonal son vínculos dentro del mismo grupo.">
+    <Marco titulo="Conexiones entre grupos" ayuda="conexiones" svgRef={n < 2 ? null : ref} archivo="conexiones-entre-grupos" nota="Cada celda cuenta cuántas conexiones van del grupo de la fila (quien elige) al de la columna (quien es elegido). La diagonal son vínculos dentro del mismo grupo.">
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}><button type="button" style={btn(tipo === "pos")} onClick={() => setTipo("pos")}>Elecciones positivas</button><button type="button" style={btn(tipo === "neg")} onClick={() => setTipo("neg")}>Rechazos</button></div>
       {n < 2 ? <div style={{ fontSize: 12, color: V("t3") }}>Se necesitan al menos dos grupos con datos para este gráfico.</div> : (
         <svg ref={ref} viewBox={`0 0 ${Math.max(W, 300)} ${H}`} style={{ width: "100%", maxWidth: Math.max(W, 300) * 1.3, height: "auto", display: "block" }} fontFamily="system-ui, sans-serif">
@@ -195,6 +196,7 @@ function Dispersion({ report, ver, onPick, pickId }) {
           const on = String(p.id) === String(pickId);
           return (
             <g key={p.id} role="button" tabIndex={0} aria-label={`${ver ? p.name : "Estudiante"}: aceptación ${p.x}%, rechazo ${p.y}%`} data-punto={p.id} style={{ cursor: "pointer" }} onClick={() => onPick(p.id)} onKeyDown={(e) => e.key === "Enter" && onPick(p.id)}>
+              <circle cx={p.cx} cy={p.cy} r="13" fill="transparent" />
               <circle cx={p.cx} cy={p.cy} r={on ? 9 : 6.5} fill={ROL_COLOR[p.rol]} fillOpacity="0.9" stroke={on ? V("text") : "#ffffff"} strokeWidth={on ? 2.5 : 1} />
               {etiquetar(p) && <text x={p.cx + 9} y={p.cy + 4} fontSize="10" fill={V("text")}>{corto(p.name, 18)}</text>}
             </g>
@@ -215,7 +217,7 @@ function Mutuas({ report, ver, onPick, pickId }) {
   const datos = useMemo(() => rankingMutuas(report, tipo, 10), [report, tipo]);
   const W = 640, fila = 28, ml = 150, H = Math.max(datos.length, 1) * fila + 10, max = Math.max(1, ...datos.map((d) => d.valor));
   return (
-    <Marco titulo="Relaciones mutuas" ayuda="mutuas" svgRef={ref} archivo="relaciones-mutuas" nota="Las 10 personas con más relaciones mutuas. Las positivas son amistades de ida y vuelta; los rechazos mutuos son conflictos de dos lados.">
+    <Marco titulo="Relaciones mutuas" ayuda="mutuas" svgRef={datos.length ? ref : null} archivo="relaciones-mutuas" nota="Las 10 personas con más relaciones mutuas. Las positivas son amistades de ida y vuelta; los rechazos mutuos son conflictos de dos lados.">
       <div style={{ display: "flex", gap: 6, marginBottom: 8 }}><button type="button" style={btn(tipo === "pos")} onClick={() => setTipo("pos")}>Mutuas positivas</button><button type="button" style={btn(tipo === "neg")} onClick={() => setTipo("neg")}>Rechazos mutuos</button></div>
       {!datos.length ? <div style={{ fontSize: 12, color: V("t3") }}>{tipo === "pos" ? "Todavía no hay relaciones mutuas positivas." : "No hay rechazos mutuos."}</div> : (
         <svg ref={ref} viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block" }} fontFamily="system-ui, sans-serif">

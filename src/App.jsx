@@ -10,6 +10,7 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { GraficosPanel } from "./Graficos.jsx";
+import { ErrorBoundary, Boom } from "./ErrorBoundary.jsx";
 import { Ayuda } from "./Ayuda.jsx";
 import { GLOSARIO } from "./lib/glosario";
 import { esEncuestaPublica, urlSoporte, cargarWidget, configuracionSoporte } from "./lib/soporte";
@@ -2087,7 +2088,7 @@ function SurveyProgress({ surveys, students, responses }) {
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(130px,1fr))", gap: 6 }}>
                 {p.items.map((s) => (
-                  <div key={s.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: s.done ? tint(C.ok, "10") : C.surface, border: `1px solid ${s.done ? tint(C.ok, "30") : C.border}` }}>
+                  <div key={s.id} title={`${s.name}${s.group ? " · " + s.group : ""} · ${s.done ? "ya respondió" : "pendiente"}`} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 8px", borderRadius: 7, background: s.done ? tint(C.ok, "10") : C.surface, border: `1px solid ${s.done ? tint(C.ok, "30") : C.border}` }}>
                     <span style={{ width: 8, height: 8, borderRadius: "50%", background: s.done ? C.ok : tint(C.t3, "50"), flexShrink: 0 }} />
                     <span style={{ fontSize: 10, color: s.done ? C.ok : C.t3, fontWeight: s.done ? 600 : 400, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.name}</span>
                   </div>
@@ -2803,6 +2804,14 @@ function LicenciaCard({ licencia, nEstudiantes }) {
   );
 }
 
+// Períodos para elegir: el año pasado, el actual y el siguiente (así no caducan); se conserva el ya guardado aunque sea de otro año.
+function periodosEscolares(actual) {
+  const y = new Date().getFullYear(), op = [{ v: "", l: "Sin definir" }];
+  for (const a of [y + 1, y, y - 1]) for (const sem of [1, 2]) op.push({ v: `${a}-${sem}`, l: `${a} — Sem. ${sem}` });
+  if (actual && !op.some((o) => o.v === actual)) op.push({ v: actual, l: String(actual).replace("-", " — Sem. ") });
+  return op;
+}
+
 function SettingsPanel({ licencia, nEstudiantes }) {
   const [cfg, setCfg] = useState({ colegio: "", ciudad: "", periodo: "", dominio: "all", registro: "no", notifEncuesta: "yes", notifResultados: "psy", logo: "", idioma: "es" });
   const [saved, setSaved] = useState(false);
@@ -2846,7 +2855,7 @@ function SettingsPanel({ licencia, nEstudiantes }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Inp label="Colegio" value={cfg.colegio} onChange={(v) => upd("colegio", v)} placeholder="Nombre del colegio" />
             <Inp label="Ciudad" value={cfg.ciudad} onChange={(v) => upd("ciudad", v)} placeholder="Ciudad" />
-            <Sel label="Período" value={cfg.periodo} onChange={(v) => upd("periodo", v)} options={[{ v: "", l: "Sin definir" }, { v: "2026-1", l: "2026 — Sem. 1" }, { v: "2026-2", l: "2026 — Sem. 2" }, { v: "2025-2", l: "2025 — Sem. 2" }, { v: "2025-1", l: "2025 — Sem. 1" }]} />
+            <Sel label="Período" value={cfg.periodo} onChange={(v) => upd("periodo", v)} options={periodosEscolares(cfg.periodo)} />
           </div>
         </Card>
         <Card glow={C.teal}>
@@ -2934,6 +2943,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
   const [textos, setTextos] = useState({});   // explicaciones escritas: { "preguntaId|estudianteId": "texto" }
   const [abiertasTxt, setAbiertasTxt] = useState({});   // respuestas a preguntas abiertas: { preguntaId: "texto" }
   const [saving, setSaving] = useState(false);
+  const [lento, setLento] = useState(false);
   const [alreadyDone, setAlreadyDone] = useState(false);
   // Grupos que el respondente puede ver al seleccionar su nombre
   const [selectedGroups, setSelectedGroups] = useState([]);
@@ -2988,6 +2998,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
 
   const submitSurvey = async () => {
     setSaving(true);
+    const aviso = setTimeout(() => setLento(true), 8000);   // si la red está lenta, se le dice que espere sin cerrar
     try {
       setCurrentColegio(colegioId);
       const rid = `${surveyId}_${respondent.id}`;
@@ -2999,8 +3010,14 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
       });
       try { await setDoc(cdoc("responseMarks", rid), { surveyId, respondentId: respondent.id }); } catch (e) { /* la marca es solo informativa */ }
       setStep("done"); setAlreadyDone(false);
-    } catch (e) { console.error("No se pudo guardar la respuesta:", e && e.code, e && e.message); alert("Error al guardar. Intenta de nuevo."); }
-    setSaving(false);
+    } catch (e) {
+      console.error("No se pudo guardar la respuesta:", e && e.code, e && e.message);
+      const c = e && e.code;
+      alert(c === "permission-denied" ? "No se pudo guardar. Es posible que ya hayas respondido esta encuesta o que esta encuesta ya no reciba respuestas. Avísale a tu profesor(a)."
+        : c === "unavailable" || c === "deadline-exceeded" ? "No hay conexión a internet. Revisa tu conexión e inténtalo de nuevo; tus respuestas siguen en esta pantalla."
+        : "No se pudo guardar. Inténtalo de nuevo en un momento; tus respuestas siguen en esta pantalla.");
+    }
+    clearTimeout(aviso); setLento(false); setSaving(false);
   };
 
   // Tema claro/oscuro: lo elige el estudiante con el botón (y se recuerda en su navegador). Todos los colores salen de las variables de tema.
@@ -3164,7 +3181,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
     const textoAb = abiertasTxt[q.id] || "";
     const faltanJ = justificacionesFaltantes(q, sel, textos);
     const obl = esObligatoria(q);
-    const faltaObl = faltaRespuesta(q, sel, textoAb);
+    const faltaObl = faltaRespuesta(q, sel, textoAb) && (esAb || students.some((x) => x.id !== respondent.id && (surveyGroups(survey || {}).length ? surveyGroups(survey || {}).includes(x.group) : true)));   // si no hay compañeros a quién elegir, no se exige
     const bloqueado = faltanJ.length > 0 || faltaObl;
     const isLast = qIdx === survey.questions.length - 1;
     // Los estudiantes que puede elegir: los de los grupos disponibles, excluyendo al respondente
@@ -3244,6 +3261,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
             </div>}
           </div>
 
+          {saving && lento && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>La conexión está lenta o se perdió. No cierres ni recargues esta pantalla: tu respuesta se enviará apenas haya conexión.</div>}
           {faltaObl && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>{esAb ? "Esta pregunta es obligatoria: escribe tu respuesta para continuar." : "Esta pregunta es obligatoria: elige al menos a una persona para continuar."}</div>}
           {faltanJ.length > 0 && <div role="status" style={{ fontSize: 12, color: "#f59e0b", marginBottom: 8, textAlign: "center" }}>Escribe por qué elegiste a: {faltanJ.map((id) => (students.find((x) => x.id === id) || {}).name).filter(Boolean).join(", ")}.</div>}
           <div style={{ display: "flex", gap: 8 }}>
@@ -4172,6 +4190,8 @@ export default function App() {
       )}
 
       <main style={{ padding: "clamp(12px, 3vw, 22px)", animation: "slideIn .3s ease" }}>
+        <ErrorBoundary compacto resetKey={tab}>
+        {import.meta.env.VITE_USE_EMULATORS === "true" && tab === "dashboard" && window.location.hash === "#boom" && <Boom />}
         {students.length > 0 && ["dashboard", "matrix", "reports"].includes(tab) && surveys.filter((sv) => !sv.deleted).length > 1 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
             <label htmlFor="rn-fuente" style={{ fontSize: 12, fontWeight: 600, color: C.t2 }}>Datos de:</label>
@@ -4187,6 +4207,7 @@ export default function App() {
           // ── Cálculos dinámicos del dashboard ──
           const visStudents = students.filter(s => visibleGroups.includes(s.group));
           const visConns = conns.filter(c => visStudents.some(s => s.id === c.f) && visStudents.some(s => s.id === c.t));
+          const pC = selNode ? visConns.filter((c) => c.f === selNode || c.t === selNode) : [];   // el detalle cuenta solo lo que se ve (grupos visibles), igual que el resto de cifras
           const n = visStudents.length;
           const densidad = density(visConns.length, n);
 
@@ -4385,6 +4406,7 @@ export default function App() {
         {students.length > 0 && tab === "reports" && <ReportsPanel students={students} conns={conns} responses={responsesVivas} surveys={surveys} surveyFilter={activeFilter} />}
         {tab === "activity" && isAdmin && (<><PageHeader title="Registro de Actividad" subtitle="Auditoría completa de acciones del sistema" /><ActivityLog /></>)}
         {tab === "settings" && isAdmin && <SettingsPanel licencia={licencia} nEstudiantes={students.length} />}
+        </ErrorBoundary>
       </main>
     </div>
   );
