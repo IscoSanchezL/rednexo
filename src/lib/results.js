@@ -1,6 +1,8 @@
 // Resultados de encuestas listos para Excel: qué hojas y columnas lleva el archivo (lógica pura, probada).
 import { buildConnections, hasType, surveyGroups } from "./sociometry.js";
 import { computeReport, ROLE_LABELS, ROLE_HELP } from "./reports.js";
+import { esAbierta } from "./justificacion.js";
+import { listarAbiertas } from "./abiertas.js";
 
 /** Más estudiantes que esto y la hoja «Matriz» del Excel se reemplaza por un aviso (2.000.000 de celdas no sirven a nadie). */
 export const MATRIZ_MAX_EXCEL = 250;
@@ -42,7 +44,8 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
     ["Conexiones", "Una fila por pareja (quién → a quién) con cuántas veces se marcó cada tipo."],
     ["Matriz", "Quién (filas) marcó a quién (columnas). Valor = elecciones positivas − rechazos (positivo = aceptación; negativo = rechazo; vacío = sin conexión)."],
     ["Respuestas", "Una fila por elección individual (con la justificación escrita, si la hubo). Es la hoja ideal para tablas dinámicas y gráficos."],
-    ["Por pregunta", "Resumen de cada pregunta: cuántos respondieron y cuántas elecciones recibió."], [],
+    ["Por pregunta", "Resumen de cada pregunta: cuántos respondieron y cuántas elecciones recibió."],
+    ["Abiertas", "(Solo si hay preguntas abiertas) Lo que escribió cada estudiante en ellas: opiniones, sugerencias o datos del grupo."], [],
     [{ v: "Definiciones", s: "bold" }],
     ["Aceptación", "Compañeros que lo eligieron positivamente ÷ (participantes − 1). De 0 % a 100 %."],
     ["Rechazo", "Compañeros que lo rechazaron ÷ (participantes − 1)."],
@@ -90,6 +93,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
     for (const q of sv.questions || []) porPregunta.set(`${sv.id}|${q.id}`, { sv, q, respondieron: new Set(), elecciones: 0 });
     for (const r of resp.filter((x) => x.surveyId === sv.id).sort(orden)) {
       for (const q of sv.questions || []) {
+        if (esAbierta(q)) { if (r.abiertas && typeof r.abiertas[q.id] === "string" && r.abiertas[q.id].trim()) porPregunta.get(`${sv.id}|${q.id}`).respondieron.add(String(r.respondentId)); continue; }   // abierta: no hay elecciones, solo texto (hoja «Abiertas»)
         const chosen = (r.answers && r.answers[q.id]) || [];
         if (!chosen.length) continue;
         const acc = porPregunta.get(`${sv.id}|${q.id}`); acc.respondieron.add(String(r.respondentId));
@@ -98,7 +102,11 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
     }
   }
   const preguntas = [["Encuesta", "Pregunta", "Tipo", "Estudiantes que respondieron", "Elecciones", "Elecciones por estudiante (promedio)"]];
-  for (const { sv, q, respondieron: rs, elecciones } of porPregunta.values()) preguntas.push([sv.title, q.text, TIPO[q.tp] || q.tp, rs.size, elecciones, rs.size ? Math.round((elecciones / rs.size) * 100) / 100 : 0]);
+  for (const { sv, q, respondieron: rs, elecciones } of porPregunta.values()) preguntas.push([sv.title, q.text, esAbierta(q) ? "Abierta" : (TIPO[q.tp] || q.tp), rs.size, elecciones, rs.size ? Math.round((elecciones / rs.size) * 100) / 100 : 0]);
+
+  // Hoja «Abiertas»: solo si alguna encuesta del alcance tiene preguntas abiertas (así los libros de siempre no cambian).
+  const hayAbiertas = surveyList.some((sv) => (sv.questions || []).some(esAbierta));
+  const hojaAbiertas = hayAbiertas ? [["Encuesta", "Pregunta", "Estudiante", "Grupo", "Respuesta"], ...listarAbiertas(resp, surveyList, scopeStudents).map((f) => [f.encuesta, f.pregunta, f.de, f.grupo, f.text])] : null;
 
   const w = (...a) => a;
   return {
@@ -110,6 +118,7 @@ export function buildResultsSheets({ students, surveys, responses, surveyId = "a
       { name: "Matriz", header: true, rows: matriz, widths: matrizGrande ? [30, 120] : [24, ...scopeStudents.map(() => 12), 11, 12] },
       { name: "Respuestas", header: true, rows: respuestas, widths: w(26, 52, 15, 24, 18, 24, 18, 18, 60) },
       { name: "Por pregunta", header: true, rows: preguntas, widths: w(26, 56, 12, 16, 12, 18) },
+      ...(hojaAbiertas ? [{ name: "Abiertas", header: true, rows: hojaAbiertas, widths: w(26, 52, 24, 18, 90) }] : []),
     ],
   };
 }
