@@ -78,7 +78,7 @@ export function renderStudentReportHTML(d, { version = "equipo", colegio = "", d
   const s = d.stats, nombre = d.student.name;
   const col = /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : "#3b82f6";
   const kpi = (v, l, _c, sub = "") => `<div class="kpi"><div class="val">${v}</div><div class="lbl">${l}</div>${sub ? `<div style="font-size:10px;color:#5a6a7c;margin-top:3px">${sub}</div>` : ""}</div>`;
-  const comp = (valor, prom, unidad = "%") => `Grupo: ${un(prom)}${unidad}`;
+  const comp = (valor, prom, unidad = "%") => `Promedio del grupo: ${un(prom)}${unidad}`;
   const rol = `<span class="role role-${s.rol}">${ROLE_LABELS[s.rol]}</span>`;
   const nombres = (arr) => arr.map((x) => esc(x.name)).join(", ");
 

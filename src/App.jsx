@@ -1534,10 +1534,10 @@ function SocioMatrix({ students, conns }) {
                   <th key={s.id}
                     onMouseEnter={() => setHovCol(s.id)}
                     onMouseLeave={() => setHovCol(null)}
-                    style={{ position: "sticky", top: 0, zIndex: 5, width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? mixOn(gc, 16) : C.cardAlt, border: `1px solid ${isHov ? tint(gc, "80") : C.border}`, textAlign: "center", transition: "background .15s, border-color .15s" }}>
+                    style={{ position: "sticky", top: 0, zIndex: 5, width: cellSize, minWidth: cellSize, padding: "6px 2px", background: isHov ? mixOn(gc, 16) : C.cardAlt, border: `1px solid ${isHov ? tint(gc, "80") : C.border}`, textAlign: "center", verticalAlign: "top", transition: "background .15s, border-color .15s" }}>
                     <div style={{ width: 28, height: 28, borderRadius: 7, background: mixOn(gc, 20, "var(--c-surface)"), border: `1.5px solid ${tint(gc, "99")}`, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 800, fontSize: 10, color: C.text, margin: "0 auto" }}>{s.av}</div>
                     <div style={{ fontSize: 8, fontWeight: 600, lineHeight: 1.15, color: C.t2, marginTop: 3 }}>{s.group}</div>
-                    <div title={s.name} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 9, fontWeight: 700, color: C.text, margin: "4px auto 0", maxHeight: 84, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{s.name.split(" ").slice(0, 2).join(" ")}</div>
+                    <div title={s.name} style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: 9, fontWeight: 700, color: C.text, margin: "4px auto 0", height: 84, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" }}>{s.name.split(" ").slice(0, 2).join(" ")}</div>
                   </th>
                 );
               })}
