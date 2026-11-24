@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RedNexo · Manual de usuario</title>
+<style>
+  :root { --tinta:#0e1a2b; --texto:#26313f; --suave:#5d6b7c; --linea:#d5dbe3; --fondo:#f3f5f8; --marca:#0b5ed7; }
+  @page {
+    size: A4; margin: 28mm 20mm 22mm 20mm;
+    @top-left { content: ""; width: 34mm; height: 8mm; background: url("img-usuario/logo-600.png") no-repeat left center / 30mm auto; vertical-align: middle; }
+    @top-right { content: "Manual de usuario"; font: 500 8pt "Inter", sans-serif; color: #5d6b7c; letter-spacing: .04em; vertical-align: middle; }
+    @bottom-left { content: "RedNexo · Iskonex · Documento de uso interno del colegio"; font: 400 7.5pt "Inter", sans-serif; color: #8a96a6; }
+    @bottom-right { content: counter(page); font: 500 8.5pt "Inter", sans-serif; color: #26313f; }
+  }
+  @page :first { margin: 0; @top-left { content: none; } @top-right { content: none; } @bottom-left { content: none; } @bottom-right { content: none; } }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { counter-reset: fig; margin: 0; font-family: "Inter", "Helvetica Neue", Arial, sans-serif; font-size: 9.4pt; line-height: 1.52; color: var(--texto); }
+  h1, h2, h3, h4 { color: var(--tinta); margin: 0; }
+  p { margin: 0 0 7pt; }
+  ul, ol { margin: 0 0 8pt 15pt; padding: 0; } li { margin: 0 0 3pt; }
+  b, strong { color: var(--tinta); font-weight: 600; }
+
+  /* Portada */
+  .portada { height: 297mm; padding: 26mm 24mm 22mm 24mm; display: flex; flex-direction: column; break-after: page; position: relative; }
+  .portada .logo { width: 62mm; }
+  .portada .centro { margin-top: auto; margin-bottom: auto; padding-top: 30mm; }
+  .portada .etiqueta { font: 600 8.5pt "Inter", sans-serif; letter-spacing: .22em; text-transform: uppercase; color: var(--marca); margin-bottom: 9mm; }
+  .portada h1 { font: 400 44pt/1.04 "Bitstream Charter", Charter, Georgia, serif; letter-spacing: -.01em; max-width: 150mm; }
+  .portada .regla { width: 22mm; height: 3px; background: var(--marca); margin: 11mm 0 9mm; }
+  .portada .sub { font: 400 13pt/1.5 "Bitstream Charter", Charter, Georgia, serif; color: #3b4859; max-width: 130mm; }
+  .portada .pie { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8mm; border-top: 1px solid var(--linea); padding-top: 6mm; font-size: 8.5pt; color: var(--suave); }
+  .portada .pie b { display: block; font-size: 7.5pt; letter-spacing: .14em; text-transform: uppercase; color: var(--suave); font-weight: 600; margin-bottom: 1.5mm; }
+  .portada .pie span { color: var(--tinta); font-size: 9.5pt; font-weight: 500; }
+
+  /* Índice */
+  .indice-titulo { font: 400 22pt "Bitstream Charter", Charter, Georgia, serif; margin-bottom: 4mm; }
+  .toc { list-style: none; margin: 0; padding: 0; }
+  .toc li { display: flex; align-items: baseline; gap: 4mm; padding: 1.5mm 0; border-bottom: 1px solid #e6eaf0; margin: 0; }
+  .toc .n { width: 9mm; font: 600 9pt "Inter", sans-serif; color: var(--marca); }
+  .toc .t { flex: 1; font-size: 10.2pt; color: var(--tinta); }
+  .toc .t small { display: block; color: var(--suave); font-size: 7.8pt; margin-top: .2mm; }
+  .toc .p { font: 500 9pt "Inter", sans-serif; color: var(--suave); }
+  .toc li.grupo { border-bottom: 0; padding-top: 3.5mm; padding-bottom: 0; }
+  .toc li.grupo .t { font: 600 7.8pt "Inter", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--suave); }
+
+  /* Secciones */
+  section.cap { break-before: page; }
+  .cap-cab { display: flex; align-items: flex-end; gap: 6mm; padding-bottom: 5mm; border-bottom: 1px solid var(--tinta); margin-bottom: 6mm; }
+  .cap-cab .num { font: 400 46pt/0.9 "Bitstream Charter", Charter, Georgia, serif; color: #b9c3d0; }
+  .cap-cab h2 { font: 400 25pt/1.1 "Bitstream Charter", Charter, Georgia, serif; }
+  .cap-cab .tag { font: 600 7.5pt "Inter", sans-serif; letter-spacing: .2em; text-transform: uppercase; color: var(--marca); margin-bottom: 2mm; }
+  .lead { font: 400 11.2pt/1.55 "Bitstream Charter", Charter, Georgia, serif; color: #2f3b4b; margin-bottom: 8pt; }
+  h3 { font: 600 11pt "Inter", sans-serif; margin: 15pt 0 5pt; break-after: avoid; }
+  h3 .k { color: var(--marca); font-weight: 600; margin-right: 4pt; }
+  h4 { font: 600 7.8pt "Inter", sans-serif; letter-spacing: .14em; text-transform: uppercase; color: var(--suave); margin: 11pt 0 3pt; break-after: avoid; }
+
+  .pasos { list-style: none; counter-reset: paso; margin-left: 0; }
+  .pasos li { counter-increment: paso; position: relative; padding-left: 8mm; margin-bottom: 4pt; }
+  .pasos li::before { content: counter(paso); position: absolute; left: 0; top: 0; width: 5.2mm; height: 5.2mm; border: 1px solid var(--marca); color: var(--marca); font: 600 7.5pt/5mm "Inter", sans-serif; text-align: center; border-radius: 50%; }
+
+  .aviso, .importante { background: var(--fondo); border-left: 3px solid #8aa0bd; padding: 7pt 11pt; margin: 9pt 0; break-inside: avoid; }
+  .importante { border-left-color: var(--marca); background: #eef3fb; }
+  .aviso .rot, .importante .rot { display: block; font: 600 7.5pt "Inter", sans-serif; letter-spacing: .16em; text-transform: uppercase; color: var(--suave); margin-bottom: 2pt; }
+  .importante .rot { color: var(--marca); }
+  .aviso p:last-child, .importante p:last-child { margin-bottom: 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 6pt 0 10pt; font-size: 8.8pt; break-inside: auto; }
+  thead { display: table-header-group; }
+  th { text-align: left; font: 600 7.6pt "Inter", sans-serif; letter-spacing: .1em; text-transform: uppercase; color: var(--suave); border-bottom: 1.5px solid var(--tinta); padding: 4pt 7pt 4pt 0; }
+  td { padding: 5pt 7pt 5pt 0; border-bottom: 1px solid #e3e8ee; vertical-align: top; }
+  td:first-child { color: var(--tinta); font-weight: 600; white-space: nowrap; }
+  tr { break-inside: avoid; }
+
+  figure { margin: 8pt 0 12pt; break-inside: avoid; counter-increment: fig; }
+  figure img { display: block; width: 100%; max-height: 118mm; object-fit: contain; object-position: top center; border: 1px solid #c9d1dc; margin: 0 auto; }
+  figure.recorte img { margin: 0 auto; }
+  figure.movil { display: inline-block; width: 49%; vertical-align: top; text-align: center; }
+  figure.movil img { width: 56mm; margin: 0 auto; }
+  figcaption { font-size: 8pt; color: var(--suave); margin-top: 3pt; line-height: 1.4; text-align: left; }
+  figure.compacta img { max-height: 66mm; }
+  figure.media img { max-height: 80mm; }
+  figcaption::before { content: "Figura " counter(fig) ".  "; font-weight: 600; color: var(--tinta); }
+  .par { display: flex; gap: 6mm; justify-content: center; break-inside: avoid; }
+  .par figure { width: 50%; text-align: center; margin: 8pt 0 12pt; }
+  .par figure img { width: 56mm; margin: 0 auto; }
+  .par figcaption { text-align: left; }
+
+  .dos { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+  .tarjeta { border: 1px solid var(--linea); padding: 8pt 10pt; break-inside: avoid; }
+  .tarjeta b { display: block; margin-bottom: 2pt; }
+  .tarjeta p { margin: 0; font-size: 8.8pt; }
+  .glosario dt { font-weight: 600; color: var(--tinta); margin-top: 3pt; }
+  .glosario dd { margin: 0 0 2pt; }
+  .glosario { font-size: 9pt; }
+</style>
+</head>
+<body>
+
+<!-- ═══ PORTADA ═══ -->
+<section class="portada">
+  <img class="logo" src="img-usuario/logo.png" alt="Iskonex RedNexo">
+  <div class="centro">
+    <div class="etiqueta">Manual de usuario</div>
+    <h1>Plataforma de análisis sociométrico escolar</h1>
+    <div class="regla"></div>
+    <p class="sub">Guía completa para el equipo de orientación, psicología y administración del colegio: cada sección de la plataforma, paso a paso.</p>
+  </div>
+  <div class="pie">
+    <div><b>Versión</b><span>2.0</span></div>
+    <div><b>Edición</b><span>Noviembre de 2026</span></div>
+    <div><b>Desarrollado por</b><span>Iskonex</span></div>
+  </div>
+</section>
+
+<!-- ═══ ÍNDICE ═══ -->
+<section class="indice" style="break-after: page;">
+  <h2 class="indice-titulo">Contenido</h2>
+  <ul class="toc">
+    <li class="grupo"><span></span><span class="t">Primeros pasos</span></li>
+    <li><span class="n">01</span><span class="t">Introducción<small>Qué hace la plataforma, a quién va dirigida y cómo se organiza el trabajo</small></span><span class="p">{{pg:s1}}</span></li>
+    <li><span class="n">02</span><span class="t">Ingreso y navegación<small>Acceso, menú de secciones, tema visual y soporte</small></span><span class="p">{{pg:s2}}</span></li>
+    <li class="grupo"><span></span><span class="t">Secciones de la plataforma</span></li>
+    <li><span class="n">03</span><span class="t">Dashboard<small>Sociograma interactivo e indicadores generales</small></span><span class="p">{{pg:s3}}</span></li>
+    <li><span class="n">04</span><span class="t">Grupos<small>Cursos y estudiantes</small></span><span class="p">{{pg:s4}}</span></li>
+    <li><span class="n">05</span><span class="t">Encuestas<small>Creación, tipos de pregunta, aplicación y seguimiento</small></span><span class="p">{{pg:s5}}</span></li>
+    <li><span class="n">06</span><span class="t">Experiencia del estudiante<small>Lo que ve y hace quien responde la encuesta</small></span><span class="p">{{pg:s6}}</span></li>
+    <li><span class="n">07</span><span class="t">Matriz<small>Quién eligió a quién, en una sola tabla</small></span><span class="p">{{pg:s7}}</span></li>
+    <li><span class="n">08</span><span class="t">Reportes<small>Informes grupales, individuales y de un estudiante</small></span><span class="p">{{pg:s8}}</span></li>
+    <li><span class="n">09</span><span class="t">Gráficos<small>Análisis visual por grupo, por estudiante y entre aplicaciones</small></span><span class="p">{{pg:s9}}</span></li>
+    <li class="grupo"><span></span><span class="t">Administración</span></li>
+    <li><span class="n">10</span><span class="t">Usuarios<small>Roles y autorizaciones del equipo</small></span><span class="p">{{pg:s10}}</span></li>
+    <li><span class="n">11</span><span class="t">Actividad<small>Registro de acciones</small></span><span class="p">{{pg:s11}}</span></li>
+    <li><span class="n">12</span><span class="t">Configuración<small>Institución, marca y copia de datos</small></span><span class="p">{{pg:s12}}</span></li>
+    <li class="grupo"><span></span><span class="t">Interpretación y buenas prácticas</span></li>
+    <li><span class="n">13</span><span class="t">Cómo leer los indicadores y los roles<small>Aceptación, rechazo, expansión, densidad y perfiles</small></span><span class="p">{{pg:s13}}</span></li>
+    <li><span class="n">14</span><span class="t">Confidencialidad, licencia y soporte<small>Manejo responsable de la información y vigencia del servicio</small></span><span class="p">{{pg:s14}}</span></li>
+    <li><span class="n">15</span><span class="t">Preguntas frecuentes y glosario</span><span class="p">{{pg:s15}}</span></li>
+  </ul>
+</section>
+
+<!-- ═══ 01 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">01</div><div><div class="tag">Sección 01</div><h2>Introducción</h2></div></div>
+  <p class="lead">RedNexo convierte las respuestas de los estudiantes a preguntas sencillas en un mapa de las relaciones del grupo: quién es buscado, quién queda por fuera, dónde hay vínculos recíprocos y dónde hay conflicto.</p>
+
+  <h3>Qué es la sociometría escolar</h3>
+  <p>La sociometría mide la estructura de relaciones de un grupo. Cada estudiante responde preguntas como «¿con quién te gustaría trabajar en un proyecto?» o «¿con quién preferirías no trabajar?». La plataforma cruza todas las respuestas, calcula indicadores por estudiante y por grupo, y los presenta en tablas, gráficos e informes.</p>
+  <p>El resultado es una herramienta de apoyo a la observación del equipo de orientación. No es un diagnóstico y no sustituye el criterio profesional ni la conversación directa con los estudiantes y sus familias.</p>
+
+  <h3>A quién va dirigido este manual</h3>
+  <p>A los psicólogos y orientadores escolares que crean y analizan las encuestas, y a los administradores del colegio que gestionan usuarios y configuración. Quienes tienen rol de solo lectura pueden consultar la información, pero no modificarla.</p>
+
+  <h3>El flujo de trabajo</h3>
+  <ol class="pasos">
+    <li><b>Preparar los grupos.</b> Cree los cursos y cargue a sus estudiantes (sección Grupos).</li>
+    <li><b>Crear la encuesta.</b> Defina el título, los grupos que participan, el máximo de elecciones y las preguntas (sección Encuestas).</li>
+    <li><b>Activar y compartir el enlace.</b> Los estudiantes responden desde el celular o el computador, sin crear cuenta.</li>
+    <li><b>Seguir el avance.</b> El panel de la encuesta muestra quién ya respondió y quién falta.</li>
+    <li><b>Analizar.</b> Revise el Dashboard, la Matriz y los Gráficos; genere los Reportes para reuniones de equipo y de familias.</li>
+    <li><b>Repetir.</b> Duplique la encuesta meses después y compare las dos aplicaciones.</li>
+  </ol>
+
+  <h3>Roles de usuario</h3>
+  <p>Si la licencia del colegio vence, todos los roles pasan a solo lectura durante un periodo de gracia (sección 14).</p>
+  <table>
+    <thead><tr><th>Rol</th><th>Qué puede hacer</th></tr></thead>
+    <tbody>
+      <tr><td>Administrador</td><td>Todo lo del psicólogo, más la gestión de usuarios, el registro de actividad, la configuración del colegio y la descarga de la copia de datos.</td></tr>
+      <tr><td>Psicólogo escolar</td><td>Crear y editar grupos, estudiantes y encuestas; consultar resultados; generar reportes y gráficos.</td></tr>
+      <tr><td>Solo lectura</td><td>Consultar el Dashboard, la Matriz, los Reportes y los Gráficos. No puede crear ni modificar nada.</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══ 02 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">02</div><div><div class="tag">Sección 02</div><h2>Ingreso y navegación</h2></div></div>
+  <p class="lead">Un solo acceso para todo el equipo: se ingresa con la cuenta autorizada por el administrador y se navega con el menú superior.</p>
+
+  <h3>Ingresar</h3>
+  <ol class="pasos">
+    <li>Abra en el navegador la dirección que le entregó el colegio.</li>
+    <li>Pulse <b>Continuar con Google</b> e ingrese con el correo que el administrador autorizó.</li>
+    <li>Si su correo aún no está autorizado, la plataforma muestra un aviso de acceso pendiente. Pida al administrador que lo agregue en la sección Usuarios.</li>
+    <li>Si trabaja con varios colegios, elija primero el colegio en la pantalla de selección.</li>
+  </ol>
+  <figure><img src="img-usuario/01-ingreso.jpg" alt=""><figcaption>Pantalla de ingreso. Desde aquí también se puede solicitar acceso o contactar a soporte.</figcaption></figure>
+
+  <h3>El menú de secciones</h3>
+  <p>Debajo del encabezado aparecen las secciones de la plataforma. Las tres últimas (Usuarios, Actividad y Configuración) solo las ven los administradores.</p>
+  <table>
+    <thead><tr><th>Sección</th><th>Para qué sirve</th></tr></thead>
+    <tbody>
+      <tr><td>Dashboard</td><td>Vista general del grupo: sociograma e indicadores.</td></tr>
+      <tr><td>Encuestas</td><td>Crear, editar, aplicar y seguir las encuestas.</td></tr>
+      <tr><td>Matriz</td><td>Tabla de quién eligió a quién.</td></tr>
+      <tr><td>Grupos</td><td>Cursos y estudiantes.</td></tr>
+      <tr><td>Reportes</td><td>Informes para imprimir, compartir o archivar.</td></tr>
+      <tr><td>Gráficos</td><td>Análisis visual para el profesional.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Otros controles del encabezado</h3>
+  <ul>
+    <li><b>Soporte.</b> Abre un formulario para contactar al equipo de Iskonex. Adjunta de forma automática su rol y el nombre del colegio, nunca datos de estudiantes. No escriba nombres de estudiantes en el mensaje.</li>
+    <li><b>Tema claro u oscuro.</b> El botón con el sol o la luna cambia la apariencia de toda la plataforma. La preferencia se recuerda en ese navegador.</li>
+    <li><b>Cambiar colegio.</b> Solo aparece si su cuenta pertenece a más de un colegio.</li>
+    <li><b>Salir.</b> Cierra la sesión. Hágalo siempre en computadores compartidos.</li>
+  </ul>
+</section>
+
+<!-- ═══ 03 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">03</div><div><div class="tag">Sección 03</div><h2>Dashboard</h2></div></div>
+  <p class="lead">La vista de conjunto: un mapa interactivo de las relaciones del grupo y los indicadores que lo resumen.</p>
+
+  <figure><img src="img-usuario/02-dashboard.jpg" alt=""><figcaption>Dashboard con el sociograma, las tarjetas de resumen y el ranking de estudiantes.</figcaption></figure>
+
+  <h3>Indicadores superiores</h3>
+  <table>
+    <thead><tr><th>Tarjeta</th><th>Qué muestra</th></tr></thead>
+    <tbody>
+      <tr><td>Participantes</td><td>Estudiantes incluidos en la vista actual.</td></tr>
+      <tr><td>Conexiones</td><td>Vínculos dirigidos entre estudiantes (A elige o marca a B). Cada pareja cuenta una vez, aunque se repita en varias preguntas.</td></tr>
+      <tr><td>Densidad</td><td>Qué tan conectado está el grupo: conexiones reales divididas entre las posibles.</td></tr>
+      <tr><td>Grupos</td><td>Número de grupos visibles.</td></tr>
+    </tbody>
+  </table>
+  <p>Junto a Conexiones y Densidad hay un pequeño icono <b>i</b>. Al pulsarlo se abre una explicación breve de qué mide, cómo leerlo y cuándo conviene prestar atención.</p>
+
+  <h3>El sociograma</h3>
+  <p>Cada círculo es un estudiante y cada línea una elección. Mientras más elecciones recibe un estudiante, más grande se ve. Los colores distinguen los grupos.</p>
+  <ul>
+    <li><b>Clic en un círculo</b> abre el detalle del estudiante: a quién eligió, quién lo eligió y su posición en el ranking.</li>
+    <li><b>Arrastrar un círculo</b> permite reubicarlo; queda fijo donde se suelta.</li>
+    <li><b>Filtros de tipo</b> (Todas, Positivas, Neutrales, Negativas) muestran solo un tipo de conexión.</li>
+    <li><b>Buscar nodo</b> localiza a un estudiante por su nombre y lo resalta.</li>
+    <li><b>Botones de grupo</b> encienden o apagan grupos para analizarlos por separado.</li>
+  </ul>
+
+  <h3>Encuesta que alimenta el análisis</h3>
+  <p>El selector <b>Datos de</b>, sobre las tarjetas, permite ver todas las encuestas juntas o una sola. Si elige una, el Dashboard, la Matriz, los Reportes y los Gráficos usan solo esa encuesta, y la plataforma lo indica con el aviso «Se muestra solo esta encuesta».</p>
+  <div class="aviso"><span class="rot">Grupos grandes</span><p>En colegios con muchos estudiantes, el mapa empieza mostrando un solo grupo para mantenerse legible. Puede añadir más grupos con los botones de grupo.</p></div>
+</section>
+
+<!-- ═══ 04 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">04</div><div><div class="tag">Sección 04</div><h2>Grupos</h2></div></div>
+  <p class="lead">Aquí se definen los cursos y se carga a los estudiantes que participarán en las encuestas.</p>
+
+  <figure class="compacta"><img src="img-usuario/07-grupos.jpg" alt=""><figcaption>Gestión de grupos: una columna por grupo, con su lista de estudiantes.</figcaption></figure>
+
+  <h3>Crear un grupo y agregar estudiantes</h3>
+  <ol class="pasos">
+    <li>Pulse <b>Nuevo grupo</b> y escriba su nombre (por ejemplo, «6A»). Elija un color: se usará en el sociograma y en los reportes.</li>
+    <li>En la columna del grupo, pulse <b>Agregar</b>.</li>
+    <li>Escriba un nombre o <b>pegue una lista</b> con un nombre por línea. La plataforma crea a todos los estudiantes de una vez.</li>
+  </ol>
+
+  <h3>Importar desde un archivo</h3>
+  <p>Para cargar muchos estudiantes, use <b>Plantilla</b> para descargar el archivo CSV de ejemplo, complételo con las columnas <b>Grupo</b> y <b>Estudiante</b> y súbalo con <b>Importar estudiantes</b>. Antes de confirmar, la plataforma muestra una vista previa con lo que se creará, lo que ya existe y las filas con errores.</p>
+
+  <h3>Editar y eliminar</h3>
+  <ul>
+    <li><b>Editar</b> un grupo permite cambiar su nombre y su color. Si lo renombra, las encuestas que lo usan se actualizan.</li>
+    <li><b>Eliminar</b> un grupo pide confirmación e indica cuántos estudiantes, encuestas y respuestas se verán afectados. Esta acción no se puede deshacer.</li>
+    <li>Cada estudiante tiene su propio botón para quitarlo del grupo.</li>
+  </ul>
+  <div class="importante"><span class="rot">Importante</span><p>Cree los grupos y estudiantes <b>antes</b> de activar una encuesta. La lista de estudiantes que verán quienes respondan se toma al momento de activar la encuesta.</p></div>
+</section>
+
+<!-- ═══ 05 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">05</div><div><div class="tag">Sección 05</div><h2>Encuestas</h2></div></div>
+  <p class="lead">El centro de trabajo del equipo de orientación: se diseña la encuesta, se activa, se comparte el enlace y se sigue quién ha respondido.</p>
+
+  <figure><img src="img-usuario/04-encuestas.jpg" alt=""><figcaption>Lista de encuestas con el avance de respuestas (arriba) y las acciones disponibles en cada una.</figcaption></figure>
+
+  <h3>Acciones de cada encuesta</h3>
+  <table>
+    <thead><tr><th>Botón</th><th>Función</th></tr></thead>
+    <tbody>
+      <tr><td>Estado (Borrador / Activa)</td><td>Una encuesta en borrador no puede responderse. Al pulsar el estado se activa, y desde ese momento recibe respuestas.</td></tr>
+      <tr><td>JSON y CSV</td><td>Exportan las preguntas de la encuesta para reutilizarlas en otro grupo o colegio.</td></tr>
+      <tr><td>Duplicar</td><td>Crea una copia en borrador, sin respuestas, para volver a aplicarla meses después.</td></tr>
+      <tr><td>Resultados (Excel)</td><td>Descarga un libro de Excel con índices, conexiones, matriz, respuestas, resultados por pregunta y, si las hay, respuestas abiertas.</td></tr>
+      <tr><td>Aplicar</td><td>Abre la encuesta tal como la ven los estudiantes, en una pestaña nueva. Úsela para aplicarla en el aula desde un dispositivo del colegio.</td></tr>
+      <tr><td>Link</td><td>Copia el enlace para enviarlo a los estudiantes.</td></tr>
+      <tr><td>Editar</td><td>Abre el editor de la encuesta.</td></tr>
+      <tr><td>Eliminar</td><td>Envía la encuesta a la papelera, desde donde puede restaurarse.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Crear una encuesta</h3>
+  <figure class="recorte"><img src="img-usuario/05-crear-encuesta.jpg" alt=""><figcaption>Creación de una encuesta: configuración a la izquierda y preguntas a la derecha.</figcaption></figure>
+  <ol class="pasos">
+    <li>Pulse <b>Nueva encuesta</b>.</li>
+    <li>Escriba un <b>título</b> que permita reconocerla después (por ejemplo, «Convivencia 6° · inicio de año»).</li>
+    <li>Marque los <b>grupos incluidos</b>. Quienes responden verán solo a los compañeros de esos grupos.</li>
+    <li>Defina el <b>máximo de selecciones</b>: cuántos compañeros puede elegir cada estudiante por pregunta.</li>
+    <li>Agregue las <b>preguntas</b> (ver siguiente apartado) y pulse <b>Guardar</b>.</li>
+    <li>La encuesta queda en borrador. Revísela, púlsela para activarla y comparta el enlace.</li>
+  </ol>
+  <p>Para empezar rápido, <b>Crear encuesta de prueba</b> genera un borrador con preguntas positivas, neutrales y negativas.</p>
+
+  <h3>Tipos de pregunta</h3>
+  <table>
+    <thead><tr><th>Tipo</th><th>Cómo responde el estudiante</th></tr></thead>
+    <tbody>
+      <tr><td>Selección múltiple</td><td>Elige hasta el máximo de compañeros. Es el formato estándar.</td></tr>
+      <tr><td>Selección con justificación</td><td>Elige compañeros y debe explicar, con sus palabras, por qué eligió a cada uno (entre 3 y 280 caracteres). Las explicaciones aparecen en los reportes y en el detalle de cada conexión.</td></tr>
+      <tr><td>Abierta</td><td>No elige a nadie: escribe un texto libre de hasta 500 caracteres. Sirve para recoger percepciones sobre el aula. No genera conexiones.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Polaridad de la pregunta</h4>
+  <p>Cada pregunta de selección tiene una polaridad que determina cómo se interpreta la elección.</p>
+  <table>
+    <thead><tr><th>Polaridad</th><th>Ejemplo</th><th>Cómo se cuenta</th></tr></thead>
+    <tbody>
+      <tr><td>Positiva</td><td>«¿Con quién trabajarías?»</td><td>Elección de afecto o preferencia.</td></tr>
+      <tr><td>Neutral</td><td>«¿Quién crees que es el líder del grupo?»</td><td>Elección de percepción.</td></tr>
+      <tr><td>Negativa</td><td>«¿Con quién preferirías no trabajar?»</td><td>Rechazo.</td></tr>
+    </tbody>
+  </table>
+
+  <h4>Obligatoria u opcional</h4>
+  <p>Cada pregunta tiene la casilla <b>Obligatoria</b>. Si está marcada, el estudiante no puede avanzar sin responder: debe elegir al menos a un compañero o, en una pregunta abierta, escribir su respuesta. Las preguntas obligatorias se señalan con un asterisco. Si no está marcada, puede dejarla en blanco.</p>
+  <div class="aviso"><span class="rot">Recomendación</span><p>Use obligatorias solo en las preguntas esenciales. Obligar a nombrar compañeros en preguntas negativas puede generar respuestas poco sinceras; déjelas como opcionales.</p></div>
+
+  <h3>Importar y exportar preguntas</h3>
+  <p>En la lista de encuestas, <b>Plantilla</b> descarga un archivo CSV de ejemplo con las columnas <b>pregunta</b>, <b>tipo</b> y <b>formato</b>. Complételo y súbalo con <b>Importar</b>: la plataforma valida el archivo y muestra una vista previa antes de crear la encuesta. También puede importar archivos JSON exportados desde otra encuesta.</p>
+
+  <h3>Seguir el avance</h3>
+  <p>Cada encuesta activa muestra un panel de avance con el porcentaje completado y el nombre de cada estudiante: en verde quienes ya respondieron, en gris quienes faltan. Con él puede recordarle en el aula a quienes no han terminado.</p>
+
+  <h3>Papelera</h3>
+  <p>Las encuestas eliminadas se conservan en la papelera. Sus respuestas dejan de contar en el análisis, pero pueden recuperarse restaurando la encuesta.</p>
+</section>
+
+<!-- ═══ 06 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">06</div><div><div class="tag">Sección 06</div><h2>Experiencia del estudiante</h2></div></div>
+  <p class="lead">Quien responde no necesita cuenta ni contraseña: abre el enlace, se identifica con su nombre y contesta las preguntas.</p>
+
+  <div class="par">
+    <figure><img src="img-usuario/17-estudiante-nombre.jpg" alt=""><figcaption>El estudiante elige su nombre en la lista. Puede filtrar por grupo.</figcaption></figure>
+    <figure><img src="img-usuario/18-estudiante-pregunta.jpg" alt=""><figcaption>Una pregunta con justificación: al elegir a un compañero aparece el cuadro para explicar por qué.</figcaption></figure>
+  </div>
+
+  <h3>Recorrido del estudiante</h3>
+  <ol class="pasos">
+    <li>Abre el enlace que usted le compartió, desde el celular o el computador.</li>
+    <li>Lee el título de la encuesta y la aclaración de confidencialidad.</li>
+    <li>Elige su propio nombre en la lista. Puede filtrar por grupo.</li>
+    <li>Responde una pregunta por pantalla. Puede volver a la anterior con <b>Anterior</b>.</li>
+    <li>En una pregunta con justificación, escribe una explicación para cada compañero elegido.</li>
+    <li>En una pregunta abierta, escribe su respuesta en el cuadro de texto.</li>
+    <li>En la última pregunta pulsa <b>Enviar respuestas</b>. La plataforma confirma que se recibieron.</li>
+  </ol>
+
+  <h3>Qué debe tener en cuenta al aplicar</h3>
+  <ul>
+    <li>Cada estudiante responde una sola vez por encuesta; si lo intenta de nuevo, la plataforma se lo indica.</li>
+    <li>Las respuestas son confidenciales: solo las ve el equipo del colegio. Los compañeros no ven lo que contestó cada uno.</li>
+    <li>El estudiante puede usar el modo claro o el oscuro con el botón de la esquina superior; si no elige, se adapta a la preferencia de su dispositivo.</li>
+    <li>Las preguntas con asterisco son obligatorias; el botón para avanzar permanece desactivado hasta responderlas.</li>
+    <li>Si la licencia del colegio ya venció, la encuesta deja de recibir respuestas.</li>
+  </ul>
+  <div class="importante"><span class="rot">Buena práctica</span><p>Aplique la encuesta en un ambiente de calma, con el docente presente y sin que los estudiantes puedan ver la pantalla de otros. Explique de antemano que las respuestas no se comparten con los compañeros y que no hay respuestas correctas.</p></div>
+</section>
+
+<!-- ═══ 07 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">07</div><div><div class="tag">Sección 07</div><h2>Matriz</h2></div></div>
+  <p class="lead">Una tabla de doble entrada que muestra, para cada pareja de estudiantes, si hay una elección y de qué tipo.</p>
+
+  <figure class="media"><img src="img-usuario/06-matriz.jpg" alt=""><figcaption>Matriz sociométrica: las filas son quienes eligen; las columnas, quienes reciben la elección.</figcaption></figure>
+
+  <h3>Cómo leerla</h3>
+  <ul>
+    <li><b>Filas</b> (De): la persona que eligió o marcó.</li>
+    <li><b>Columnas</b> (Para): la persona elegida o marcada.</li>
+    <li>Cada celda con marca indica una elección; el símbolo y el color diferencian las positivas, las neutrales y las negativas.</li>
+    <li>La marca <b>Mutua</b> señala las parejas que se eligieron entre sí.</li>
+  </ul>
+
+  <h3>Filas de resumen</h3>
+  <p>En la parte inferior de la matriz hay un resumen fijo por columna: cuántas elecciones <b>positivas</b>, <b>neutrales</b> y <b>negativas</b> recibió cada estudiante. A la derecha hay columnas de totales por estudiante. El encabezado de columnas permanece visible al desplazarse.</p>
+
+  <h3>Filtros y grupos grandes</h3>
+  <p>Use el selector de datos para ver una sola encuesta y los botones de grupo para limitar la matriz a uno o varios grupos. Cuando hay más de unas pocas decenas de estudiantes, la plataforma empieza mostrando un solo grupo para que la tabla siga siendo legible, y avisa cuando una vista es demasiado grande.</p>
+  <p>La matriz es la fuente más fiel para verificar un dato puntual, por ejemplo cuando una familia pregunta por qué su hijo aparece con determinado perfil. Para una lectura global, los Gráficos son más rápidos.</p>
+</section>
+
+<!-- ═══ 08 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">08</div><div><div class="tag">Sección 08</div><h2>Reportes</h2></div></div>
+  <p class="lead">Documentos listos para imprimir, archivar o presentar en reuniones del equipo y con las familias.</p>
+
+  <figure><img src="img-usuario/08-reportes.jpg" alt=""><figcaption>Configuración del reporte: grupo, tipo y formato de salida.</figcaption></figure>
+
+  <h3>Tipos de reporte</h3>
+  <table>
+    <thead><tr><th>Tipo</th><th>Contenido</th><th>Uso</th></tr></thead>
+    <tbody>
+      <tr><td>Individual</td><td>Una ficha por estudiante con sus cifras, a quién eligió y quién lo eligió.</td><td>Trabajo interno del equipo.</td></tr>
+      <tr><td>Grupal</td><td>Solo cifras del grupo: densidad, roles en conteos y tabla de grupos. Sin nombres de estudiantes.</td><td>Informes a directivas o docentes.</td></tr>
+      <tr><td>Completo</td><td>Individual y grupal, con la matriz cuando el grupo es de tamaño razonable.</td><td>Archivo del caso.</td></tr>
+      <tr><td>Un estudiante</td><td>Informe de una sola persona, organizado por pregunta.</td><td>Reuniones con familias.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Generar un reporte</h3>
+  <ol class="pasos">
+    <li>Elija el <b>grupo a analizar</b> (uno o todos).</li>
+    <li>Elija el <b>tipo de reporte</b>.</li>
+    <li>Use una de las cuatro salidas: <b>Vista previa</b> en pantalla, <b>PDF</b> para imprimir, <b>HTML</b> para compartir como archivo y <b>Excel</b> con las cifras en hojas.</li>
+  </ol>
+  <p>Debajo del título hay una <b>guía desplegable</b> con la explicación de cada indicador y de cada rol, para tenerla a mano al leer un reporte.</p>
+
+  <h3>Informe de un estudiante</h3>
+  <figure><img src="img-usuario/09-informe-estudiante.jpg" alt=""><figcaption>Selección del estudiante y de la versión del informe.</figcaption></figure>
+  <p>Está pensado para las reuniones con familias. Elija «Un estudiante», seleccione a la persona y escoja la versión:</p>
+  <table>
+    <thead><tr><th>Versión</th><th>Contiene</th></tr></thead>
+    <tbody>
+      <tr><td>Para el equipo</td><td>Cifras, perfil, quién lo eligió o rechazó por pregunta, explicaciones escritas por sus compañeros y sus propias respuestas abiertas. Es confidencial: no se entrega a las familias.</td></tr>
+      <tr><td>Para familias</td><td>Cifras y lectura del perfil, sin nombres de otros niños ni explicaciones de terceros. Incluye un espacio para los acuerdos de la reunión.</td></tr>
+    </tbody>
+  </table>
+  <div class="importante"><span class="rot">Importante</span><p>Nunca entregue a una familia el informe «para el equipo»: contiene información de otros menores. Verifique siempre la versión antes de imprimir.</p></div>
+</section>
+
+<!-- ═══ 09 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">09</div><div><div class="tag">Sección 09</div><h2>Gráficos</h2></div></div>
+  <p class="lead">Cuatro vistas pensadas para el profesional: del panorama del grupo al detalle de un estudiante y a la comparación en el tiempo.</p>
+  <p>En todas las vistas, al hacer clic sobre un punto, una barra, una celda o un círculo se despliega el detalle correspondiente. Cada gráfico puede descargarse como imagen con el botón <b>Imagen</b>, para incluirlo en un informe o una presentación. El selector <b>Grupo</b> limita el análisis a un curso.</p>
+
+  <h3><span class="k">9.1</span>Panorama del grupo</h3>
+  <figure><img src="img-usuario/10-graficos-panorama.jpg" alt=""><figcaption>Roles por grupo, densidad por grupo y conexiones entre grupos.</figcaption></figure>
+  <ul>
+    <li><b>Roles por grupo.</b> Una barra por grupo, dividida por perfil. Al hacer clic en un segmento aparece la lista de estudiantes con ese rol.</li>
+    <li><b>Densidad por grupo.</b> Permite comparar qué tan conectado está cada curso.</li>
+    <li><b>Conexiones entre grupos.</b> Mapa de calor: cuántas elecciones (o rechazos) van de un grupo a otro. La diagonal son los vínculos dentro del mismo grupo.</li>
+  </ul>
+
+  <h3><span class="k">9.2</span>Estudiantes</h3>
+  <figure><img src="img-usuario/11-graficos-estudiantes.jpg" alt=""><figcaption>Aceptación frente a rechazo: cada punto es un estudiante; al hacer clic se abre su ficha.</figcaption></figure>
+  <p>Cada punto es un estudiante. A la derecha, quienes más elecciones reciben; arriba, quienes reciben más rechazo. Las líneas punteadas marcan el promedio. La leyenda de colores permite ocultar o mostrar roles. Al hacer clic en un punto se abre una <b>ficha</b> con su rol, su aceptación, su rechazo, su expansión y sus relaciones mutuas, comparadas con el promedio del grupo, y un acceso directo a su gráfico individual.</p>
+  <p>Más abajo, el <b>ranking de relaciones mutuas</b> lista a quienes tienen más vínculos recíprocos positivos o, alternando la vista, más rechazos mutuos.</p>
+
+  <h3><span class="k">9.3</span>Individual</h3>
+  <figure><img src="img-usuario/12-graficos-individual.jpg" alt=""><figcaption>Gráfico individual: indicadores del estudiante frente al grupo y su red de relaciones.</figcaption></figure>
+  <p>Elija a un estudiante para ver, primero, sus tres indicadores junto al promedio del grupo y, después, su <b>red de relaciones</b>: el estudiante al centro y, alrededor, los compañeros con los que tiene algún vínculo. El color de cada línea indica el tipo de relación (elección mutua, elegido por el compañero, rechazo, etc.). Al hacer clic en un compañero se muestra el detalle de esa relación, incluidas las explicaciones escritas cuando las hay.</p>
+
+  <h3><span class="k">9.4</span>Comparar aplicaciones</h3>
+  <figure><img src="img-usuario/13-graficos-comparar.jpg" alt=""><figcaption>Comparación entre dos encuestas del mismo grupo: indicadores del grupo y estudiantes que cambiaron.</figcaption></figure>
+  <p>Seleccione dos encuestas con respuestas (por ejemplo, el inicio y el cierre del año). La plataforma compara las conexiones, la densidad y las relaciones mutuas, y lista a los estudiantes que cambiaron de rol o variaron diez puntos o más en aceptación o rechazo. Es la herramienta indicada para evaluar el efecto de una intervención.</p>
+  <div class="aviso"><span class="rot">Nota</span><p>Para comparar, ambas encuestas deben haberse aplicado a los mismos grupos. Si un estudiante respondió solo una de las dos, sus cifras pueden variar por esa razón y no por un cambio real.</p></div>
+</section>
+
+<!-- ═══ 10 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">10</div><div><div class="tag">Sección 10 · Administradores</div><h2>Usuarios</h2></div></div>
+  <p class="lead">El administrador decide quién del equipo puede ingresar y con qué permisos.</p>
+
+  <figure><img src="img-usuario/14-usuarios.jpg" alt=""><figcaption>Gestión de usuarios: formulario para autorizar y lista de usuarios registrados.</figcaption></figure>
+
+  <h3>Autorizar a una persona</h3>
+  <ol class="pasos">
+    <li>Escriba el <b>correo de Google</b> de la persona.</li>
+    <li>Elija su <b>rol</b>: administrador, psicólogo escolar o solo lectura.</li>
+    <li>Pulse <b>Autorizar acceso</b>. La persona podrá ingresar de inmediato con ese correo.</li>
+  </ol>
+
+  <h3>Cambiar o retirar un acceso</h3>
+  <ul>
+    <li>Para cambiar el rol de alguien, autorícelo de nuevo con el rol deseado.</li>
+    <li>Para retirar un acceso, use <b>Revocar</b> en la fila del usuario. La persona deja de poder ingresar.</li>
+    <li>La plataforma no permite revocar o degradar al único administrador, para que el colegio nunca quede sin acceso.</li>
+  </ul>
+  <p>A la derecha se muestra un resumen con el número de usuarios activos y su distribución por rol.</p>
+  <div class="importante"><span class="rot">Importante</span><p>Autorice solo correos institucionales o de personas que realmente deban ver datos de menores, y revise la lista al comenzar cada año escolar.</p></div>
+</section>
+
+<!-- ═══ 11 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">11</div><div><div class="tag">Sección 11 · Administradores</div><h2>Actividad</h2></div></div>
+  <p class="lead">Un registro cronológico de lo que ocurre en el colegio, útil para auditoría y para resolver dudas.</p>
+  <figure class="compacta"><img src="img-usuario/15-actividad.jpg" alt=""><figcaption>Registro de actividad: cada acción indica quién la hizo y cuándo.</figcaption></figure>
+  <p>Se registran los ingresos, la creación y activación de encuestas, los cambios en grupos y estudiantes, la gestión de usuarios y la generación de reportes y exportaciones. Cada línea muestra la persona, la acción y el momento.</p>
+  <div class="aviso"><span class="rot">Privacidad</span><p>El registro nunca guarda nombres de estudiantes: por ejemplo, al generar el informe de un estudiante solo queda constancia de que se generó, no de a quién correspondía.</p></div>
+</section>
+
+<!-- ═══ 12 ═══ -->
+<section class="cap" style="break-before: auto; margin-top: 12mm;">
+  <div class="cap-cab"><div class="num">12</div><div><div class="tag">Sección 12 · Administradores</div><h2>Configuración</h2></div></div>
+  <p class="lead">Datos del colegio, su logo y la copia de seguridad de la información.</p>
+  <figure class="compacta"><img src="img-usuario/16-config.jpg" alt=""><figcaption>Configuración del colegio.</figcaption></figure>
+  <table>
+    <thead><tr><th>Bloque</th><th>Qué permite</th></tr></thead>
+    <tbody>
+      <tr><td>Institución</td><td>Nombre del colegio, ciudad y periodo académico. El nombre aparece en el encabezado, en las encuestas y en los reportes.</td></tr>
+      <tr><td>Marca</td><td>Cargar el logo del colegio. Se redimensiona automáticamente y aparece en el encabezado y en las encuestas de los estudiantes.</td></tr>
+      <tr><td>Datos del colegio</td><td>Descarga una copia completa de la información (estudiantes, grupos, encuestas, respuestas, usuarios y ajustes) en un archivo JSON.</td></tr>
+      <tr><td>Seguridad y Notificaciones</td><td>Opciones en preparación: se muestran para conocimiento, pero todavía no tienen efecto.</td></tr>
+    </tbody>
+  </table>
+  <p>Después de modificar cualquier campo, pulse <b>Guardar cambios</b>. La plataforma indica cuando hay cambios sin guardar.</p>
+  <div class="importante"><span class="rot">Importante</span><p>La copia de datos contiene información de menores. Guárdela en un lugar seguro y con acceso restringido, y no la envíe por correo ni por mensajería.</p></div>
+</section>
+
+<!-- ═══ 13 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">13</div><div><div class="tag">Sección 13</div><h2>Cómo leer los indicadores y los roles</h2></div></div>
+  <p class="lead">Los números orientan la mirada; la interpretación la hace el profesional. Esta sección explica qué mide cada indicador y qué hacer con él.</p>
+
+  <h3>Indicadores</h3>
+  <p>Todos los porcentajes se calculan sobre los demás compañeros del grupo (es decir, el número de estudiantes menos uno).</p>
+  <table>
+    <thead><tr><th>Indicador</th><th>Qué mide</th><th>Cuándo prestar atención</th></tr></thead>
+    <tbody>
+      <tr><td>Aceptación</td><td>Compañeros que eligieron positivamente al estudiante.</td><td>Muy por debajo del promedio del grupo, sobre todo si va con rechazo alto.</td></tr>
+      <tr><td>Rechazo</td><td>Compañeros que lo marcaron negativamente.</td><td>Varias veces por encima del promedio, o con aceptación baja. Revise también las explicaciones escritas.</td></tr>
+      <tr><td>Expansión</td><td>A cuántos compañeros eligió o marcó él o ella. Mide lo que emite, no lo que recibe.</td><td>No es buena ni mala por sí sola. Importa si va con aceptación baja o con muchas marcas negativas emitidas.</td></tr>
+      <tr><td>Densidad</td><td>Qué tan conectado está el grupo (conexiones reales entre las posibles).</td><td>Mucho más baja que la de grupos parecidos, o que baja entre una aplicación y la siguiente.</td></tr>
+      <tr><td>Mutuas positivas</td><td>Parejas que se eligen entre sí.</td><td>Estudiantes sin ninguna mutua positiva.</td></tr>
+      <tr><td>Rechazos mutuos</td><td>Parejas que se rechazan entre sí.</td><td>Siempre que se repitan: indican un conflicto de dos lados.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Perfiles (roles)</h3>
+  <p>La plataforma asigna a cada estudiante un perfil según lo que recibe. El umbral para «muchos» es la mitad del grupo, con un mínimo de dos. Por ejemplo, en un grupo de 28 estudiantes, «muchos» significa 14 o más compañeros. Los perfiles se evalúan en este orden y se asigna el primero que se cumple:</p>
+  <table>
+    <thead><tr><th>Perfil</th><th>Condición</th><th>Qué significa y qué hacer</th></tr></thead>
+    <tbody>
+      <tr><td>Controvertido</td><td>Muchas elecciones positivas y muchos rechazos.</td><td>Polariza al grupo. Conviene entender qué lo causa: carácter fuerte, conflictos o un liderazgo discutido.</td></tr>
+      <tr><td>Líder</td><td>Muchas elecciones positivas.</td><td>Tiene influencia. Observe qué tipo de liderazgo ejerce y cómo trata a los demás.</td></tr>
+      <tr><td>Rechazado</td><td>Muchos rechazos.</td><td>Requiere atención y seguimiento. Revise las explicaciones y el contexto antes de actuar.</td></tr>
+      <tr><td>Aislado</td><td>Ninguna elección positiva recibida.</td><td>No significa que nadie lo nombró, sino que nadie lo eligió de forma positiva. Indague si es timidez, llegada reciente u otra causa.</td></tr>
+      <tr><td>Integrado</td><td>Al menos dos elecciones mutuas positivas.</td><td>Tiene vínculos recíprocos, que es lo esperable.</td></tr>
+      <tr><td>Regular</td><td>No cumple ninguna de las anteriores.</td><td>El caso típico. «Regular» no significa «sin problema»: revise los avisos que comparan con el promedio.</td></tr>
+    </tbody>
+  </table>
+
+  <h3>Ejemplo de lectura</h3>
+  <p>Un informe individual muestra a una estudiante con perfil <b>Integrado</b> que aparece con un aviso: «recibió 13 marcas negativas; el promedio del grupo es 3,3». En un grupo de 28 estudiantes el umbral es 14, así que su rechazo (48,1 %) está justo por debajo del límite para ser «Rechazado»; por eso el perfil es Integrado, pero el aviso señala que su rechazo es cuatro veces el promedio.</p>
+  <p>La lectura profesional es doble: tiene dos amistades mutuas, de modo que no está sola, pero casi la mitad del grupo la rechaza. Es un caso para explorar con calma, leyendo las explicaciones de quienes la marcaron, y para llevar a la reunión con la familia partiendo de sus vínculos y no solo del rechazo.</p>
+  <div class="importante"><span class="rot">Criterio profesional</span><p>Un resultado aislado puede deberse a que el estudiante es nuevo, estuvo ausente o es reservado. Contraste siempre con la observación, la entrevista y la información de docentes y familia. Los umbrales y las pautas de «cuándo vigilar» son orientativos, no un diagnóstico.</p></div>
+</section>
+
+<!-- ═══ 14 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">14</div><div><div class="tag">Sección 14</div><h2>Confidencialidad, licencia y soporte</h2></div></div>
+  <p class="lead">La plataforma trabaja con datos de menores. Esta sección resume cómo manejarlos con responsabilidad y cómo funciona la vigencia del servicio.</p>
+
+  <h3>Manejo responsable de la información</h3>
+  <ul>
+    <li>Las respuestas las ve únicamente el equipo autorizado del colegio. Los estudiantes no ven lo que respondieron sus compañeros.</li>
+    <li>Entregue a las familias solo la versión «para familias» del informe de un estudiante.</li>
+    <li>No escriba nombres de estudiantes al contactar a soporte.</li>
+    <li>Guarde los reportes impresos y las copias de datos en lugares con acceso restringido.</li>
+    <li>Revise los usuarios autorizados periódicamente y revoque los accesos que ya no se necesiten.</li>
+    <li>Cierre la sesión en computadores compartidos.</li>
+  </ul>
+
+  <h3>Licencia y vigencia</h3>
+  <p>El servicio se presta mediante una licencia con fecha de vencimiento, definida según el plan contratado por el colegio. Antes del vencimiento, los administradores ven un aviso en la parte superior de la plataforma. Si la licencia vence:</p>
+  <table>
+    <thead><tr><th>Periodo</th><th>Qué ocurre</th></tr></thead>
+    <tbody>
+      <tr><td>Vigente</td><td>Uso normal de todas las funciones.</td></tr>
+      <tr><td>Periodo de gracia (15 días)</td><td>La plataforma queda en solo lectura: se puede consultar y descargar, pero no crear ni modificar. Las encuestas dejan de recibir respuestas.</td></tr>
+      <tr><td>Vencida</td><td>El acceso se bloquea. Los datos se conservan durante el periodo de retención acordado y se recuperan al renovar.</td></tr>
+    </tbody>
+  </table>
+  <p>El número de estudiantes de cada plan funciona como referencia: si el colegio lo supera, la plataforma avisa, pero no bloquea el uso. Para renovar o cambiar de plan, comuníquese con Iskonex.</p>
+
+  <h3>Soporte técnico</h3>
+  <p>El botón <b>Soporte</b> del encabezado abre un formulario con tipo de solicitud, urgencia, asunto y descripción. Al enviarlo recibe un número de seguimiento. Para agilizar la atención, describa qué intentaba hacer, qué esperaba y qué ocurrió realmente.</p>
+  <div class="aviso"><span class="rot">Recuerde</span><p>El formulario envía su rol y el nombre del colegio, nunca datos de estudiantes. No los escriba en el mensaje.</p></div>
+</section>
+
+<!-- ═══ 15 ═══ -->
+<section class="cap">
+  <div class="cap-cab"><div class="num">15</div><div><div class="tag">Sección 15</div><h2>Preguntas frecuentes y glosario</h2></div></div>
+
+  <h3>Preguntas frecuentes</h3>
+  <div class="dos">
+    <div class="tarjeta"><b>Un estudiante dice que no encuentra su nombre.</b><p>Revise que esté en uno de los grupos incluidos en la encuesta. Si lo agregó después de activarla, la lista de la encuesta se actualiza al abrirla desde la pestaña Encuestas; pídale al estudiante que recargue la página del enlace.</p></div>
+    <div class="tarjeta"><b>Un estudiante respondió por error.</b><p>Cada estudiante responde una sola vez. Si necesita repetir la respuesta de alguien, consulte a soporte; no cree estudiantes duplicados.</p></div>
+    <div class="tarjeta"><b>No veo resultados en el Dashboard.</b><p>Compruebe el selector «Datos de» y los botones de grupo: puede estar viendo una encuesta o un grupo sin respuestas.</p></div>
+    <div class="tarjeta"><b>La matriz o el reporte no incluyen a todos.</b><p>En grupos grandes la plataforma limita lo que muestra para que sea legible. Use los botones de grupo o descargue el Excel, que incluye todo.</p></div>
+    <div class="tarjeta"><b>¿Puedo cambiar las preguntas de una encuesta en curso?</b><p>Puede, pero no es recomendable: las respuestas ya recibidas se refieren a las preguntas originales. Es preferible duplicar la encuesta.</p></div>
+    <div class="tarjeta"><b>¿Cada cuánto aplicar la encuesta?</b><p>Lo habitual es al inicio del año y a mitad o al cierre, para comparar. Aplíquela también tras una intervención importante en el grupo.</p></div>
+  </div>
+
+  <h3>Glosario</h3>
+  <dl class="glosario">
+    <dt>Sociograma</dt><dd>Mapa de las relaciones de un grupo: los estudiantes son puntos y las elecciones son líneas.</dd>
+    <dt>Aceptación</dt><dd>Porcentaje de compañeros que eligieron positivamente a un estudiante.</dd>
+    <dt>Rechazo</dt><dd>Porcentaje de compañeros que marcaron negativamente a un estudiante.</dd>
+    <dt>Expansión</dt><dd>Porcentaje de compañeros a los que un estudiante eligió o marcó.</dd>
+    <dt>Densidad</dt><dd>Proporción de conexiones existentes frente a las posibles en un grupo.</dd>
+    <dt>Perfil o rol</dt><dd>Clasificación orientativa de un estudiante según lo que recibe del grupo.</dd>
+    <dt>Aplicación</dt><dd>Cada vez que se responde una encuesta con un grupo. Dos aplicaciones de las mismas preguntas permiten comparar.</dd>
+    <dt>Periodo de gracia</dt><dd>Tiempo posterior al vencimiento de la licencia en el que la plataforma funciona solo en lectura.</dd>
+  </dl>
+</section>
+
+</body>
+</html>

@@ -76,7 +76,7 @@ function Ficha({ row, report, ver, onIndividual }) {
 function RolesGrupo({ report, onPick, pick }) {
   const ref = useRef(null);
   const datos = useMemo(() => rolesPorGrupo(report), [report]);
-  const W = 640, fila = 34, ml = 90, H = datos.length * fila + 46, ancho = W - ml - 20;
+  const W = 640, fila = 34, ml = 90, H = datos.length * fila + 62, ancho = W - ml - 20;
   const lista = pick ? (datos.find((d) => d.group === pick.group)?.porRol[pick.rol] || []) : [];
   return (
     <Marco titulo="Roles por grupo" ayuda="regular" svgRef={ref} archivo="roles-por-grupo" nota="Cada barra es un grupo; cada color, un rol. Haz clic en un segmento para ver quiénes son.">
@@ -100,7 +100,7 @@ function RolesGrupo({ report, onPick, pick }) {
             </g>
           );
         })}
-        {ROLES_ORDEN.map((rol, i) => <g key={rol} transform={`translate(${ml + i * 100}, ${datos.length * fila + 14})`}><rect width="10" height="10" rx="2" fill={ROL_COLOR[rol]} /><text x="14" y="9" fontSize="11" fill={V("t2")}>{ROLE_LABELS[rol]}</text></g>)}
+                {ROLES_ORDEN.map((rol, i) => <g key={rol} transform={`translate(${ml + (i % 3) * 170}, ${datos.length * fila + 12 + Math.floor(i / 3) * 18})`}><rect width="10" height="10" rx="2" fill={ROL_COLOR[rol]} /><text x="14" y="9" fontSize="11" fill={V("t2")}>{ROLE_LABELS[rol]}</text></g>)}
       </svg>
       {pick && <div data-lista-rol style={{ fontSize: 12, marginTop: 8, lineHeight: 1.6 }}><Chip rol={pick.rol} /> en <b>{pick.group}</b>: {lista.length ? lista.map((r) => r.student.name).join(", ") : "nadie"}. <span style={{ color: V("t3") }}>{GLOSARIO[pick.rol]?.que}</span></div>}
     </Marco>
@@ -181,7 +181,7 @@ function Dispersion({ report, ver, onPick, pickId }) {
     const k = `${p.x}|${p.y}`, i = (cont[k] = (cont[k] ?? -1) + 1), ang = i * 2.4, r = 7 * Math.sqrt(i);
     return { ...p, cx: px(p.x) + r * Math.cos(ang), cy: py(p.y) + r * Math.sin(ang) };
   });
-  const etiquetar = (p) => ver && (pts.length <= 30 || ["rechazado", "controvertido", "aislado"].includes(p.rol) || String(p.id) === String(pickId));
+  const etiquetar = (p) => ver && (pts.length <= 16 || ["rechazado", "controvertido", "aislado"].includes(p.rol) || String(p.id) === String(pickId));
   const alternar = (rol) => setOcultos((s) => { const n = new Set(s); n.has(rol) ? n.delete(rol) : n.add(rol); return n; });
   return (
     <Marco titulo="Aceptación y rechazo por estudiante" ayuda="rechazo" svgRef={ref} archivo="aceptacion-vs-rechazo" nota="Cada punto es un estudiante. A la derecha, más elegido; arriba, más rechazado. Las líneas punteadas son el promedio. Arriba a la derecha están los controvertidos; arriba a la izquierda, quienes más se deben vigilar. Haz clic en un punto para ver su ficha.">
