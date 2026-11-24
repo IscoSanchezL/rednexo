@@ -60,7 +60,7 @@ try {
   check(JSON.stringify(s.ctx) === JSON.stringify({ rol: "psychologist", colegio: "Colegio SP" }), "el contexto es solo el rol y el colegio");
   check(!JSON.stringify(s).includes("Secreto"), "ningún dato de estudiantes viaja al soporte");
   await p.locator("header button:has-text('Soporte')").click();
-  check((await p.evaluate(() => window.__soporte.abiertos.length)) === 2, "el botón «❓ Soporte» de la cabecera abre el formulario");
+  check((await p.evaluate(() => window.__soporte.abiertos.length)) === 2, "el botón «Soporte» de la cabecera abre el formulario");
 
   // 4) Cerrar sesión: se limpia
   await p.click("button:has-text('Salir')");

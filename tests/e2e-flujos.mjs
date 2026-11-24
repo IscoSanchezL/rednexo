@@ -40,7 +40,7 @@ try {
   async function getDocSafe() { let d; await env.withSecurityRulesDisabled(async (x) => { d = (await getDoc(doc(x.firestore(), P + "/settings/global"))).data(); }); return { data: d }; }
   check(st.colegio === "Colegio Flujos Nuevo" && st.ciudad === "Medellín", "…guardar escribe el nombre y la ciudad en la base de datos");
   await p.reload(); await p.waitForSelector("header button:has-text('Config')", { timeout: 25000 });
-  check((await p.innerText("header")).includes("Colegio Flujos Nuevo"), "…y el nuevo nombre del colegio aparece en el encabezado tras recargar");
+  check(await p.waitForFunction(() => document.querySelector("header")?.innerText.includes("Colegio Flujos Nuevo"), null, { timeout: 10000 }).then(() => true, () => false), "…y el nuevo nombre del colegio aparece en el encabezado tras recargar");
   await p.click("header button:has-text('Config')"); await p.waitForTimeout(500);
   const optsPeriodo = await p.locator("select option").allInnerTexts();
   check(optsPeriodo.some((o) => o.includes(String(anio + 1))) && optsPeriodo.some((o) => o.includes(String(anio))), `El selector de período incluye el año actual y el siguiente (${anio}, ${anio + 1})`);
@@ -59,7 +59,7 @@ try {
   await pop.waitForLoadState(); check(/survey=/.test(pop.url()), "«Aplicar» abre la encuesta en una pestaña nueva: " + pop.url().replace(/^.*\?/, "?")); await pop.close();
   await p.locator("button:has-text('Link')").first().click(); await p.waitForTimeout(400);
   check(avisos.some((a) => /Link copiado/.test(a)) && /survey=/.test(await p.evaluate(() => navigator.clipboard.readText())), "«Link» copia el enlace al portapapeles");
-  await p.locator("button.dan, button:has-text('🗑')").first().click(); await p.waitForTimeout(900);
+  await p.locator("button[aria-label='Eliminar encuesta']").first().click(); await p.waitForTimeout(900);
   sv = await leer(P + "/surveys"); check(sv[0].deleted === true, "Eliminar manda la encuesta a la papelera");
   await p.locator("summary:has-text('Papelera'), button:has-text('Papelera')").first().click().catch(() => {}); await p.waitForTimeout(300);
   await p.locator("button:has-text('Restaurar')").first().click(); await p.waitForTimeout(900);

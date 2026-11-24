@@ -10,6 +10,7 @@ import { buildResultsSheets, resultsFileName } from "./lib/results";
 import { revokePatch, reactivateRole, userActions, statusLabel, ROLE_NAMES } from "./lib/users";
 import { slugify, parsePublicSurveyUrl, planMigration, chunk, LEGACY_COLEGIO_ID } from "./lib/colegio";
 import { GraficosPanel } from "./Graficos.jsx";
+import { Ico } from "./Icono.jsx";
 import { ErrorBoundary, Boom } from "./ErrorBoundary.jsx";
 import { Ayuda } from "./Ayuda.jsx";
 import { GLOSARIO } from "./lib/glosario";
@@ -201,23 +202,23 @@ async function eliminarColegio(id, por, onProgress = () => {}) {
 }
 
 const ROLES = {
-  admin: { label: "Administrador", color: C.rx, icon: "🏫", desc: "Gestiona su colegio" },
+  admin: { label: "Administrador", color: C.rx, icon: "colegio", desc: "Gestiona su colegio" },
   superadmin: {
     label: "Super Admin",
     color: C.rx,
-    icon: "⚡",
+    icon: "rayo",
     desc: "Control total",
   },
   psychologist: {
     label: "Psicólogo Escolar",
     color: C.violet,
-    icon: "🧠",
+    icon: "cerebro",
     desc: "Encuestas y análisis",
   },
   readonly: {
     label: "Solo Lectura",
     color: C.sky,
-    icon: "👁",
+    icon: "ver",
     desc: "Solo visualización",
   },
 };
@@ -678,7 +679,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
                 alignItems: "center",
                 gap: 8,
               }}>
-                <span>⚠️</span><span>{error}</span>
+                <Ico n="aviso" size={15} /><span>{error}</span>
               </div>
             )}
 
@@ -723,7 +724,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
 
             {/* Info */}
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 16, padding: "10px 14px", background: "#ffffff06", borderRadius: 8, border: "1px solid #ffffff0a" }}>
-              <span style={{ fontSize: 16 }}>🔐</span>
+              <Ico n="escudo" size={17} sinMargen />
               <span style={{ fontSize: 11, color: "#555770", lineHeight: 1.5 }}>
                 Solo cuentas autorizadas por el administrador pueden acceder al panel.
               </span>
@@ -825,7 +826,7 @@ function RegistrationPage({ onBack }) {
             <Inp label="Correo institucional" value={formData.email} onChange={(v) => setFormData({ ...formData, email: v })} placeholder="tu@institucion.edu" />
             <Sel label="Rol solicitado" value={formData.role} onChange={(v) => setFormData({ ...formData, role: v })} options={[{ v: "psychologist", l: "Psicólogo Escolar" }, { v: "readonly", l: "Solo Lectura" }]} />
             <div style={{ fontSize: 11, color: C.t3, background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 8, padding: 11, lineHeight: 1.55 }}>
-              ℹ️ La solicitud se envía por el formulario de soporte de Iskonex. No podrás ingresar hasta que el administrador de tu colegio te autorice.
+              La solicitud se envía por el formulario de soporte de Iskonex. No podrás ingresar hasta que el administrador de tu colegio te autorice.
             </div>
           </div>
           <Btn v="pri" onClick={handleSubmit} disabled={!formData.name.trim() || !formData.email.trim()} style={{ width: "100%", justifyContent: "center", marginTop: 16 }}>
@@ -862,12 +863,12 @@ function UsersPanel({ authorizeUser, revokeUser, reactivateUser, deleteUser, me 
     const ya = users.find((u) => String(u.email).toLowerCase() === newEmail.trim().toLowerCase());
     if (ya) {
       const ac = userActions(users, ya, me);
-      if ((ac.esYo || ac.ultimoAdmin) && newRole !== "admin") { flash(`❌ ${ac.esYo ? "Ese correo eres tú: no puedes cambiar tu propio rol." : ac.motivo}`); return; }
+      if ((ac.esYo || ac.ultimoAdmin) && newRole !== "admin") { flash(`✕ ${ac.esYo ? "Ese correo eres tú: no puedes cambiar tu propio rol." : ac.motivo}`); return; }
     }
     setSaving(true);
     setMsg("");
     const ok = await authorizeUser(newEmail.trim().toLowerCase(), newRole);
-    setMsg(ok ? "✅ Usuario autorizado correctamente" : "❌ Error al autorizar");
+    setMsg(ok ? "✓ Usuario autorizado correctamente" : "✕ Error al autorizar");
     setNewEmail("");
     setSaving(false);
     setTimeout(() => setMsg(""), 3500);
@@ -876,19 +877,19 @@ function UsersPanel({ authorizeUser, revokeUser, reactivateUser, deleteUser, me 
   const flash = (m) => { setMsg(m); setTimeout(() => setMsg(""), 3500); };
   const revoke = async (u) => {
     if (!window.confirm(`¿Revocar el acceso de ${u.email}? Perderá el acceso al instante; podrás reactivarlo después con el mismo rol.`)) return;
-    flash((await revokeUser(u)) ? "✅ Acceso revocado" : "❌ No se pudo revocar");
+    flash((await revokeUser(u)) ? "✓ Acceso revocado" : "✕ No se pudo revocar");
   };
   const reactivate = async (u) => {
     const role = reactivateRole(u, restore[u.email]);
-    flash((await reactivateUser(u.email, role)) ? `✅ Acceso reactivado como ${ROLE_NAMES[role]}` : "❌ No se pudo reactivar");
+    flash((await reactivateUser(u.email, role)) ? `✓ Acceso reactivado como ${ROLE_NAMES[role]}` : "✕ No se pudo reactivar");
   };
   const remove = async (u) => {
     if (!window.confirm(`¿Eliminar a ${u.email}? Desaparece de esta lista y no podrá entrar. Si más adelante lo necesitas, puedes volver a autorizarlo.`)) return;
-    flash((await deleteUser(u.email)) ? "✅ Usuario eliminado" : "❌ No se pudo eliminar");
+    flash((await deleteUser(u.email)) ? "✓ Usuario eliminado" : "✕ No se pudo eliminar");
   };
 
   const roleColor = { superadmin: C.rx, admin: C.rx, psychologist: C.violet, readonly: C.sky };
-  const roleLabel = { superadmin: "⚡ Super Admin", admin: "🏫 Administrador", psychologist: "🧠 Psicólogo", readonly: "👤 Solo lectura" };
+  const roleLabel = { superadmin: "Super Admin", admin: "Administrador", psychologist: "Psicólogo", readonly: "Solo lectura" };
   const activeUsers = users.filter((u) => u.status === "active");
   const revokedUsers = users.filter((u) => u.status === "revoked");
 
@@ -896,24 +897,24 @@ function UsersPanel({ authorizeUser, revokeUser, reactivateUser, deleteUser, me 
     <div>
       <PageHeader title="Gestión de Usuarios" subtitle="Autoriza acceso por correo de Google. Los cambios se sincronizan en tiempo real." />
       {msg && (
-        <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: msg.startsWith("✅") ? tint(C.ok, "15") : tint(C.err, "15"), color: msg.startsWith("✅") ? C.ok : C.err, border: `1px solid ${msg.startsWith("✅") ? tint(C.ok, "30") : tint(C.err, "30")}` }}>
+        <div style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 14, fontSize: 12, background: msg.startsWith("✓") ? tint(C.ok, "15") : tint(C.err, "15"), color: msg.startsWith("✓") ? C.ok : C.err, border: `1px solid ${msg.startsWith("✓") ? tint(C.ok, "30") : tint(C.err, "30")}` }}>
           {msg}
         </div>
       )}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14, marginBottom: 14 }}>
         <Card glow={C.violet}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: C.violet }}>➕ Autorizar usuario</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: C.violet }}><Ico n="mas" />Autorizar usuario</div>
           <div style={{ fontSize: 11, color: C.t2, marginBottom: 14 }}>Ingresa el correo Google del usuario y asigna su rol</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
             <Inp label="Correo Google" value={newEmail} onChange={setNewEmail} placeholder="correo@gmail.com" />
-            <Sel label="Rol" value={newRole} onChange={setNewRole} options={[{ v: "psychologist", l: "🧠 Psicólogo Escolar" }, { v: "readonly", l: "👤 Solo Lectura" }, { v: "admin", l: "🏫 Administrador del colegio" }]} />
+            <Sel label="Rol" value={newRole} onChange={setNewRole} options={[{ v: "psychologist", l: "Psicólogo Escolar" }, { v: "readonly", l: "Solo Lectura" }, { v: "admin", l: "Administrador del colegio" }]} />
           </div>
           <Btn v="sec" onClick={authorize} disabled={saving || !newEmail.trim() || !newEmail.includes("@")} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>
             {saving ? "Guardando..." : "✓ Autorizar acceso"}
           </Btn>
         </Card>
         <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>📊 Resumen</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}><Ico n="grafico" />Resumen</div>
           {[
             { l: "Usuarios activos", v: activeUsers.length, c: C.ok },
             { l: "Psicólogos", v: users.filter((u) => u.role === "psychologist" && u.status === "active").length, c: C.violet },
@@ -1519,7 +1520,7 @@ function SocioMatrix({ students, conns }) {
 
       {demasiado && (
         <div style={{ padding: 18, borderRadius: 12, border: `1px solid ${tint(C.amber, "50")}`, background: tint(C.amber, "12"), fontSize: 13, lineHeight: 1.6, color: C.text }}>
-          ⚠ Con <b>{fs.length}</b> estudiantes la matriz es demasiado grande para mostrarse (máximo {MATRIZ_MAX}). Elige uno o varios grupos con los botones de arriba. Para ver a todo el colegio usa el Dashboard o descarga el Excel de resultados en Reportes.
+          Atención: Con <b>{fs.length}</b> estudiantes la matriz es demasiado grande para mostrarse (máximo {MATRIZ_MAX}). Elige uno o varios grupos con los botones de arriba. Para ver a todo el colegio usa el Dashboard o descarga el Excel de resultados en Reportes.
         </div>
       )}
 
@@ -1733,7 +1734,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     const malG = gs.filter((_, i) => !rg[i]), malS = ss.filter((_, i) => !rs[i]);
     if (malG.length) setGroups((p) => p.filter((x) => !malG.some((b) => b.id === x.id)));
     if (malS.length) setStudents((p) => p.filter((x) => !malS.some((b) => b.id === x.id)));
-    setNotice(malG.length || malS.length ? `❌ Se importaron ${ss.length - malS.length} de ${ss.length} estudiantes; ${malS.length + malG.length} no se pudieron guardar. Revisa tu conexión e inténtalo de nuevo.` : `✅ Importación lista: ${gs.length} grupo(s) y ${ss.length} estudiante(s).`);
+    setNotice(malG.length || malS.length ? `✕ Se importaron ${ss.length - malS.length} de ${ss.length} estudiantes; ${malS.length + malG.length} no se pudieron guardar. Revisa tu conexión e inténtalo de nuevo.` : `✓ Importación lista: ${gs.length} grupo(s) y ${ss.length} estudiante(s).`);
     if (ss.length - malS.length > 0) logActivity("group", `importó ${ss.length - malS.length} estudiante(s) y ${gs.length} grupo(s) desde archivo`, imp.nombreArchivo);
     setImp(null); setImporting(false);
   };
@@ -1746,7 +1747,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
   const guardarEdicion = async () => {
     if (!editG || busyG) return;
     const v = validarNombreGrupo(editG.name, names, editG.old);
-    if (!v.ok) { setNotice("❌ " + v.error); return; }
+    if (!v.ok) { setNotice("✕ " + v.error); return; }
     const viejo = editG.old, nuevo = v.nombre, color = editG.color;
     const docViejo = groups.find((x) => x.name === viejo);
     setBusyG(true);
@@ -1756,10 +1757,10 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       if (nuevo !== viejo) {
         // Los estudiantes se guardan primero: si algo falla, el grupo viejo sigue existiendo y nada queda a medias.
         const res = await enTandas(miembros, (x) => saveStudentFS({ ...x, group: nuevo }));
-        if (res.some((ok) => !ok)) { setNotice("❌ No se pudieron mover todos los estudiantes al nombre nuevo. Revisa tu conexión e inténtalo de nuevo."); setBusyG(false); return; }
+        if (res.some((ok) => !ok)) { setNotice("✕ No se pudieron mover todos los estudiantes al nombre nuevo. Revisa tu conexión e inténtalo de nuevo."); setBusyG(false); return; }
       }
       const okG = await saveGroupFS(docNuevo);
-      if (!okG) { setNotice("❌ No se pudo guardar el grupo. Inténtalo de nuevo."); setBusyG(false); return; }
+      if (!okG) { setNotice("✕ No se pudo guardar el grupo. Inténtalo de nuevo."); setBusyG(false); return; }
       if (docViejo && docViejo.id !== docNuevo.id) await deleteGroupFS(docViejo.id);
       setGroups((p) => [...p.filter((x) => x.id !== docNuevo.id && x.id !== docViejo?.id), docNuevo]);
       if (nuevo !== viejo) {
@@ -1768,9 +1769,9 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
         for (const sv of await encuestasDelColegio()) { const patch = renombrarEnEncuesta(sv, viejo, nuevo); if (patch) { try { await updateDoc(cdoc("surveys", sv.id), patch); } catch (e) { console.error(e); } } }
         logActivity("group", "renombró el grupo", `${viejo} → ${nuevo}`);
       } else logActivity("group", "cambió el color del grupo", nuevo);
-      setNotice(nuevo !== viejo ? `✅ Grupo renombrado a «${nuevo}».` : "✅ Grupo actualizado.");
+      setNotice(nuevo !== viejo ? `✓ Grupo renombrado a «${nuevo}».` : "✓ Grupo actualizado.");
       setEditG(null);
-    } catch (e) { console.error(e); setNotice("❌ No se pudo editar el grupo."); }
+    } catch (e) { console.error(e); setNotice("✕ No se pudo editar el grupo."); }
     setBusyG(false);
   };
   const eliminarGrupo = async (g) => {
@@ -1786,19 +1787,19 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       setStudents((p) => p.filter((x) => x.group !== g));
       setGroups((p) => p.filter((x) => x.name !== g));
       logActivity("group", `eliminó el grupo${r.estudiantes ? ` y sus ${r.estudiantes} estudiante(s)` : ""}`, g);
-      setNotice(`✅ Grupo «${g}» eliminado.`);
-    } catch (e) { console.error(e); setNotice("❌ No se pudo eliminar el grupo."); }
+      setNotice(`✓ Grupo «${g}» eliminado.`);
+    } catch (e) { console.error(e); setNotice("✕ No se pudo eliminar el grupo."); }
     setBusyG(false);
   };
 
   const createGroup = async () => {
     const name = newGroup.trim();
     if (!name) return;
-    if (groupExists(names, name)) { setNotice(`❌ Ya existe un grupo llamado «${name}».`); return; }
+    if (groupExists(names, name)) { setNotice(`✕ Ya existe un grupo llamado «${name}».`); return; }
     const g = { id: groupIdFor(name), name, color: GROUP_COLORS[groups.length % GROUP_COLORS.length] };
     setNewGroup(""); setAddingGroup(false);
     const ok = await saveGroupFS(g);
-    setNotice(ok ? `✅ Grupo «${name}» creado. Agrega estudiantes con «+ Agregar».` : `❌ No se pudo guardar el grupo «${name}». Revisa tu conexión o tus permisos e inténtalo de nuevo.`);
+    setNotice(ok ? `✓ Grupo «${name}» creado. Agrega estudiantes con «+ Agregar».` : `✕ No se pudo guardar el grupo «${name}». Revisa tu conexión o tus permisos e inténtalo de nuevo.`);
     if (!ok) setGroups((p) => p.filter((x) => x.id !== g.id)); else logActivity("group", "creó el grupo", name);
   };
 
@@ -1809,7 +1810,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     const s = { id, name: newName.trim(), group: addingTo, av };
     setStudents((prev) => [...prev, s]);
     const ok = await saveStudentFS(s);
-    if (!ok) { setStudents((prev) => prev.filter((x) => x.id !== id)); setNotice("❌ No se pudo guardar el estudiante. Inténtalo de nuevo."); return; }
+    if (!ok) { setStudents((prev) => prev.filter((x) => x.id !== id)); setNotice("✕ No se pudo guardar el estudiante. Inténtalo de nuevo."); return; }
     logActivity("group", "agregó un estudiante al grupo", addingTo);
     setNewName("");
   };
@@ -1820,8 +1821,8 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
     setStudents((s) => [...s, ...newStudents]);
     const res = await Promise.all(newStudents.map((s) => saveStudentFS(s)));
     const bad = newStudents.filter((_, i) => !res[i]);
-    if (bad.length) { setStudents((s) => s.filter((x) => !bad.some((b) => b.id === x.id))); setNotice(`❌ No se pudieron guardar ${bad.length} de ${newStudents.length} estudiantes. Inténtalo de nuevo.`); }
-    else setNotice(`✅ ${newStudents.length} estudiantes agregados.`);
+    if (bad.length) { setStudents((s) => s.filter((x) => !bad.some((b) => b.id === x.id))); setNotice(`✕ No se pudieron guardar ${bad.length} de ${newStudents.length} estudiantes. Inténtalo de nuevo.`); }
+    else setNotice(`✓ ${newStudents.length} estudiantes agregados.`);
     if (newStudents.length - bad.length > 0) logActivity("group", `agregó ${newStudents.length - bad.length} estudiante(s) al grupo`, addingTo);
     setBulkText("");
     setAddingTo(null);
@@ -1839,24 +1840,24 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10, marginBottom: 18 }}>
         <div><PageHeader title="Gestión de Grupos" subtitle="Administra grupos y participantes" /></div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_NOMBRE, plantillaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por estudiante con su grupo">⬇ Plantilla</Btn>
-          {canEdit && <Btn v="ghost" onClick={() => impRef.current?.click()} title="Sube la plantilla diligenciada (CSV)">⬆ Importar estudiantes</Btn>}
+          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_NOMBRE, plantillaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por estudiante con su grupo"><Ico n="descargar" />Plantilla</Btn>
+          {canEdit && <Btn v="ghost" onClick={() => impRef.current?.click()} title="Sube la plantilla diligenciada (CSV)"><Ico n="subir" />Importar estudiantes</Btn>}
           {canEdit && <input ref={impRef} type="file" accept=".csv,.txt,text/csv" onChange={onPickImport} style={{ display: "none" }} data-testid="import-grupos" />}
           <Btn v="sec" onClick={() => setAddingGroup(!addingGroup)}>+ Nuevo Grupo</Btn>
         </div>
       </div>
       {notice && (
-        <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✅") ? tint(C.ok, "15") : tint(C.err, "15"), color: notice.startsWith("✅") ? C.ok : C.err, border: `1px solid ${tint(notice.startsWith("✅") ? C.ok : C.err, "30")}` }}>{notice}</div>
+        <div onClick={() => setNotice("")} style={{ padding: "9px 14px", borderRadius: 8, marginBottom: 12, fontSize: 12, cursor: "pointer", background: notice.startsWith("✓") ? tint(C.ok, "15") : tint(C.err, "15"), color: notice.startsWith("✓") ? C.ok : C.err, border: `1px solid ${tint(notice.startsWith("✓") ? C.ok : C.err, "30")}` }}>{notice}</div>
       )}
       {imp && (
         <Card style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📥 Vista previa de la importación · {imp.nombreArchivo}</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}><Ico n="descargar" />Vista previa de la importación · {imp.nombreArchivo}</div>
           <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.7 }}>
             Se crearán <b>{imp.plan.gruposNuevos.length}</b> grupo(s) nuevo(s){imp.plan.gruposNuevos.length ? `: ${imp.plan.gruposNuevos.join(", ")}` : ""} y se agregarán <b>{imp.plan.estudiantesNuevos.length}</b> estudiante(s).
             {imp.plan.repetidos > 0 && <> Se omiten <b>{imp.plan.repetidos}</b> que ya existen o están repetidos.</>}
             {imp.ignoradas > 0 && <> Se ignoraron {imp.ignoradas} fila(s) de ejemplo.</>}
           </div>
-          {imp.errores.length > 0 && <div style={{ fontSize: 11, color: C.err, marginTop: 6 }}>{imp.errores.slice(0, 6).map((x) => <div key={x}>⚠ {x}</div>)}{imp.errores.length > 6 && <div>…y {imp.errores.length - 6} más.</div>}<div style={{ color: C.t3 }}>Esas filas no se importarán.</div></div>}
+          {imp.errores.length > 0 && <div style={{ fontSize: 11, color: C.err, marginTop: 6 }}>{imp.errores.slice(0, 6).map((x) => <div key={x}>Atención: {x}</div>)}{imp.errores.length > 6 && <div>…y {imp.errores.length - 6} más.</div>}<div style={{ color: C.t3 }}>Esas filas no se importarán.</div></div>}
           <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
             <Btn v="pri" disabled={importing || !imp.plan.estudiantesNuevos.length} onClick={confirmImport}>{importing ? "Importando..." : "✓ Confirmar importación"}</Btn>
             <Btn v="ghost" disabled={importing} onClick={() => setImp(null)}>Cancelar</Btn>
@@ -1917,7 +1918,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
             </div>
             {res.length === 0 ? (
               <div style={{ textAlign: "center", padding: "16px 0", color: C.t3, fontSize: 12 }}>
-                <div style={{ fontSize: 28, opacity: .3, marginBottom: 6 }}>🔍</div>
+                <div style={{ fontSize: 28, opacity: .3, marginBottom: 6 }}><Ico n="buscar" size={28} strokeWidth={1.5} sinMargen /></div>
                 No se encontró ningún estudiante ni grupo con ese nombre
               </div>
             ) : (
@@ -1964,7 +1965,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(min(100%,300px),1fr))", gap: 14 }}>
         {names.length === 0 && (
           <div style={{ gridColumn: "1 / -1", textAlign: "center", padding: "36px 12px", color: C.t2, fontSize: 13 }}>
-            <div style={{ fontSize: 34, marginBottom: 8 }}>👥</div>
+            <div style={{ fontSize: 34, marginBottom: 8 }}><Ico n="usuarios" size={34} strokeWidth={1.5} sinMargen /></div>
             Todavía no hay grupos. Pulsa <b>+ Nuevo Grupo</b> para crear el primero y luego agrega estudiantes.
           </div>
         )}
@@ -1993,7 +1994,7 @@ function GroupMgmt({ students, setStudents, groups, setGroups, GC, GROUPS, saveS
                 <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                   {canEdit && (editG?.old === g
                     ? (<><Btn sm v="pri" disabled={busyG} onClick={guardarEdicion}>{busyG ? "Guardando…" : "✓ Guardar"}</Btn><Btn sm v="ghost" disabled={busyG} onClick={() => setEditG(null)}>Cancelar</Btn></>)
-                    : (<><Btn sm v="ghost" title="Cambiar el nombre o el color del grupo" onClick={() => setEditG({ old: g, name: g, color: GC[g] || GROUP_COLORS[0] })}>✎ Editar</Btn><Btn sm v="dan" disabled={busyG} title="Eliminar el grupo" onClick={() => eliminarGrupo(g)}>🗑</Btn></>))}
+                    : (<><Btn sm v="ghost" title="Cambiar el nombre o el color del grupo" onClick={() => setEditG({ old: g, name: g, color: GC[g] || GROUP_COLORS[0] })}><Ico n="editar" />Editar</Btn><Btn sm v="dan" disabled={busyG} title="Eliminar el grupo" aria-label="Eliminar grupo" onClick={() => eliminarGrupo(g)}><Ico n="papelera" sinMargen /></Btn></>))}
                   <Btn sm onClick={() => setAddingTo(addingTo === g ? null : g)}>+ Agregar</Btn>
                 </div>
               </div>
@@ -2077,7 +2078,7 @@ function SurveyProgress({ surveys, students, responses }) {
         return (
           <Card key={sv.id} glow={C.rx} style={{ marginBottom: 10 }}>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-              <div style={{ fontSize: 13, fontWeight: 700 }}>📊 Avance: {sv.title}</div>
+              <div style={{ fontSize: 13, fontWeight: 700 }}><Ico n="grafico" />Avance: {sv.title}</div>
               <Badge color={p.total > 0 && p.pct === 100 ? C.ok : C.amber}>{p.pct}% completado</Badge>
             </div>
             <div style={{ height: 8, borderRadius: 4, background: C.border, marginBottom: 12, overflow: "hidden" }}>
@@ -2096,7 +2097,7 @@ function SurveyProgress({ surveys, students, responses }) {
               </div>
             )}
             <div style={{ display: "flex", gap: 12, marginTop: 12, fontSize: 11, color: C.t2 }}>
-              <span>✅ {p.completed} de {p.total} completadas</span>
+              <span>✓ {p.completed} de {p.total} completadas</span>
               <span>⏳ {p.pending} pendientes</span>
             </div>
           </Card>
@@ -2109,7 +2110,7 @@ function SurveyProgress({ surveys, students, responses }) {
 // ════════ ACTIVITY LOG ════════
 
 function ActivityLog() {
-  const icons = { create: "📋", report: "📊", system: "⚙", survey: "✅", user: "👤", export: "📄", group: "👥" };
+  const icons = { create: "lista", report: "grafico", system: "ajustes", survey: "ok", user: "usuario", export: "documento", group: "usuarios" };
   const colors = { create: C.rx, report: C.violet, system: C.t2, survey: C.teal, user: C.amber, export: C.sky, group: C.rx };
   const [log, setLog] = useState([]);
   const [confirming, setConfirming] = useState(false);
@@ -2135,27 +2136,27 @@ function ActivityLog() {
   return (
     <Card>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-        <div style={{ fontSize: 13, fontWeight: 700 }}>📜 Actividad Reciente <span style={{ fontSize: 10, color: C.t2, fontWeight: 400 }}>({log.length >= 200 ? "últimas 200" : `${log.length} entradas`})</span></div>
+        <div style={{ fontSize: 13, fontWeight: 700 }}><Ico n="historial" />Actividad Reciente <span style={{ fontSize: 10, color: C.t2, fontWeight: 400 }}>({log.length >= 200 ? "últimas 200" : `${log.length} entradas`})</span></div>
         {log.length > 0 && (confirming ? (
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             <span style={{ fontSize: 11, color: C.err }}>¿Vaciar todo?</span>
             <Btn v="dan" sm onClick={clear}>Sí, vaciar</Btn>
             <Btn sm onClick={() => setConfirming(false)}>Cancelar</Btn>
           </div>
-        ) : (<Btn sm v="dan" onClick={() => setConfirming(true)}>🗑 Vaciar</Btn>))}
+        ) : (<Btn sm v="dan" onClick={() => setConfirming(true)}><Ico n="papelera" />Vaciar</Btn>))}
       </div>
       {loading ? (
         <div style={{ textAlign: "center", padding: 30, color: C.t3, fontSize: 12 }}>Cargando actividad...</div>
       ) : !log.length ? (
         <div style={{ textAlign: "center", padding: 30 }}>
-          <div style={{ fontSize: 28, opacity: 0.2, marginBottom: 8 }}>📭</div>
+          <div style={{ fontSize: 28, opacity: 0.2, marginBottom: 8 }}><Ico n="bandeja" size={28} strokeWidth={1.5} sinMargen /></div>
           <div style={{ fontSize: 12, color: C.t3 }}>No hay actividad registrada</div>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
           {log.map((a) => (
             <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}`, transition: "all .15s" }}>
-              <span style={{ fontSize: 14 }}>{icons[a.type] || "📌"}</span>
+              <Ico n={icons[a.type] || "pin"} size={15} sinMargen />
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12 }}>
                   <span style={{ fontWeight: 600, color: colors[a.type] || C.text }}>{a.user}</span>{" "}
@@ -2182,7 +2183,7 @@ function AddQToSurvey({ onAdd }) {
   const add = () => { if (!text.trim()) return; onAdd({ text: text.trim(), tp: kind === "abierta" ? "neu" : tp, ...(kind !== "seleccion" ? { kind } : {}), ...(obl ? { obligatoria: true } : {}) }); setText(""); setTp("pos"); setKind("seleccion"); setObl(false); };
   return (
     <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 8, background: C.card, border: `1px dashed ${C.borderLit}` }}>
-      <div style={{ fontSize: 10, color: C.t3, marginBottom: 7, fontWeight: 600 }}>➕ NUEVA PREGUNTA</div>
+      <div style={{ fontSize: 10, color: C.t3, marginBottom: 7, fontWeight: 600 }}><Ico n="mas" />NUEVA PREGUNTA</div>
       <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
         <input value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()} placeholder="Escribe la pregunta y pulsa Enter..." style={{ flex: 1, background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 10px", color: C.text, fontSize: 12, outline: "none", fontFamily: "inherit" }} />
         {kind !== "abierta" && <select value={tp} onChange={(e) => setTp(e.target.value)} style={{ background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 6, padding: "6px 8px", color: tp === "pos" ? C.teal : tp === "neg" ? C.err : C.amber, fontSize: 11, fontWeight: 700, cursor: "pointer", outline: "none", fontFamily: "inherit" }}>
@@ -2205,14 +2206,14 @@ function AddQToSurvey({ onAdd }) {
 function EmptyState({ canEdit, onGo }) {
   return (
     <div style={{ maxWidth: 520, margin: "60px auto", textAlign: "center", padding: 24 }}>
-      <div style={{ fontSize: 44, marginBottom: 12 }}>🌱</div>
+      <div style={{ fontSize: 44, marginBottom: 12 }}><Ico n="brote" size={44} strokeWidth={1.5} sinMargen /></div>
       <div style={{ fontSize: 20, fontWeight: 800, marginBottom: 8 }}>Aún no hay estudiantes</div>
       <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 20 }}>
         {canEdit
           ? "Crea tus grupos y agrega estudiantes uno por uno o pega una lista completa para importarlos. Cuando apliques una encuesta, aquí verás el sociograma."
           : "Todavía no se han cargado grupos ni estudiantes. Cuando el psicólogo los cree, aparecerán aquí."}
       </div>
-      {canEdit && <Btn v="pri" onClick={onGo}>👥 Crear grupos / importar estudiantes</Btn>}
+      {canEdit && <Btn v="pri" onClick={onGo}><Ico n="usuarios" />Crear grupos / importar estudiantes</Btn>}
       <div style={{ fontSize: 11, color: C.t3, marginTop: 18 }}>¿Solo quieres explorar? Agrega <code>?demo</code> al final de la dirección para ver datos ficticios.</div>
     </div>
   );
@@ -2259,7 +2260,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
       return id;
     } catch (e) {
       console.error("Error guardando encuesta:", e);
-      flash("❌ No se pudo guardar la encuesta: " + e.message);
+      flash("✕ No se pudo guardar la encuesta: " + e.message);
       return null;
     }
   };
@@ -2267,20 +2268,20 @@ function SurveyBuilder({ role, students, GROUPS }) {
   const save = async () => {
     if (!nS.title.trim() || !nS.questions.length) return;
     const id = await addSurvey(nS);
-    if (id) flash("✅ Encuesta guardada como borrador. Actívala cuando quieras aplicarla.");
+    if (id) flash("✓ Encuesta guardada como borrador. Actívala cuando quieras aplicarla.");
     setCreating(false);
     setNS(blankSurvey());
   };
 
   const openCreate = () => {
-    if ((GROUPS || []).length === 0) { flash("⚠ Primero crea un grupo en la pestaña Grupos: la encuesta se aplica a uno o más grupos."); return; }
+    if ((GROUPS || []).length === 0) { flash("Atención: Primero crea un grupo en la pestaña Grupos: la encuesta se aplica a uno o más grupos."); return; }
     setNS(blankSurvey()); setCreating(true);
   };
 
   const useTemplate = async () => {
-    if ((GROUPS || []).length === 0) { flash("⚠ Primero crea un grupo y agrega estudiantes en la pestaña Grupos; la encuesta de prueba se aplica a tus grupos."); return; }
+    if ((GROUPS || []).length === 0) { flash("Atención: Primero crea un grupo y agrega estudiantes en la pestaña Grupos; la encuesta de prueba se aplica a tus grupos."); return; }
     const id = await addSurvey(buildTemplateSurvey(GROUPS), "plantilla");
-    if (id) flash("✅ Encuesta de prueba creada en borrador, con preguntas positivas, neutrales y negativas. Pulsa «Borrador» para activarla y «Aplicar» para abrirla.", 7000);
+    if (id) flash("✓ Encuesta de prueba creada en borrador, con preguntas positivas, neutrales y negativas. Pulsa «Borrador» para activarla y «Aplicar» para abrirla.", 7000);
   };
 
   const onPickFile = async (e) => {
@@ -2296,7 +2297,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const r = importPreview?.result; if (!r?.ok) return;
     const groups = (GROUPS || []).slice();
     const id = await addSurvey({ title: (importPreview.title || r.survey.title).trim() || r.survey.title, group: groups[0] || "", groups, maxSel: r.survey.maxSel, questions: r.survey.questions.map((q, i) => ({ id: "q_" + Date.now() + "_" + i, text: q.text, tp: q.tp, ...(q.kind ? { kind: q.kind } : {}), ...(q.obligatoria ? { obligatoria: true } : {}) })) }, "importada");
-    if (id) flash(`✅ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
+    if (id) flash(`✓ Encuesta importada en borrador con ${r.survey.questions.length} preguntas.`);
     setImportPreview(null);
   };
 
@@ -2306,7 +2307,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const base = `Copia de ${sv.title}`;
     const n = surveys.filter((x) => !x.deleted && (x.title === base || x.title.startsWith(base + " ("))).length;
     const id = await addSurvey({ title: n ? `${base} (${n + 1})` : base, group: gs[0] || "", groups: gs, maxSel: sv.maxSel, questions: (sv.questions || []).map((q) => ({ id: "q_" + Math.random().toString(36).slice(2, 9), text: q.text, tp: q.tp, ...(q.kind ? { kind: q.kind } : {}), ...(q.obligatoria === true ? { obligatoria: true } : {}) })) }, "duplicada");
-    if (id) { setEditing(id); flash("✅ Copia creada en borrador, sin respuestas. Cambia el título y los grupos, y actívala cuando quieras aplicarla.", 8000); }
+    if (id) { setEditing(id); flash("✓ Copia creada en borrador, sin respuestas. Cambia el título y los grupos, y actívala cuando quieras aplicarla.", 8000); }
   };
 
   // Resultados de una encuesta a Excel (.xlsx): hojas con índices, conexiones, matriz y una fila por respuesta.
@@ -2314,7 +2315,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
     const res = buildResultsSheets({ students, surveys, responses, surveyId: sv.id, group: "Todos", colegio: SCHOOL.nombre });
     downloadBytes(resultsFileName({ colegio: SCHOOL.nombre, surveyTitle: sv.title }), buildXlsx(res.sheets), XLSX_MIME);
     logActivity("export", "exportó los resultados de la encuesta (Excel)", sv.title);
-    flash(`✅ Excel descargado: ${res.resumen.respuestas} respuestas, ${res.resumen.elecciones} elecciones. Contiene datos de menores: guárdalo con cuidado.`, 7000);
+    flash(`✓ Excel descargado: ${res.resumen.respuestas} respuestas, ${res.resumen.elecciones} elecciones. Contiene datos de menores: guárdalo con cuidado.`, 7000);
   };
 
   const exportSurvey = (sv, kind) => {
@@ -2377,7 +2378,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,320px),1fr))", gap: 16 }}>
         <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>⚙ Configuración</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}><Ico n="ajustes" />Configuración</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <Inp label="Título" value={nS.title} onChange={(v) => setNS((s) => ({ ...s, title: v }))} placeholder="Ej: Sociograma Q2" />
             <div>
@@ -2407,21 +2408,21 @@ function SurveyBuilder({ role, students, GROUPS }) {
             </div>
             <Inp label="Máx. selecciones" type="number" value={nS.maxSel} onChange={(v) => setNS((s) => ({ ...s, maxSel: parseInt(v) || 1 }))} />
             <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "9px 11px", borderRadius: 8, background: tint(C.teal, "12"), border: `1px solid ${tint(C.teal, "30")}` }}>
-              <span>🔒</span>
+              <span><Ico n="candado" /></span>
               <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5 }}><b style={{ color: C.text }}>Confidencial.</b> Los estudiantes no ven lo que responden los demás; solo el equipo del colegio ve las respuestas. Se guarda quién respondió, porque el sociograma lo necesita.</div>
             </div>
           </div>
         </Card>
         <Card>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>📝 Preguntas ({nS.questions.length})</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}><Ico n="notas" />Preguntas ({nS.questions.length})</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 12, maxHeight: 160, overflowY: "auto" }}>
             {nS.questions.map((q, i) => (
               <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 8, background: C.surface, border: `1px solid ${C.border}` }}>
                 <span style={{ fontSize: 10, fontWeight: 800, color: C.t3, width: 22 }}>#{i + 1}</span>
                 <span style={{ fontSize: 12, color: C.text, flex: 1 }}>{q.text}</span>
-                {esJustificable(q) && <span title={KIND_LABELS.justificable} style={{ fontSize: 11 }}>💬</span>}
+                {esJustificable(q) && <span title={KIND_LABELS.justificable} style={{ fontSize: 11 }}><Ico n="mensaje" /></span>}
                 {esObligatoria(q) && <span title="Obligatoria" style={{ fontSize: 11, color: C.amber, fontWeight: 800 }}>*</span>}
-                {esAbierta(q) ? <Badge color={C.sky}>✎ abierta</Badge> : <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>}
+                {esAbierta(q) ? <Badge color={C.sky}><Ico n="editar" />abierta</Badge> : <Badge color={q.tp === "pos" ? C.teal : q.tp === "neg" ? C.err : C.amber}>{q.tp === "pos" ? "+" : q.tp === "neg" ? "−" : "○"}</Badge>}
                 <button onClick={() => setNS((s) => ({ ...s, questions: s.questions.filter((x) => x.id !== q.id) }))} style={{ background: "none", border: "none", color: C.err, cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
             ))}
@@ -2440,7 +2441,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
       </div>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
         <Btn onClick={() => setCreating(false)}>Cancelar</Btn>
-        <Btn v="pri" onClick={save} disabled={!nS.title.trim() || !nS.questions.length}>💾 Guardar</Btn>
+        <Btn v="pri" onClick={save} disabled={!nS.title.trim() || !nS.questions.length}><Ico n="guardar" />Guardar</Btn>
       </div>
     </div>
   );
@@ -2459,14 +2460,14 @@ function SurveyBuilder({ role, students, GROUPS }) {
               </span>
             )}
           </Btn>
-          <Btn v="ghost" onClick={useTemplate}>📋 Encuesta de prueba</Btn>
-          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_ENCUESTA_NOMBRE, plantillaEncuestaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por pregunta (pregunta; tipo)">⬇ Plantilla</Btn>
-          <Btn v="ghost" onClick={() => fileInputRef.current?.click()}>⬆ Importar</Btn>
+          <Btn v="ghost" onClick={useTemplate}><Ico n="lista" />Encuesta de prueba</Btn>
+          <Btn v="ghost" onClick={() => downloadFile(PLANTILLA_ENCUESTA_NOMBRE, plantillaEncuestaCSV(), "text/csv;charset=utf-8")} title="Archivo para diligenciar en Excel: una fila por pregunta (pregunta; tipo)"><Ico n="descargar" />Plantilla</Btn>
+          <Btn v="ghost" onClick={() => fileInputRef.current?.click()}><Ico n="subir" />Importar</Btn>
           <input ref={fileInputRef} type="file" accept=".json,.csv,.txt,application/json,text/csv" onChange={onPickFile} style={{ display: "none" }} data-testid="import-file" />
           <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
         </div>}
       </div>
-      {msg && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✅") ? tint(C.ok, "15") : tint(C.amber, "15"), color: msg.startsWith("✅") ? C.ok : C.amber, fontSize: 12 }}>{msg}</div>}
+      {msg && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, background: msg.startsWith("✓") ? tint(C.ok, "15") : tint(C.amber, "15"), color: msg.startsWith("✓") ? C.ok : C.amber, fontSize: 12 }}>{msg}</div>}
       {loadingS && <div style={{ textAlign: "center", padding: 30, color: C.t3 }}>Cargando encuestas...</div>}
 
       {/* ── Vista previa de la importación ── */}
@@ -2474,7 +2475,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
         const r = importPreview.result;
         return (
           <Card style={{ marginBottom: 14, border: `1px solid ${r.ok ? C.teal : C.err}50` }}>
-            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: r.ok ? C.teal : C.err }}>{r.ok ? "⬆ Vista previa de la importación" : "❌ No se pudo importar el archivo"}</div>
+            <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4, color: r.ok ? C.teal : C.err }}>{r.ok ? "Vista previa de la importación" : "✕ No se pudo importar el archivo"}</div>
             <div style={{ fontSize: 11, color: C.t3, marginBottom: 10 }}>{importPreview.fileName}</div>
             {r.errors.length > 0 && (
               <div style={{ marginBottom: 10 }}>
@@ -2491,11 +2492,11 @@ function SurveyBuilder({ role, students, GROUPS }) {
                     <div key={i} style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 12, padding: "5px 8px", borderRadius: 7, background: C.surface, border: `1px solid ${C.border}` }}>
                       <span style={{ minWidth: 20, color: C.t3 }}>{i + 1}.</span>
                       <span style={{ flex: 1 }}>{q.text}</span>
-                      {esAbierta(q) ? <span style={{ fontSize: 10, fontWeight: 700, color: C.sky }}>✎ Abierta</span> : <span style={{ fontSize: 10, fontWeight: 700, color: TIPO_INFO[q.tp].c() }}>{TIPO_INFO[q.tp].s} {TIPO_INFO[q.tp].l}</span>}
+                      {esAbierta(q) ? <span style={{ fontSize: 10, fontWeight: 700, color: C.sky }}><Ico n="editar" />Abierta</span> : <span style={{ fontSize: 10, fontWeight: 700, color: TIPO_INFO[q.tp].c() }}>{TIPO_INFO[q.tp].s} {TIPO_INFO[q.tp].l}</span>}
                     </div>
                   ))}
                 </div>
-                {r.warnings.map((w, i) => <div key={i} style={{ fontSize: 11, color: C.amber }}>⚠ {w}</div>)}
+                {r.warnings.map((w, i) => <div key={i} style={{ fontSize: 11, color: C.amber }}>Atención: {w}</div>)}
                 <div style={{ fontSize: 11, color: C.t2, margin: "6px 0 10px" }}>Se creará en borrador para {(GROUPS || []).length > 0 ? `todos tus grupos (${GROUPS.join(", ")})` : "…(primero crea un grupo)"}. Podrás cambiar los grupos al editarla.</div>
               </>
             )}
@@ -2511,7 +2512,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
       {showTrash && (
         <Card style={{ marginBottom: 16, border: `1px solid ${tint(C.err, "30")}` }}>
           <div style={{ fontSize: 13, fontWeight: 700, color: C.err, marginBottom: 12, display: "flex", alignItems: "center", gap: 8 }}>
-            🗑 Papelera ({surveys.filter(s => s.deleted).length} encuestas)
+            <Ico n="papelera" />Papelera ({surveys.filter(s => s.deleted).length} encuestas)
           </div>
           {surveys.filter(s => s.deleted).length === 0 ? (
             <div style={{ fontSize: 12, color: C.t3, textAlign: "center", padding: 16 }}>La papelera está vacía</div>
@@ -2530,7 +2531,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
 
       {!loadingS && surveys.filter((sv) => !sv.deleted).length === 0 && (
         <Card style={{ marginBottom: 14, textAlign: "center", padding: "28px 16px" }}>
-          <div style={{ fontSize: 34, marginBottom: 8 }}>📝</div>
+          <div style={{ fontSize: 34, marginBottom: 8 }}><Ico n="notas" size={34} strokeWidth={1.5} sinMargen /></div>
           <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6 }}>Todavía no hay encuestas</div>
           <div style={{ fontSize: 12, color: C.t2, lineHeight: 1.6, marginBottom: 14 }}>
             {students.length === 0
@@ -2540,8 +2541,8 @@ function SurveyBuilder({ role, students, GROUPS }) {
           {canEdit && students.length > 0 && (
             <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
               <Btn v="pri" onClick={openCreate}>+ Nueva Encuesta</Btn>
-              <Btn v="ghost" onClick={useTemplate}>📋 Crear encuesta de prueba</Btn>
-              <Btn v="ghost" onClick={() => fileInputRef.current?.click()}>⬆ Importar desde archivo</Btn>
+              <Btn v="ghost" onClick={useTemplate}><Ico n="lista" />Crear encuesta de prueba</Btn>
+              <Btn v="ghost" onClick={() => fileInputRef.current?.click()}><Ico n="subir" />Importar desde archivo</Btn>
             </div>
           )}
         </Card>
@@ -2559,22 +2560,22 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 </button>
               </div>
               <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
-                <span>📋 {sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()}){sv.questions.some(esJustificable) ? ` · 💬 ${sv.questions.filter(esJustificable).length} con justificación` : ""}{sv.questions.some(esAbierta) ? ` · ✎ ${sv.questions.filter(esAbierta).length} abiertas` : ""}</span>
-                <span title="Grupos a los que se aplica">👥 {surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
-                <span>🎯 Máx: {sv.maxSel}</span>
-                <span title="Los estudiantes no ven las respuestas de los demás; solo el equipo del colegio las ve. Se guarda quién respondió.">🔒 Confidencial</span>
+                <span><Ico n="lista" />{sv.questions.length} preguntas ({(() => { const c = countTipos(sv.questions); return `${c.pos} + · ${c.neu} ○ · ${c.neg} −`; })()}){sv.questions.some(esJustificable) ? ` · ${sv.questions.filter(esJustificable).length} con justificación` : ""}{sv.questions.some(esAbierta) ? ` · ${sv.questions.filter(esAbierta).length} abiertas` : ""}</span>
+                <span title="Grupos a los que se aplica"><Ico n="usuarios" />{surveyGroups(sv).join(", ") || "Todos los grupos"}</span>
+                <span><Ico n="objetivo" />Máx: {sv.maxSel}</span>
+                <span title="Los estudiantes no ven las respuestas de los demás; solo el equipo del colegio las ve. Se guarda quién respondió."><Ico n="candado" />Confidencial</span>
               </div>
             </div>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>
-              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "json")} title="Descargar la encuesta como JSON (para importarla en otro colegio)">⬇ JSON</Btn>
-              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)">⬇ CSV</Btn>
-              {canEdit && <Btn sm v="ghost" onClick={() => duplicateSurvey(sv)} title="Crea una copia sin respuestas para aplicarla a otro grupo o en otro periodo">⧉ Duplicar</Btn>}
-              {canEdit && <Btn sm v="teal" disabled={!responses.some((r) => r.surveyId === sv.id)} onClick={() => exportResults(sv)} title={responses.some((r) => r.surveyId === sv.id) ? "Descarga los resultados en Excel (.xlsx) para hacer tus propios gráficos" : "Aún no hay respuestas para exportar"}>⬇ Resultados (Excel)</Btn>}
+              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "json")} title="Descargar la encuesta como JSON (para importarla en otro colegio)"><Ico n="descargar" />JSON</Btn>
+              <Btn sm v="ghost" onClick={() => exportSurvey(sv, "csv")} title="Descargar las preguntas en CSV (se abre en Excel)"><Ico n="descargar" />CSV</Btn>
+              {canEdit && <Btn sm v="ghost" onClick={() => duplicateSurvey(sv)} title="Crea una copia sin respuestas para aplicarla a otro grupo o en otro periodo"><Ico n="copiar" />Duplicar</Btn>}
+              {canEdit && <Btn sm v="teal" disabled={!responses.some((r) => r.surveyId === sv.id)} onClick={() => exportResults(sv)} title={responses.some((r) => r.surveyId === sv.id) ? "Descarga los resultados en Excel (.xlsx) para hacer tus propios gráficos" : "Aún no hay respuestas para exportar"}><Ico n="descargar" />Resultados (Excel)</Btn>}
               {canEdit && (<>
-              <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("⚠ Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); logActivity("survey", "abrió para aplicar la encuesta", sv.title); }}>▶ Aplicar</Btn>
-              <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✅ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}>🔗 Link</Btn>
+              <Btn sm v="ok" onClick={() => { if (sv.status !== "active") { setMsg("Atención: Activa la encuesta (pulsa «Borrador») para poder aplicarla."); setTimeout(() => setMsg(""), 4000); return; } window.open(`${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`, "_blank", "noopener"); logActivity("survey", "abrió para aplicar la encuesta", sv.title); }}><Ico n="jugar" />Aplicar</Btn>
+              <Btn sm v="teal" onClick={() => { const url = `${window.location.origin}${window.location.pathname}?c=${CID}&survey=${sv.id}`; navigator.clipboard.writeText(url).then(() => alert("✓ Link copiado:\n\n" + url)).catch(() => prompt("Copia este link:", url)); }}><Ico n="vinculo" />Link</Btn>
               </>)}
-              {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "✎ Editar"}</Btn><Btn sm v="dan" onClick={() => deleteSurvey(sv.id)}>🗑</Btn></>)}
+              {canEdit && (<><Btn sm onClick={() => setEditing(editing === sv.id ? null : sv.id)}>{editing === sv.id ? "Cerrar" : "Editar"}</Btn><Btn sm v="dan" title="Mover a la papelera" aria-label="Eliminar encuesta" onClick={() => deleteSurvey(sv.id)}><Ico n="papelera" sinMargen /></Btn></>)}
             </div>
           </div>
           {editing === sv.id && (
@@ -2594,7 +2595,7 @@ function SurveyBuilder({ role, students, GROUPS }) {
                 </div>
                 <Inp label="Máx. selecciones" type="number" value={sv.maxSel} onChange={(v) => updateSurveyField(sv.id, "maxSel", parseInt(v) || 1)} />
               </div>
-              <div style={{ fontSize: 11, fontWeight: 600, color: C.teal, marginBottom: 8 }}>📝 Preguntas ({sv.questions.length})</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: C.teal, marginBottom: 8 }}><Ico n="notas" />Preguntas ({sv.questions.length})</div>
               {sv.questions.map((q, i) => (
                 <div key={q.id} style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4, padding: "7px 10px", borderRadius: 7, background: C.card, border: `1px solid ${C.border}` }}>
                   <span style={{ fontSize: 10, color: C.t3, width: 22, fontWeight: 700 }}>#{i + 1}</span>
@@ -2683,7 +2684,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
     <Card style={{ marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.sky }}>
-          👁 Vista Previa — Reporte {REPORT_TYPES[reportType]}
+          <Ico n="ver" />Vista Previa — Reporte {REPORT_TYPES[reportType]}
           <span style={{ fontSize: 10, color: C.t2, fontWeight: 400, marginLeft: 8 }}>{groupLabel} · {filteredStudents.length} participantes</span>
         </div>
         <Btn sm v="ghost" onClick={() => setActive(null)}>✕ Cerrar</Btn>
@@ -2696,7 +2697,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
     <div>
       <PageHeader title="Reportes y Análisis" subtitle="Genera reportes del análisis sociométrico filtrados por grupo" />
       <details style={{ marginBottom: 12 }}>
-        <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: C.t2 }}>ℹ Guía para leer los indicadores y los roles</summary>
+        <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 700, color: C.t2 }}>Guía para leer los indicadores y los roles</summary>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 8, marginTop: 8 }}>
           {["aceptacion", "rechazo", "expansion", "densidad", "mutuas", "lider", "controvertido", "rechazado", "aislado", "integrado", "regular"].map((k) => (
             <div key={k} style={{ border: `1px solid ${C.border}`, borderRadius: 8, padding: "8px 10px", fontSize: 11, lineHeight: 1.5, color: C.t2, background: C.surface }}>
@@ -2712,13 +2713,13 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Grupo a analizar</label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#3b82f6" : GC[g] || "#3b82f6"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(gc, "80") : C.border}`, background: on ? tint(gc, "18") : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "🌐 Todos" : g}</button>); })}
+              {grupos.map((g) => { const on = selectedGroup === g; const gc = g === "Todos" ? "#3b82f6" : GC[g] || "#3b82f6"; return (<button key={g} onClick={() => setSelectedGroup(g)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(gc, "80") : C.border}`, background: on ? tint(gc, "18") : "transparent", color: on ? gc : C.t3, transition: "all .2s" }}>{g === "Todos" ? "Todos" : g}</button>); })}
             </div>
           </div>
           <div>
             <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 5 }}>Tipo de reporte</label>
             <div style={{ display: "flex", gap: 6 }}>
-              {[{ v: "individual", l: "👤 Individual" }, { v: "grupal", l: "👥 Grupal" }, { v: "ambos", l: "📊 Completo" }, { v: "estudiante", l: "🎓 Un estudiante" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
+              {[{ v: "individual", l: "Individual" }, { v: "grupal", l: "Grupal" }, { v: "ambos", l: "Completo" }, { v: "estudiante", l: "Un estudiante" }].map((opt) => { const on = reportType === opt.v; return (<button key={opt.v} onClick={() => setReportType(opt.v)} style={{ padding: "5px 13px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.violet, "80") : C.border}`, background: on ? tint(C.violet, "18") : "transparent", color: on ? C.violet : C.t3, transition: "all .2s" }}>{opt.l}</button>); })}
             </div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginTop: 7 }}>{TYPE_HELP[reportType]}</div>
             {reportType === "estudiante" && (
@@ -2733,22 +2734,22 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.t2, display: "block", marginBottom: 4 }}>Versión</label>
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                    {[{ v: "equipo", l: "🔒 Para el equipo (con nombres)" }, { v: "familias", l: "👪 Para familias (sin nombres de otros niños)" }].map((o) => { const on = versionEst === o.v; return (<button key={o.v} onClick={() => setVersionEst(o.v)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.rx, "80") : C.border}`, background: on ? tint(C.rx, "18") : "transparent", color: on ? C.rx : C.t2 }}>{o.l}</button>); })}
+                    {[{ v: "equipo", l: "Para el equipo (con nombres)" }, { v: "familias", l: "Para familias (sin nombres de otros niños)" }].map((o) => { const on = versionEst === o.v; return (<button key={o.v} onClick={() => setVersionEst(o.v)} style={{ padding: "5px 12px", borderRadius: 7, fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${on ? tint(C.rx, "80") : C.border}`, background: on ? tint(C.rx, "18") : "transparent", color: on ? C.rx : C.t2 }}>{o.l}</button>); })}
                   </div>
-                  {versionEst === "equipo" && <div style={{ fontSize: 10, color: C.amber, marginTop: 5, lineHeight: 1.4 }}>⚠ Incluye nombres de otros estudiantes y lo que escribieron. No lo entregues a familias.</div>}
+                  {versionEst === "equipo" && <div style={{ fontSize: 10, color: C.amber, marginTop: 5, lineHeight: 1.4 }}>Atención: Incluye nombres de otros estudiantes y lo que escribieron. No lo entregues a familias.</div>}
                 </div>
               </div>
             )}
           </div>
         </div>
         <div style={{ marginTop: 12, padding: "8px 12px", borderRadius: 8, background: C.bgSub, border: `1px solid ${C.border}`, fontSize: 11, color: C.t2 }}>
-          📌 {reportType === "estudiante" ? (estSel ? `${estSel.name} · ${estSel.group}` : "Elige un estudiante") : `${filteredStudents.length} participantes · ${filteredConns.length} conexiones`}{reportType !== "estudiante" && selectedGroup !== "Todos" && <span style={{ color: GC[selectedGroup] || C.rx, fontWeight: 700, marginLeft: 6 }}>· {selectedGroup}</span>}
+          <Ico n="pin" />{reportType === "estudiante" ? (estSel ? `${estSel.name} · ${estSel.group}` : "Elige un estudiante") : `${filteredStudents.length} participantes · ${filteredConns.length} conexiones`}{reportType !== "estudiante" && selectedGroup !== "Todos" && <span style={{ color: GC[selectedGroup] || C.rx, fontWeight: 700, marginLeft: 6 }}>· {selectedGroup}</span>}
         </div>
       </Card>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12, marginBottom: 16 }}>
         <Card glow={C.sky} style={{ cursor: "pointer" }}>
           <div onClick={() => setActive(active === "preview" ? null : "preview")}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>👁</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}><Ico n="ver" size={28} strokeWidth={1.5} sinMargen /></div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Vista Previa</div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Explora los datos en pantalla antes de exportar</div>
             <Btn v="teal" sm style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>{active === "preview" ? "Cerrar ✕" : "Ver ahora"}</Btn>
@@ -2756,7 +2757,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
         </Card>
         <Card glow={C.rx} style={{ cursor: "pointer" }}>
           <div onClick={exportPDF}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📄</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}><Ico n="documento" size={28} strokeWidth={1.5} sinMargen /></div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Exportar PDF</div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Abre una ventana lista para imprimir con formato profesional</div>
             <Btn v="pri" sm style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>Generar PDF ↓</Btn>
@@ -2764,7 +2765,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
         </Card>
         <Card glow={C.violet} style={{ cursor: "pointer" }}>
           <div onClick={exportHTML}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>🌐</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}><Ico n="mundo" size={28} strokeWidth={1.5} sinMargen /></div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Descargar HTML</div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>Archivo HTML completo para abrir en navegador e imprimir</div>
             <Btn v="sec" sm style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>Descargar ↓</Btn>
@@ -2772,7 +2773,7 @@ function ReportsPanel({ students, conns, responses = [], surveys = [], surveyFil
         </Card>
         <Card glow={C.teal} style={{ cursor: sinRespuestas ? "not-allowed" : "pointer", opacity: sinRespuestas ? 0.6 : 1 }}>
           <div onClick={sinRespuestas ? undefined : exportExcel}>
-            <div style={{ fontSize: 28, marginBottom: 8 }}>📗</div>
+            <div style={{ fontSize: 28, marginBottom: 8 }}><Ico n="libro" size={28} strokeWidth={1.5} sinMargen /></div>
             <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 4 }}>Excel (.xlsx)</div>
             <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 12 }}>{sinRespuestas ? "Aún no hay respuestas de este grupo para exportar" : "Índices, conexiones, matriz y una fila por respuesta, para hacer tus propios gráficos"}</div>
             <Btn v="teal" sm disabled={sinRespuestas} style={{ width: "100%", justifyContent: "center", pointerEvents: "none" }}>Descargar Excel ↓</Btn>
@@ -2795,7 +2796,7 @@ function LicenciaCard({ licencia, nEstudiantes }) {
   const filas = [["Plan", plan ? plan.label : "—"], ["Estudiantes", `${nEstudiantes}${licencia.maxEstudiantes ? ` de ${licencia.maxEstudiantes}` : " (sin tope)"}`], ["Costo anual", costo], ["Vigencia", `hasta el ${f(est.vence)}`]];
   return (
     <Card style={{ marginBottom: 14 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>🔑 Licencia</div>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}><Ico n="llave" />Licencia</div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 10 }}>
         {filas.map(([k, v]) => <div key={k}><div style={{ fontSize: 10, color: C.t3, textTransform: "uppercase", letterSpacing: ".05em" }}>{k}</div><div style={{ fontSize: 13, fontWeight: 600 }}>{v}</div></div>)}
       </div>
@@ -2845,13 +2846,13 @@ function SettingsPanel({ licencia, nEstudiantes }) {
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexShrink: 0 }}>
           {dirty && <span style={{ fontSize: 11, color: C.amber }}>● Cambios sin guardar</span>}
           {saved && <span style={{ fontSize: 11, color: C.ok }}>✓ Guardado</span>}
-          <Btn v="pri" onClick={save} disabled={!dirty}>💾 Guardar cambios</Btn>
+          <Btn v="pri" onClick={save} disabled={!dirty}><Ico n="guardar" />Guardar cambios</Btn>
         </div>
       </div>
       <LicenciaCard licencia={licencia} nEstudiantes={nEstudiantes} />
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,300px),1fr))", gap: 14 }}>
         <Card glow={C.rx}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}>🏫 Institución</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.rx }}><Ico n="colegio" />Institución</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Inp label="Colegio" value={cfg.colegio} onChange={(v) => upd("colegio", v)} placeholder="Nombre del colegio" />
             <Inp label="Ciudad" value={cfg.ciudad} onChange={(v) => upd("ciudad", v)} placeholder="Ciudad" />
@@ -2859,21 +2860,21 @@ function SettingsPanel({ licencia, nEstudiantes }) {
           </div>
         </Card>
         <Card glow={C.teal}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.teal }}>🔐 Seguridad <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.teal }}><Ico n="escudo" />Seguridad <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Sel disabled label="Dominio Google permitido (próximamente)" value={cfg.dominio} onChange={(v) => upd("dominio", v)} options={[{ v: "all", l: "Cualquier correo" }, { v: "edu.co", l: "@edu.co" }]} />
             <Sel disabled label="Registro de nuevos usuarios (próximamente)" value={cfg.registro} onChange={(v) => upd("registro", v)} options={[{ v: "no", l: "Solo invitación (recomendado)" }, { v: "approval", l: "Libre con aprobación admin" }, { v: "yes", l: "Completamente abierto" }]} />
           </div>
         </Card>
         <Card glow={C.amber}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.amber }}>📧 Notificaciones <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.amber }}><Ico n="correo" />Notificaciones <span style={{ fontSize: 10, fontWeight: 600, color: C.t3 }}>· aún sin efecto</span></div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <Sel disabled label="Notificar encuestas nuevas (próximamente)" value={cfg.notifEncuesta} onChange={(v) => upd("notifEncuesta", v)} options={[{ v: "yes", l: "Sí" }, { v: "no", l: "No" }]} />
             <Sel disabled label="Enviar resultados a (próximamente)" value={cfg.notifResultados} onChange={(v) => upd("notifResultados", v)} options={[{ v: "psy", l: "Solo psicólogos" }, { v: "all", l: "Todos los usuarios" }, { v: "admin", l: "Solo administradores" }]} />
           </div>
         </Card>
         <Card glow={C.violet}>
-          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.violet }}>🎨 Marca</div>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, color: C.violet }}><Ico n="paleta" />Marca</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
             <div>
               <div style={{ fontSize: 11, color: C.t2, marginBottom: 6 }}>Logo del colegio</div>
@@ -2889,12 +2890,12 @@ function SettingsPanel({ licencia, nEstudiantes }) {
         </Card>
       </div>
       <Card style={{ marginTop: 14 }}>
-        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Datos del colegio</div>
+        <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}><Ico n="paquete" />Datos del colegio</div>
         <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Descarga una copia completa de los datos de este colegio (estudiantes, grupos, encuestas, respuestas, usuarios y ajustes) en un archivo JSON. Guárdala en un lugar seguro: contiene datos de menores.</div>
-        <Btn v="sec" disabled={exporting} onClick={async () => { setExporting(true); setExportMsg(""); try { const c = await exportColegio({ id: CID, nombre: cfg.colegio }, SESSION_EMAIL); setExportMsg(`✅ Descargado: ${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas.`); logActivity("export", "exportó los datos del colegio", `${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas`); } catch (e) { setExportMsg("❌ No se pudo exportar: " + e.message); } setExporting(false); }}>{exporting ? "Exportando..." : "⬇ Exportar datos del colegio"}</Btn>
+        <Btn v="sec" disabled={exporting} onClick={async () => { setExporting(true); setExportMsg(""); try { const c = await exportColegio({ id: CID, nombre: cfg.colegio }, SESSION_EMAIL); setExportMsg(`✓ Descargado: ${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas.`); logActivity("export", "exportó los datos del colegio", `${c.students} estudiantes, ${c.groups} grupos, ${c.surveys} encuestas, ${c.responses} respuestas`); } catch (e) { setExportMsg("✕ No se pudo exportar: " + e.message); } setExporting(false); }}>{exporting ? "Exportando..." : "Exportar datos del colegio"}</Btn>
         {exportMsg && <div style={{ fontSize: 11, marginTop: 8, color: C.t2 }}>{exportMsg}</div>}
       </Card>
-      {dirty && (<div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}><Btn v="pri" onClick={save}>💾 Guardar todos los cambios</Btn></div>)}
+      {dirty && (<div style={{ marginTop: 18, display: "flex", justifyContent: "flex-end" }}><Btn v="pri" onClick={save}><Ico n="guardar" />Guardar todos los cambios</Btn></div>)}
     </div>
   );
 }
@@ -3023,7 +3024,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
   // Tema claro/oscuro: lo elige el estudiante con el botón (y se recuerda en su navegador). Todos los colores salen de las variables de tema.
   const tema = (
     <button type="button" onClick={onToggleTheme} aria-label={isDark ? "Cambiar a tema claro" : "Cambiar a tema oscuro"} title={isDark ? "Tema claro" : "Tema oscuro"}
-      style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", fontSize: 17, lineHeight: 1, fontFamily: "inherit", flexShrink: 0 }}>{isDark ? "☀️" : "🌙"}</button>
+      style={{ width: 36, height: 36, borderRadius: 10, border: `1px solid ${C.border}`, background: C.card, color: C.text, cursor: "pointer", fontSize: 17, lineHeight: 1, fontFamily: "inherit", flexShrink: 0 }}><Ico n={isDark ? "sol" : "luna"} size={17} sinMargen /></button>
   );
   const temaFijo = <div style={{ position: "fixed", top: 12, right: 12, zIndex: 5 }}>{tema}</div>;
   const bg = (
@@ -3055,7 +3056,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
       {bg}
       {temaFijo}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 380 }}>
-        <div style={{ fontSize: 48, marginBottom: 16 }}>🔒</div>
+        <div style={{ fontSize: 48, marginBottom: 16 }}><Ico n="candado" size={48} strokeWidth={1.5} sinMargen /></div>
         <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 8, color: C.text }}>Encuesta no disponible</div>
         <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6 }}>Este link no es válido o la encuesta no está activa. Contacta a tu psicólogo o profesor.</div>
       </div>
@@ -3069,7 +3070,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
       {temaFijo}
       <div style={{ position: "relative", zIndex: 1, textAlign: "center", maxWidth: 400 }}>
         <div style={{ width: 80, height: 80, borderRadius: 20, background: alreadyDone ? tint(C.amber, "20") : tint(C.ok, "20"), display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 36, marginBottom: 20 }}>
-          {alreadyDone ? "⚠️" : "✅"}
+          <Ico n={alreadyDone ? "aviso" : "ok"} size={38} strokeWidth={1.6} sinMargen />
         </div>
         <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, color: alreadyDone ? C.amber : C.ok }}>
           {alreadyDone ? "Ya respondiste esta encuesta" : "¡Gracias por responder!"}
@@ -3110,12 +3111,12 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
           <div style={{ background: C.card, backdropFilter: "blur(12px)", border: `1px solid ${tint(C.rx, "33")}`, borderRadius: 14, padding: 20, marginBottom: 14 }}>
             <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 6, color: C.text }}>{survey?.title}</div>
             <div style={{ display: "flex", gap: 14, fontSize: 11, color: C.t2 }}>
-              <span>📋 {survey?.questions?.length} preguntas</span>
-              <span>🎯 Máx. {survey?.maxSel} selecciones</span>
-              <span>👥 {filtered.length} participantes</span>
+              <span><Ico n="lista" />{survey?.questions?.length} preguntas</span>
+              <span><Ico n="objetivo" />Máx. {survey?.maxSel} selecciones</span>
+              <span><Ico n="usuarios" />{filtered.length} participantes</span>
             </div>
             <div style={{ fontSize: 11, color: C.t2, marginTop: 10, lineHeight: 1.5 }}>
-              🔒 Tus respuestas son confidenciales: solo las ve el equipo del colegio. Tus compañeros no ven lo que respondes.
+              <Ico n="candado" />Tus respuestas son confidenciales: solo las ve el equipo del colegio. Tus compañeros no ven lo que respondes.
             </div>
           </div>
 
@@ -3123,7 +3124,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
           {allAvailGroups.length > 1 && (
             <div style={{ background: C.card, backdropFilter: "blur(12px)", border: `1px solid ${C.border}`, borderRadius: 14, padding: 16, marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: C.t2, marginBottom: 10, textTransform: "uppercase", letterSpacing: "1px" }}>
-                🏫 Filtrar por grupo
+                <Ico n="colegio" />Filtrar por grupo
               </div>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                 {allAvailGroups.map(g => {
@@ -3221,13 +3222,13 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
             <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 4, color: q.tp === "neg" ? C.err : C.text, lineHeight: 1.4 }}>{q.text}{obl && <span title="Obligatoria" aria-label="obligatoria" style={{ color: "#f59e0b" }}> *</span>}</div>
             {esAb && (
               <div>
-                <div style={{ fontSize: 11, color: C.t2, marginBottom: 10, lineHeight: 1.5 }}>✎ Esta pregunta es <b>abierta</b>: no tienes que elegir a nadie. Escribe lo que piensas{obl ? "." : " (puedes dejarla en blanco)."} Solo lo lee el equipo del colegio. No escribas insultos ni datos personales.</div>
+                <div style={{ fontSize: 11, color: C.t2, marginBottom: 10, lineHeight: 1.5 }}><Ico n="editar" />Esta pregunta es <b>abierta</b>: no tienes que elegir a nadie. Escribe lo que piensas{obl ? "." : " (puedes dejarla en blanco)."} Solo lo lee el equipo del colegio. No escribas insultos ni datos personales.</div>
                 <textarea aria-label="Tu respuesta" value={textoAb} maxLength={MAX_ABIERTA} rows={5} onChange={(e) => setAbiertasTxt((t) => ({ ...t, [q.id]: e.target.value }))} placeholder="Escribe aquí…" style={{ width: "100%", background: C.bgSub, border: `1px solid ${C.border}`, borderRadius: 10, padding: "10px 12px", color: C.text, fontSize: 14, fontFamily: "inherit", resize: "vertical", outline: "none" }} />
                 <div style={{ fontSize: 10, color: C.t3, textAlign: "right" }}>{textoAb.length}/{MAX_ABIERTA}</div>
               </div>
             )}
             {!esAb && <div style={{ fontSize: 11, color: C.t3, marginBottom: esJ ? 6 : 14 }}>Selecciona hasta {survey.maxSel} personas{obl ? " (esta pregunta es obligatoria)" : " (puedes dejarla en blanco)"}</div>}
-            {esJ && !esAb && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}>✍ Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
+            {esJ && !esAb && <div style={{ fontSize: 11, color: C.t2, marginBottom: 14, lineHeight: 1.5 }}><Ico n="pluma" />Al elegir a alguien, escribe <b>por qué</b> lo eliges. Solo lo lee el equipo del colegio; tus compañeros no. No escribas insultos ni datos personales.</div>}
             {!esAb && <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {otherStudents.map(s => {
                 const on = sel.includes(s.id);
@@ -3279,7 +3280,7 @@ function PublicSurvey({ surveyId, colegioId, isDark = true, onToggleTheme }) {
             ) : (
               <button onClick={submitSurvey} disabled={saving || bloqueado}
                 style={{ flex: 1, padding: "11px 20px", borderRadius: 10, border: "none", background: saving || bloqueado ? C.t3 : C.rx, color: "#fff", fontSize: 13, fontWeight: 700, cursor: saving || bloqueado ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: saving ? 0.6 : 1 }}>
-                {saving ? "Guardando..." : "✅ Enviar respuestas"}
+                {saving ? "Guardando..." : "✓ Enviar respuestas"}
               </button>
             )}
           </div>
@@ -3305,7 +3306,7 @@ async function abrirSoporte(prefill) {
   alert("No se pudo abrir el soporte. Revisa tu conexión e inténtalo de nuevo.");
   return false;
 }
-const BtnSoporte = ({ prefill, label = "❓ Soporte" }) => (
+const BtnSoporte = ({ prefill, label = <><Ico n="ayuda" />Soporte</> }) => (
   <Btn sm v="ghost" onClick={() => abrirSoporte(prefill)} title="Contactar a soporte (no escribas datos de estudiantes)">{label}</Btn>
 );
 
@@ -3338,14 +3339,14 @@ function EmpresaForm({ onGuardado }) {
   useEffect(() => { getDoc(doc(db, "plataforma", "empresa")).then((d) => setV((cur) => ({ ...(d.exists() ? d.data() : {}), ...cur }))).catch(() => {}); }, []);
   const faltan = faltantes(CAMPOS_EMPRESA, v);
   const guardar = async () => {
-    try { await setDoc(doc(db, "plataforma", "empresa"), v); setMsg("✅ Datos guardados."); onGuardado && onGuardado(v); } catch (e) { setMsg("❌ No se pudo guardar: " + e.message); }
+    try { await setDoc(doc(db, "plataforma", "empresa"), v); setMsg("✓ Datos guardados."); onGuardado && onGuardado(v); } catch (e) { setMsg("✕ No se pudo guardar: " + e.message); }
   };
   return (
     <div style={{ padding: "0 12px 12px", borderTop: `1px solid ${C.border}` }}>
       <div style={{ fontSize: 11, color: C.t2, margin: "10px 0" }}>Estos datos aparecen en el contrato como «EL PROVEEDOR». Mientras falten, el contrato sale como borrador con marcas «[PENDIENTE]» y no se puede marcar como firmado.</div>
       <CamposForm campos={CAMPOS_EMPRESA} valores={v} onChange={setV} />
       {faltan.length > 0 && <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>Pendiente: {faltan.join(", ")}.</div>}
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}><Btn v="pri" sm onClick={guardar}>💾 Guardar datos de Iskonex</Btn>{msg && <span style={{ fontSize: 11 }}>{msg}</span>}</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}><Btn v="pri" sm onClick={guardar}><Ico n="guardar" />Guardar datos de Iskonex</Btn>{msg && <span style={{ fontSize: 11 }}>{msg}</span>}</div>
     </div>
   );
 }
@@ -3402,7 +3403,7 @@ function GestionColegio({ colegio, session, onCerrar, onCambio }) {
     setHistorial((await leer("historial")).sort((a, b) => (aMs(b.creadoEn) || 0) - (aMs(a.creadoEn) || 0)));
   };
   useEffect(() => { cargar(); }, [colegio.id]);  // eslint-disable-line
-  const ok = (t) => setMsg("✅ " + t), mal = (e) => setMsg("❌ " + (e?.message || e));
+  const ok = (t) => setMsg("✓ " + t), mal = (e) => setMsg("✕ " + (e?.message || e));
 
   const guardarLegal = async () => { try { await setDoc(cdocRef("legal", "datos"), legal); ok("Datos legales guardados."); } catch (e) { mal(e); } };
 
@@ -3450,7 +3451,7 @@ function GestionColegio({ colegio, session, onCerrar, onCambio }) {
   };
   const registrarPago = async () => {
     const v = validarPago(fp);
-    if (!v.ok) { setMsg("❌ " + v.errores[0]); return; }
+    if (!v.ok) { setMsg("✕ " + v.errores[0]); return; }
     try {
       await addDoc(collection(db, "colegios", colegio.id, "pagos"), { valor: v.pago.valor, fecha: Timestamp.fromMillis(v.pago.fechaMs), medio: v.pago.medio, referencia: v.pago.referencia, factura: v.pago.factura, contratoId: v.pago.contratoId, nota: v.pago.nota, registradoPor: session.email, creadoEn: serverTimestamp() });
       await logAudit("registrar_pago", colegio.id, session.email, { valor: v.pago.valor });
@@ -3460,11 +3461,11 @@ function GestionColegio({ colegio, session, onCerrar, onCambio }) {
 
   const faltanLegal = faltantes(CAMPOS_COLEGIO, legal), faltanEmp = faltantes(CAMPOS_EMPRESA, empresa);
   const estadoTxt = { emitido: "Emitido", firmado: "Firmado", activo: "Activo" };
-  const tabs = [["contratos", "📄 Contratos"], ["pagos", "💵 Pagos"], ["historial", "🕘 Historial"], ["legal", "🏫 Datos legales"]];
+  const tabs = [["contratos", "Contratos"], ["pagos", "Pagos"], ["historial", "Historial"], ["legal", "Datos legales"]];
   return (
     <div style={{ borderTop: `1px solid ${C.border}`, padding: 14, background: tint(C.rx, "08") }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>📋 Gestión · {colegio.nombre || colegio.id}</div>
+        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}><Ico n="lista" />Gestión · {colegio.nombre || colegio.id}</div>
         {tabs.map(([k, l]) => <Btn key={k} sm v={tab === k ? "pri" : "ghost"} onClick={() => { setTab(k); setMsg(""); }}>{l}</Btn>)}
         <Btn sm v="ghost" onClick={onCerrar}>✕</Btn>
       </div>
@@ -3473,17 +3474,17 @@ function GestionColegio({ colegio, session, onCerrar, onCambio }) {
         <div style={{ fontSize: 11, color: C.t2, marginBottom: 8 }}>Datos del colegio que aparecen en el contrato como «EL COLEGIO». Solo los ve el equipo de la plataforma.</div>
         <CamposForm campos={CAMPOS_COLEGIO} valores={legal} onChange={setLegal} />
         {faltanLegal.length > 0 && <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>Pendiente: {faltanLegal.join(", ")}.</div>}
-        <div style={{ marginTop: 10 }}><Btn v="pri" sm onClick={guardarLegal}>💾 Guardar datos legales</Btn></div>
+        <div style={{ marginTop: 10 }}><Btn v="pri" sm onClick={guardarLegal}><Ico n="guardar" />Guardar datos legales</Btn></div>
       </div>)}
       {tab === "contratos" && (<div>
-        {(faltanLegal.length > 0 || faltanEmp.length > 0) && <div style={{ fontSize: 11, color: C.amber, marginBottom: 8 }}>⚠ Faltan datos: {[...faltanEmp.map((x) => "Iskonex: " + x), ...faltanLegal.map((x) => "Colegio: " + x)].join("; ")}. El contrato sale como borrador y no se puede marcar como firmado.</div>}
+        {(faltanLegal.length > 0 || faltanEmp.length > 0) && <div style={{ fontSize: 11, color: C.amber, marginBottom: 8 }}>Atención: Faltan datos: {[...faltanEmp.map((x) => "Iskonex: " + x), ...faltanLegal.map((x) => "Colegio: " + x)].join("; ")}. El contrato sale como borrador y no se puede marcar como firmado.</div>}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(170px,1fr))", gap: 8, alignItems: "end" }}>
           <Sel label="Plan" value={fc.plan} onChange={(v) => setFc({ ...fc, plan: v })} options={Object.keys(PLANES).map((k) => ({ v: k, l: etiquetaPlan(k) }))} />
           <Inp label="Descuento %" value={fc.descuento} onChange={(v) => setFc({ ...fc, descuento: v })} />
           <Inp label="Inicio de vigencia" type="date" value={fc.inicio} onChange={(v) => setFc({ ...fc, inicio: v })} />
         </div>
         <div style={{ fontSize: 12, margin: "8px 0" }}>Valor del contrato (12 meses): <b>{precioFinal ? copTxt(precioFinal) : "a convenir"}</b>{Number(fc.descuento) > 0 ? ` (lista ${copTxt(precioLista)})` : ""} + IVA</div>
-        <Btn v="pri" sm onClick={generar}>📄 Generar e imprimir contrato</Btn>
+        <Btn v="pri" sm onClick={generar}><Ico n="documento" />Generar e imprimir contrato</Btn>
         <div style={{ marginTop: 12 }}>
           {contratos.length === 0 && <div style={{ fontSize: 12, color: C.t3 }}>Todavía no hay contratos para este colegio.</div>}
           {contratos.map((c) => (
@@ -3491,9 +3492,9 @@ function GestionColegio({ colegio, session, onCerrar, onCambio }) {
               <div style={{ flex: 1, minWidth: 220 }}><b>{c.numero}</b> · {PLANES[c.plan]?.label || c.plan} · {copTxt(c.precioFinal)} <span style={{ color: C.t3 }}>· {fechaCorta(aMs(c.inicio))} → {fechaCorta(aMs(c.fin))}</span>
                 <div style={{ fontSize: 11, color: C.t3 }}>Pagado: {copTxt(pagadoDe(c))} de {copTxt(c.precioFinal)} · texto v{c.version}</div></div>
               <Badge color={c.estado === "activo" ? C.ok : c.estado === "firmado" ? C.teal : C.amber}>{estadoTxt[c.estado] || c.estado}</Badge>
-              <Btn sm v="ghost" onClick={() => reimprimir(c)}>🖨 Imprimir</Btn>
-              {c.estado === "emitido" && <Btn sm v="teal" onClick={() => firmar(c)}>✍ Marcar firmado</Btn>}
-              {c.estado === "firmado" && <Btn sm v="ok" onClick={() => activar(c)}>🔑 Activar licencia</Btn>}
+              <Btn sm v="ghost" onClick={() => reimprimir(c)}><Ico n="imprimir" />Imprimir</Btn>
+              {c.estado === "emitido" && <Btn sm v="teal" onClick={() => firmar(c)}><Ico n="pluma" />Marcar firmado</Btn>}
+              {c.estado === "firmado" && <Btn sm v="ok" onClick={() => activar(c)}><Ico n="llave" />Activar licencia</Btn>}
             </div>))}
         </div>
       </div>)}
@@ -3534,21 +3535,21 @@ function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
   return (
     <div style={{ marginBottom: 18, borderRadius: 10, border: `1px solid ${C.border}`, background: C.surface }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", padding: 12, alignItems: "center" }}>
-        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>⚙ Plataforma</div>
+        <div style={{ fontSize: 13, fontWeight: 700, flex: 1 }}><Ico n="ajustes" />Plataforma</div>
         <Btn sm v="ghost" onClick={() => setAbierto(abierto === "venc" ? null : "venc")}>⏰ Vencimientos{avisar.length ? ` (${avisar.length})` : ""}</Btn>
-        <Btn sm v="ghost" onClick={abrirPlanes}>💲 Planes y precios</Btn>
-        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "cartera" ? null : "cartera")}>💼 Cartera</Btn>
-        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "empresa" ? null : "empresa")}>🏢 Datos de Iskonex</Btn>
+        <Btn sm v="ghost" onClick={abrirPlanes}><Ico n="dinero" />Planes y precios</Btn>
+        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "cartera" ? null : "cartera")}><Ico n="maletin" />Cartera</Btn>
+        <Btn sm v="ghost" onClick={() => setAbierto(abierto === "empresa" ? null : "empresa")}><Ico n="edificio" />Datos de Iskonex</Btn>
       </div>
       {abierto === "cartera" && <CarteraPanel colegios={colegios} />}
       {abierto === "empresa" && <EmpresaForm />}
       {abierto === "venc" && (
         <div style={{ padding: "0 12px 12px" }}>
-          {avisar.length === 0 && <div style={{ fontSize: 12, color: C.t2 }}>Ningún colegio está por vencer. 🎉</div>}
+          {avisar.length === 0 && <div style={{ fontSize: 12, color: C.t2 }}>Ningún colegio está por vencer. <Ico n="ok" /></div>}
           {avisar.map(({ c, est }) => (
             <div key={c.id} style={{ display: "flex", gap: 8, alignItems: "center", padding: "7px 0", borderTop: `1px solid ${C.border}`, fontSize: 12 }}>
               <div style={{ flex: 1 }}><b>{c.nombre || c.id}</b> <span style={{ color: colorFase[est.fase], fontWeight: 700 }}>· {textoFase[est.fase]}</span><div style={{ color: C.t3, fontSize: 11 }}>vence {f(est.vence)}</div></div>
-              <Btn sm v="teal" disabled={busy} onClick={() => onRecordar(c, est)} title="Abre tu correo con el mensaje listo para el administrador del colegio">✉ Recordatorio</Btn>
+              <Btn sm v="teal" disabled={busy} onClick={() => onRecordar(c, est)} title="Abre tu correo con el mensaje listo para el administrador del colegio"><Ico n="correo" />Recordatorio</Btn>
             </div>
           ))}
           <div style={{ fontSize: 10, color: C.t3, marginTop: 6 }}>El envío automático de correos necesita el plan Blaze de Firebase; mientras tanto, el recordatorio se abre en tu correo ya redactado.</div>
@@ -3565,7 +3566,7 @@ function PanelSuper({ colegios, onGuardarPlanes, onRecordar, busy }) {
             </div>
           ))}
           {!v.ok && <div style={{ fontSize: 11, color: C.err, marginBottom: 6 }}>{v.errores[0]}</div>}
-          <Btn v="pri" sm disabled={busy || !v.ok} onClick={async () => { if (await onGuardarPlanes(v.planes)) setAbierto(null); }}>💾 Guardar planes</Btn>
+          <Btn v="pri" sm disabled={busy || !v.ok} onClick={async () => { if (await onGuardarPlanes(v.planes)) setAbierto(null); }}><Ico n="guardar" />Guardar planes</Btn>
         </div>
       )}
     </div>
@@ -3609,20 +3610,20 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
                 <button disabled={blocked} onClick={() => onPick(c.id)} style={{ width: "100%", textAlign: "left", padding: "12px 14px", border: "none", background: "transparent", color: C.text, cursor: blocked ? "not-allowed" : "pointer", fontFamily: "inherit", opacity: blocked ? 0.6 : 1 }}>
                   <div style={{ fontSize: 14, fontWeight: 700 }}>{c.nombre || c.id} {suspended(c) && <span style={{ fontSize: 10, color: C.amber, fontWeight: 700 }}>· {etiquetaEstado(c.estado).toUpperCase()}</span>}</div>
                   <div style={{ fontSize: 11, color: C.t3 }}>{c.id}{c.role ? ` · ${ROLES[c.role]?.label || c.role}` : ""}</div>
-                  {etiquetaLic(c) && <div style={{ fontSize: 11, color: etiquetaLic(c).color, marginTop: 2 }}>🔑 {etiquetaLic(c).texto}</div>}
+                  {etiquetaLic(c) && <div style={{ fontSize: 11, color: etiquetaLic(c).color, marginTop: 2 }}><Ico n="llave" />{etiquetaLic(c).texto}</div>}
                   {blocked && <div style={{ fontSize: 11, color: C.amber, marginTop: 4 }}>{sinLic(c) ? "Licencia vencida. Comunícate con Iskonex para renovarla." : "Acceso suspendido. Comunícate con el administrador de la plataforma."}</div>}
                 </button>
                 {isSuper && (
                   <div style={{ display: "flex", gap: 6, flexWrap: "wrap", padding: "0 14px 12px" }}>
-                    <Btn sm v="ghost" disabled={busy} onClick={() => onExport(c)}>⬇ Exportar</Btn>
-                    <Btn sm v="ghost" onClick={() => setGestionando(gestionando === c.id ? null : c.id)}>📋 Gestión</Btn>
-                    <Btn sm v="teal" disabled={busy} onClick={() => onRenew(c)} title="Suma 12 meses a la licencia (si ya venció, cuenta desde hoy)">🔑 Renovar 12 meses</Btn>
+                    <Btn sm v="ghost" disabled={busy} onClick={() => onExport(c)}><Ico n="descargar" />Exportar</Btn>
+                    <Btn sm v="ghost" onClick={() => setGestionando(gestionando === c.id ? null : c.id)}><Ico n="lista" />Gestión</Btn>
+                    <Btn sm v="teal" disabled={busy} onClick={() => onRenew(c)} title="Suma 12 meses a la licencia (si ya venció, cuenta desde hoy)"><Ico n="llave" />Renovar 12 meses</Btn>
                     <select disabled={busy} value={c.licencia?.plan || ""} onChange={(e) => e.target.value && onPlan(c, e.target.value)} title="Al elegir un plan se ajustan solos el máximo de estudiantes y el costo" style={{ padding: "5px 8px", borderRadius: 8, border: `1px solid ${C.border}`, background: C.surface, color: C.text, fontSize: 12, fontFamily: "inherit" }}>
                       <option value="">Elegir plan…</option>
                       {Object.keys(PLANES).map((k) => <option key={k} value={k}>{etiquetaPlan(k)}</option>)}
                     </select>
-                    <Btn sm v="ghost" disabled={busy} onClick={() => onSuspend(c)}>{suspended(c) ? "▶ Reactivar" : "⏸ Suspender"}</Btn>
-                    <Btn sm v="dan" disabled={busy} onClick={() => { setDeleting(deleting === c.id ? null : c.id); setTyped(""); setExported(false); }}>🗑 Eliminar</Btn>
+                    <Btn sm v="ghost" disabled={busy} onClick={() => onSuspend(c)}>{suspended(c) ? "Reactivar" : "Suspender"}</Btn>
+                    <Btn sm v="dan" disabled={busy} onClick={() => { setDeleting(deleting === c.id ? null : c.id); setTyped(""); setExported(false); }}><Ico n="papelera" />Eliminar</Btn>
                   </div>
                 )}
                 {isSuper && gestionando === c.id && <GestionColegio colegio={c} session={session} onCerrar={() => setGestionando(null)} onCambio={onRefrescar} />}
@@ -3644,7 +3645,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
         {isSuper && (
           <>
             <Card glow={C.violet}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: C.violet }}>➕ Crear colegio</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10, color: C.violet }}><Ico n="mas" />Crear colegio</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 9 }}>
                 <Inp label="Nombre del colegio" value={nombre} onChange={setNombre} placeholder="Colegio San José" />
                 <Inp label="Ciudad" value={ciudad} onChange={setCiudad} placeholder="Ciudad" />
@@ -3658,7 +3659,7 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
               <Btn v="sec" disabled={busy || !slugify(nombre)} onClick={async () => { const ok = await onCreate({ nombre: nombre.trim(), ciudad: ciudad.trim(), adminEmail: adminEmail.trim().toLowerCase(), plan: planNuevo, legal: { ...legalNuevo, ciudad: ciudad.trim() } }); if (ok) { setNombre(""); setCiudad(""); setAdminEmail(""); setLegalNuevo({}); } }} style={{ width: "100%", justifyContent: "center", marginTop: 12 }}>✓ Crear colegio</Btn>
             </Card>
             <Card style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>👑 Superadmins de la plataforma</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}><Ico n="corona" />Superadmins de la plataforma</div>
               <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>Cuentas de la empresa con acceso a todos los colegios. Usa correos corporativos con verificación en dos pasos activada en Google. {session.isRoot ? "Solo la cuenta raíz puede agregarlas o desactivarlas." : "Solo la cuenta raíz puede modificar esta lista."}</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 10 }}>
                 <div style={{ fontSize: 12, display: "flex", justifyContent: "space-between" }}><span>{ROOT_EMAIL}</span><span style={{ color: C.t3, fontSize: 11 }}>raíz</span></div>
@@ -3677,11 +3678,11 @@ function SchoolPicker({ session, colegios, supers, onPick, onCreate, onMigrate, 
               )}
             </Card>
             <Card style={{ marginTop: 14 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>📦 Importar datos existentes</div>
+              <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}><Ico n="paquete" />Importar datos existentes</div>
               <div style={{ fontSize: 11, color: C.t2, lineHeight: 1.5, marginBottom: 10 }}>
                 Copia los estudiantes, grupos, encuestas, respuestas, actividad, ajustes y usuarios que ya tenías al colegio «{LEGACY_COLEGIO_ID}». <b>No borra nada</b> de lo anterior y se puede repetir sin duplicar datos.
               </div>
-              <Btn v="sec" disabled={busy} onClick={() => { if (window.confirm(hasLegacy ? "Ya existe el colegio inicial. ¿Volver a copiar los datos existentes? (no duplica ni borra)" : "¿Copiar los datos existentes al colegio inicial? No se borra nada.")) onMigrate(); }} style={{ width: "100%", justifyContent: "center" }}>{busy ? "Trabajando..." : "📦 Importar datos existentes"}</Btn>
+              <Btn v="sec" disabled={busy} onClick={() => { if (window.confirm(hasLegacy ? "Ya existe el colegio inicial. ¿Volver a copiar los datos existentes? (no duplica ni borra)" : "¿Copiar los datos existentes al colegio inicial? No se borra nada.")) onMigrate(); }} style={{ width: "100%", justifyContent: "center" }}>{busy ? "Trabajando..." : "Importar datos existentes"}</Btn>
             </Card>
           </>
         )}
@@ -3925,8 +3926,8 @@ export default function App() {
       await updateDoc(doc(db, "colegios", c.id), { estado: suspender ? "suspendido" : "activo", estadoCambiado: serverTimestamp(), estadoPor: session.email });
       await logAudit(suspender ? "suspender" : "reactivar", c.id, session.email);
       await reloadColegios();
-      setPickerMsg(suspender ? `⏸ «${c.nombre}» suspendido.` : `▶ «${c.nombre}» reactivado.`);
-    } catch (e) { setPickerMsg("❌ No se pudo cambiar el estado: " + e.message); }
+      setPickerMsg(suspender ? `«${c.nombre}» suspendido.` : `«${c.nombre}» reactivado.`);
+    } catch (e) { setPickerMsg("✕ No se pudo cambiar el estado: " + e.message); }
     setPickerBusy(false);
   };
   const guardarLicencia = async (c, lic, accion, texto) => {
@@ -3937,20 +3938,20 @@ export default function App() {
       await logAudit(accion, c.id, session.email);
       await reloadColegios();
       setPickerMsg(texto);
-    } catch (e) { setPickerMsg("❌ No se pudo actualizar la licencia: " + e.message); }
+    } catch (e) { setPickerMsg("✕ No se pudo actualizar la licencia: " + e.message); }
     setPickerBusy(false);
   };
   const renovarColegio = async (c) => {
     const nueva = c.licencia ? renovar(c.licencia, 12) : licenciaNueva("basico");
     const f = new Date(nueva.vence).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" });
     if (!window.confirm(`¿Renovar «${c.nombre}» hasta el ${f}?`)) return;
-    await guardarLicencia(c, nueva, "renovar_licencia", `🔑 «${c.nombre}» renovado hasta el ${f}.`);
+    await guardarLicencia(c, nueva, "renovar_licencia", `«${c.nombre}» renovado hasta el ${f}.`);
   };
   const cambiarPlan = async (c, clave) => {
     if (!PLANES[clave]) return;
     const nueva = aplicarPlan(c.licencia, clave);
     if (!window.confirm(`¿Cambiar «${c.nombre}» al plan ${etiquetaPlan(clave)}?`)) { await reloadColegios(); return; }
-    await guardarLicencia(c, nueva, "cambiar_plan", `🔑 «${c.nombre}» ahora tiene el plan ${etiquetaPlan(clave)}.`);
+    await guardarLicencia(c, nueva, "cambiar_plan", `«${c.nombre}» ahora tiene el plan ${etiquetaPlan(clave)}.`);
   };
   const guardarPlanes = async (planes) => {
     setPickerBusy(true); setPickerMsg("");
@@ -3958,9 +3959,9 @@ export default function App() {
       await setDoc(doc(db, "plataforma", "planes"), planes);
       aplicarPlanes(planes);
       await logAudit("editar_planes", "plataforma", session.email);
-      setPickerMsg("✅ Planes y precios guardados.");
+      setPickerMsg("✓ Planes y precios guardados.");
       setPickerBusy(false); return true;
-    } catch (e) { setPickerMsg("❌ No se pudieron guardar los planes: " + e.message); setPickerBusy(false); return false; }
+    } catch (e) { setPickerMsg("✕ No se pudieron guardar los planes: " + e.message); setPickerBusy(false); return false; }
   };
   // Abre el correo del administrador del colegio con el recordatorio ya redactado.
   const recordarColegio = async (c, est) => {
@@ -3968,12 +3969,12 @@ export default function App() {
     try { correos = (await getDocs(collection(db, "colegios", c.id, "miembros"))).docs.map((d) => d.data()).filter((m) => m.role === "admin" && m.status === "active").map((m) => m.email); } catch (e) {}
     const { asunto, cuerpo } = recordatorio(c.nombre || c.id, est);
     window.location.href = `mailto:${correos.join(",")}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-    if (!correos.length) setPickerMsg("⚠ Este colegio no tiene un administrador activo: escribe el destinatario a mano.");
+    if (!correos.length) setPickerMsg("Atención: Este colegio no tiene un administrador activo: escribe el destinatario a mano.");
   };
   const exportFromPicker = async (c) => {
     setPickerBusy(true); setPickerMsg("Exportando...");
-    try { const n = await exportColegio(c, session.email); setPickerMsg(`✅ Exportación descargada: ${n.students} estudiantes, ${n.groups} grupos, ${n.surveys} encuestas, ${n.responses} respuestas, ${n.miembros} usuarios.`); }
-    catch (e) { setPickerMsg("❌ No se pudo exportar: " + e.message); }
+    try { const n = await exportColegio(c, session.email); setPickerMsg(`✓ Exportación descargada: ${n.students} estudiantes, ${n.groups} grupos, ${n.surveys} encuestas, ${n.responses} respuestas, ${n.miembros} usuarios.`); }
+    catch (e) { setPickerMsg("✕ No se pudo exportar: " + e.message); }
     setPickerBusy(false);
   };
   const deleteFromPicker = async (c) => {
@@ -3981,19 +3982,19 @@ export default function App() {
     try {
       const n = await eliminarColegio(c.id, session.email, (k) => setPickerMsg(`Eliminando... ${k} documentos`));
       try { if (localStorage.getItem("rn_colegio") === c.id) localStorage.removeItem("rn_colegio"); } catch (e) {}
-      await reloadColegios(); setPickerMsg(`🗑 «${c.nombre}» eliminado (${n} documentos). Queda constancia en la bitácora.`);
+      await reloadColegios(); setPickerMsg(`«${c.nombre}» eliminado (${n} documentos). Queda constancia en la bitácora.`);
       setPickerBusy(false); return true;
-    } catch (e) { setPickerMsg("❌ La eliminación se detuvo: " + e.message + ". Es seguro repetirla."); setPickerBusy(false); return false; }
+    } catch (e) { setPickerMsg("✕ La eliminación se detuvo: " + e.message + ". Es seguro repetirla."); setPickerBusy(false); return false; }
   };
   const addSuper = async (email) => {
     setPickerBusy(true); setPickerMsg("");
-    try { await setDoc(doc(db, "superadmins", email), { email, activo: true, creadoPor: session.email, creadoEn: serverTimestamp() }); await logAudit("superadmin_agregar", "-", session.email, { objetivo: email }); await reloadSupers(); setPickerMsg(`✅ ${email} ahora es superadmin.`); setPickerBusy(false); return true; }
-    catch (e) { setPickerMsg("❌ No se pudo agregar: " + e.message); setPickerBusy(false); return false; }
+    try { await setDoc(doc(db, "superadmins", email), { email, activo: true, creadoPor: session.email, creadoEn: serverTimestamp() }); await logAudit("superadmin_agregar", "-", session.email, { objetivo: email }); await reloadSupers(); setPickerMsg(`✓ ${email} ahora es superadmin.`); setPickerBusy(false); return true; }
+    catch (e) { setPickerMsg("✕ No se pudo agregar: " + e.message); setPickerBusy(false); return false; }
   };
   const toggleSuper = async (u) => {
     setPickerBusy(true); setPickerMsg("");
     try { await updateDoc(doc(db, "superadmins", u.email), { activo: !u.activo }); await logAudit(u.activo ? "superadmin_desactivar" : "superadmin_activar", "-", session.email, { objetivo: u.email }); await reloadSupers(); }
-    catch (e) { setPickerMsg("❌ No se pudo cambiar: " + e.message); }
+    catch (e) { setPickerMsg("✕ No se pudo cambiar: " + e.message); }
     setPickerBusy(false);
   };
 
@@ -4002,7 +4003,7 @@ export default function App() {
     if (!id) return false;
     setPickerBusy(true); setPickerMsg("");
     try {
-      if ((await getDoc(doc(db, "colegios", id))).exists()) { setPickerMsg("❌ Ya existe un colegio con ese nombre."); setPickerBusy(false); return false; }
+      if ((await getDoc(doc(db, "colegios", id))).exists()) { setPickerMsg("✕ Ya existe un colegio con ese nombre."); setPickerBusy(false); return false; }
       const batch = writeBatch(db);
       const lic0 = licenciaNueva(plan);
       batch.set(doc(db, "colegios", id), { nombre, ciudad, createdAt: serverTimestamp(), licencia: { ...lic0, vence: Timestamp.fromMillis(lic0.vence) } });
@@ -4012,9 +4013,9 @@ export default function App() {
       await batch.commit();
       await logAudit("crear", id, session.email);
       await reloadColegios();
-      setPickerMsg(`✅ Colegio «${nombre}» creado.`);
+      setPickerMsg(`✓ Colegio «${nombre}» creado.`);
       setPickerBusy(false); return true;
-    } catch (e) { setPickerMsg("❌ No se pudo crear el colegio: " + e.message); setPickerBusy(false); return false; }
+    } catch (e) { setPickerMsg("✕ No se pudo crear el colegio: " + e.message); setPickerBusy(false); return false; }
   };
 
   // Copia (sin borrar nada) las colecciones globales anteriores al colegio inicial.
@@ -4038,8 +4039,8 @@ export default function App() {
         done += part.length; setPickerMsg(`Copiando... ${done}/${ops.length}`);
       }
       await reloadColegios();
-      setPickerMsg(`✅ Listo: ${students.length} estudiantes, ${groups.length} grupos, ${surveys.length} encuestas, ${responses.length} respuestas, ${users.length} usuarios copiados al colegio «${LEGACY_COLEGIO_ID}». Lo anterior no se tocó.` + (skipped.length ? ` ⚠ ${skipped.length} documento(s) no se pudieron copiar: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? "…" : ""}` : ""));
-    } catch (e) { setPickerMsg("❌ La importación se detuvo: " + e.message + ". Es seguro repetirla."); }
+      setPickerMsg(`✓ Listo: ${students.length} estudiantes, ${groups.length} grupos, ${surveys.length} encuestas, ${responses.length} respuestas, ${users.length} usuarios copiados al colegio «${LEGACY_COLEGIO_ID}». Lo anterior no se tocó.` + (skipped.length ? ` Atención: ${skipped.length} documento(s) no se pudieron copiar: ${skipped.slice(0, 5).join(", ")}${skipped.length > 5 ? "…" : ""}` : ""));
+    } catch (e) { setPickerMsg("✕ La importación se detuvo: " + e.message + ". Es seguro repetirla."); }
     setPickerBusy(false);
   };
 
@@ -4081,7 +4082,7 @@ export default function App() {
   if (user && (school.blocked || licBloqueada) && !session.isSuper) return (
     <div style={{ minHeight: "100vh", background: C.bg, color: C.text, display: "flex", alignItems: "center", justifyContent: "center", padding: 24, fontFamily: "'Outfit','Segoe UI',system-ui,sans-serif" }}>
       <div style={{ maxWidth: 420, textAlign: "center" }}>
-        <div style={{ fontSize: 40, marginBottom: 10 }}>{licBloqueada ? "🔑" : "⏸"}</div>
+        <div style={{ fontSize: 40, marginBottom: 10 }}><Ico n={licBloqueada ? "llave" : "pausa"} size={44} strokeWidth={1.5} sinMargen /></div>
         <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 8 }}>{licBloqueada ? "Licencia vencida" : "Acceso suspendido"}</div>
         <div style={{ fontSize: 13, color: C.t2, lineHeight: 1.6, marginBottom: 18 }}>{licBloqueada ? mensajeLicencia(estLic) : "El acceso de este colegio está suspendido o ya no tienes permisos. Tus datos se conservan. Comunícate con el administrador de la plataforma."}</div>
         <div style={{ display: "flex", gap: 8, justifyContent: "center" }}><BtnSoporte /><Btn v="sec" onClick={doLogout}>Salir</Btn></div>
@@ -4104,13 +4105,13 @@ export default function App() {
   const canEdit = role !== "readonly";
 
   const tabs = [
-    { id: "dashboard", label: "Dashboard", icon: "◎" },
-    { id: "surveys", label: "Encuestas", icon: "✎" },
-    { id: "matrix", label: "Matriz", icon: "⊞" },
-    { id: "groups", label: "Grupos", icon: "👥" },
-    { id: "reports", label: "Reportes", icon: "📊" },
-    { id: "graphs", label: "Gráficos", icon: "📈" },
-    ...(isAdmin ? [{ id: "users", label: "Usuarios", icon: "👤" }, { id: "activity", label: "Actividad", icon: "📜" }, { id: "settings", label: "Config", icon: "⚙" }] : []),
+    { id: "dashboard", label: "Dashboard", icon: "dashboard" },
+    { id: "surveys", label: "Encuestas", icon: "editar" },
+    { id: "matrix", label: "Matriz", icon: "matriz" },
+    { id: "groups", label: "Grupos", icon: "usuarios" },
+    { id: "reports", label: "Reportes", icon: "grafico" },
+    { id: "graphs", label: "Gráficos", icon: "lineas" },
+    ...(isAdmin ? [{ id: "users", label: "Usuarios", icon: "usuario" }, { id: "activity", label: "Actividad", icon: "historial" }, { id: "settings", label: "Config", icon: "ajustes" }] : []),
   ];
   const filters = [
     { id: "all", l: "Todas", c: C.text },
@@ -4143,7 +4144,7 @@ export default function App() {
         <div style={{ display: "flex", gap: 2, background: C.surface, borderRadius: 9, padding: 3, border: `1px solid ${C.border}`, overflowX: "auto", order: 10, flex: "1 1 100%", maxWidth: "100%", WebkitOverflowScrolling: "touch" }}>
           {tabs.map((t) => (
             <button key={t.id} onClick={() => setTab(t.id)} style={{ padding: "5px 12px", borderRadius: 7, border: "none", fontFamily: "inherit", background: tab === t.id ? `linear-gradient(135deg,${C.rx},#a78bfa)` : "transparent", color: tab === t.id ? "#fff" : C.t2, fontSize: 11, fontWeight: 600, cursor: "pointer", display: "flex", alignItems: "center", gap: 3, transition: "all .2s", whiteSpace: "nowrap" }}>
-              <span style={{ fontSize: 11 }}>{t.icon}</span>{t.label}
+              <Ico n={t.icon} size={13} style={{ marginRight: 2 }} />{t.label}
             </button>
           ))}
         </div>
@@ -4166,26 +4167,26 @@ export default function App() {
           onMouseEnter={(e) => { e.currentTarget.style.borderColor = C.rx; e.currentTarget.style.transform = "scale(1.08)"; }}
           onMouseLeave={(e) => { e.currentTarget.style.borderColor = ""; e.currentTarget.style.transform = "scale(1)"; }}
         >
-          {isDark ? "☀️" : "🌙"}
+          <Ico n={isDark ? "sol" : "luna"} size={17} sinMargen />
         </button>
 
-        <Badge color={ri.color}>{ri.icon} {ri.label}</Badge>
+        <Badge color={ri.color}><Ico n={ri.icon} size={12} /> {ri.label}</Badge>
         <Btn sm v="ghost" onClick={doLogout}>Salir</Btn>
       </header>
 
       {["por_vencer", "gracia"].includes(estLic.fase) && (isAdmin || estLic.fase === "gracia") && (
         <div style={{ background: estLic.fase === "gracia" ? tint(C.err, "18") : tint(C.amber, "18"), borderBottom: `1px solid ${tint(estLic.fase === "gracia" ? C.err : C.amber, "40")}`, padding: "6px 22px", fontSize: 12, color: estLic.fase === "gracia" ? C.err : C.amber, fontWeight: 600 }}>
-          🔑 {mensajeLicencia(estLic)}
+          <Ico n="llave" />{mensajeLicencia(estLic)}
         </div>
       )}
       {isAdmin && excedeTope(licencia, students.length) && (
         <div style={{ background: tint(C.amber, "18"), borderBottom: `1px solid ${tint(C.amber, "40")}`, padding: "6px 22px", fontSize: 12, color: C.amber, fontWeight: 600 }}>
-          ⚠ Tu plan incluye hasta {licencia.maxEstudiantes} estudiantes y hay {students.length}. Comunícate con Iskonex para ampliar tu plan.
+          Atención: Tu plan incluye hasta {licencia.maxEstudiantes} estudiantes y hay {students.length}. Comunícate con Iskonex para ampliar tu plan.
         </div>
       )}
       {role === "readonly" && !soloLecturaLic && (
         <div style={{ background: C.skyDim, borderBottom: `1px solid ${tint(C.sky, "20")}`, padding: "5px 22px", fontSize: 11, color: C.sky }}>
-          👁 Modo solo lectura
+          <Ico n="ver" />Modo solo lectura
         </div>
       )}
 
@@ -4216,16 +4217,16 @@ export default function App() {
           const ns = nodeStats(selNode, visConns, n);
 
           return (<>
-            {dashAuto && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, background: tint(C.sky, "14"), border: `1px solid ${tint(C.sky, "35")}`, color: C.t2 }}>ℹ Con {students.length} estudiantes el mapa empieza mostrando solo «{visibleGroups[0]}». Activa más grupos con los botones del mapa.</div>}
+            {dashAuto && <div style={{ padding: "8px 12px", borderRadius: 8, marginBottom: 10, fontSize: 12, background: tint(C.sky, "14"), border: `1px solid ${tint(C.sky, "35")}`, color: C.t2 }}>Con {students.length} estudiantes el mapa empieza mostrando solo «{visibleGroups[0]}». Activa más grupos con los botones del mapa.</div>}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(min(100%,150px),1fr))", gap: 10, marginBottom: 14 }}>
               {[
-                { i: "👥", v: visStudents.length, l: "Participantes", c: C.rx },
-                { i: "🔗", v: visConns.length,    l: "Conexiones",    c: C.teal, h: "conexiones" },
-                { i: "📊", v: `${densidad}%`,     l: "Densidad",      c: C.amber, h: "densidad" },
-                { i: "🎯", v: visibleGroups.length, l: "Grupos vis.", c: C.violet },
+                { i: "usuarios", v: visStudents.length, l: "Participantes", c: C.rx },
+                { i: "vinculo", v: visConns.length,    l: "Conexiones",    c: C.teal, h: "conexiones" },
+                { i: "red", v: `${densidad}%`,     l: "Densidad",      c: C.amber, h: "densidad" },
+                { i: "capas", v: visibleGroups.length, l: "Grupos vis.", c: C.violet },
               ].map((s) => (
                 <Card key={s.l} glow={s.c} style={{ display: "flex", alignItems: "center", gap: 12, padding: 14 }}>
-                  <div style={{ width: 40, height: 40, borderRadius: 10, background: tint(s.c, "12"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>{s.i}</div>
+                  <div style={{ width: 40, height: 40, borderRadius: 10, background: tint(s.c, "12"), display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, color: s.c }}><Ico n={s.i} size={19} sinMargen /></div>
                   <div>
                     <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1 }}>{s.v}</div>
                     <div style={{ fontSize: 9, color: C.t2, textTransform: "uppercase", letterSpacing: ".4px" }}>{s.l}{s.h && <Ayuda clave={s.h} />}</div>
@@ -4278,7 +4279,7 @@ export default function App() {
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                 {/* ── Mini buscador de nodos ── */}
                 <Card style={{ padding: "10px 12px" }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: C.t2, marginBottom: 7, textTransform: "uppercase", letterSpacing: ".5px" }}>🔍 Buscar nodo</div>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: C.t2, marginBottom: 7, textTransform: "uppercase", letterSpacing: ".5px" }}><Ico n="buscar" />Buscar nodo</div>
                   <div style={{ position: "relative" }}>
                     <input
                       placeholder="Nombre del estudiante..."
@@ -4335,7 +4336,7 @@ export default function App() {
                           <div style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 7px", borderRadius: 6, background: C.bgSub, fontSize: 11 }}>
                             <span style={{ color: C.rx, fontFamily: "monospace" }}>{c.f === selNode ? "→" : "←"}</span>
                             <span style={{ flex: 1 }}>{o?.name}</span>
-                            {c.notas?.length > 0 && <span title="Explicó por qué" style={{ fontSize: 10 }}>💬</span>}
+                            {c.notas?.length > 0 && <span title="Explicó por qué" style={{ fontSize: 10 }}><Ico n="mensaje" /></span>}
                             {(c.counts ? ["pos", "neu", "neg"].flatMap((t) => Array(Math.min(c.counts[t] || 0, 3)).fill(t)) : Array(c.s).fill(c.tp)).map((t, j) => (<span key={j} style={{ color: t === "pos" ? C.teal : t === "neg" ? C.err : C.amber, fontSize: 7 }}>●</span>))}
                           </div>
                           {(c.notas || []).map((n, k) => <div key={k} style={{ fontSize: 10, color: C.t2, fontStyle: "italic", padding: "2px 8px 3px 24px", lineHeight: 1.4 }}>«{n.text}»{n.q ? <span style={{ color: C.t3, fontStyle: "normal" }}> · {n.q}</span> : null}</div>)}
@@ -4362,7 +4363,7 @@ export default function App() {
                     const col = neg ? C.err : C.teal;
                     return (<>
                       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 6, flexWrap: "wrap" }}>
-                        <div style={{ fontSize: 11, fontWeight: 700, color: C.rx }}>🏆 Ranking</div>
+                        <div style={{ fontSize: 11, fontWeight: 700, color: C.rx }}><Ico n="trofeo" />Ranking</div>
                         <div style={{ display: "flex", gap: 2 }}>
                           {[{ id: "pos", l: "Más aceptados", c: C.teal }, { id: "neg", l: "Más rechazados", c: C.err }].map((o) => (
                             <button key={o.id} onClick={() => { setRankMode(o.id); setRankAll(false); }} style={{ padding: "3px 8px", borderRadius: 6, fontSize: 9, fontWeight: 700, cursor: "pointer", fontFamily: "inherit", border: `1px solid ${rankMode === o.id ? tint(o.c, "66") : C.border}`, background: rankMode === o.id ? tint(o.c, "1f") : "transparent", color: rankMode === o.id ? ink(o.c) : C.t2 }}>{o.l}</button>
@@ -4399,7 +4400,7 @@ export default function App() {
         {tab === "groups" && (canEdit ? (
           <GroupMgmt students={students} setStudents={setStudents} groups={groups} setGroups={setGroups} GC={dynGC} GROUPS={dynGROUPS} saveStudentFS={saveStudentFS} deleteStudentFS={deleteStudentFS} saveGroupFS={saveGroupFS} deleteGroupFS={deleteGroupFS} canEdit={canEdit} />
         ) : (
-          <div style={{ textAlign: "center", padding: 40, color: C.t3 }}>👁 Solo lectura — No puedes gestionar grupos</div>
+          <div style={{ textAlign: "center", padding: 40, color: C.t3 }}><Ico n="ver" />Solo lectura — No puedes gestionar grupos</div>
         ))}
         {tab === "users" && isAdmin && <UsersPanel authorizeUser={authorizeUser} revokeUser={revokeUser} reactivateUser={reactivateUser} deleteUser={deleteUser} me={user.email} />}
         {students.length > 0 && tab === "graphs" && <GraficosPanel students={students} conns={conns} surveys={surveys.filter((sv) => !sv.deleted)} responses={responsesVivas} />}

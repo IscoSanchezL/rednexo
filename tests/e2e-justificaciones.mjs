@@ -82,7 +82,7 @@ try {
   // Detalle de un nodo: se prueban puntos del mapa hasta abrir uno que tenga explicaciones en sus conexiones
   const cv = await p.locator("canvas").boundingBox(); let visto = "";
   for (const rad of [0.1, 0.16, 0.22, 0.3]) for (let i = 0; i < 24 && !visto; i++) { const a = (i / 24) * Math.PI * 2; await p.mouse.click(cv.x + cv.width / 2 + Math.cos(a) * Math.min(cv.width, cv.height) * rad, cv.y + cv.height / 2 + Math.sin(a) * Math.min(cv.width, cv.height) * rad); await p.waitForTimeout(120); const tx = (await p.innerText("body")).replace(/\s+/g, " "); if (/CONEXIONES \(\d+\)/.test(tx) && tx.includes("«")) visto = tx; }
-  check(!!visto && /💬|«(Siempre me ayuda con las tareas|Es muy divertida|Hace trampa en los juegos|<b>Me insulta)/.test(visto), "Dashboard: el detalle de un nodo muestra lo que escribieron en sus conexiones");
+  check(!!visto && /«(Siempre me ayuda con las tareas|Es muy divertida|Hace trampa en los juegos|<b>Me insulta)/.test(visto), "Dashboard: el detalle de un nodo muestra lo que escribieron en sus conexiones");
   // Informe individual
   await p.click("header button:has-text('Reportes')"); await p.waitForTimeout(600);
   const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }).catch(() => null), p.locator("text=Descargar HTML").click()]);
@@ -106,8 +106,8 @@ try {
   await p.fill("input[placeholder='Escribe la pregunta...']", "¿A quién admiras?");
   await p.locator("xpath=//input[@placeholder='Escribe la pregunta...']/ancestor::div[2]//select").nth(1).selectOption("justificable");
   await p.click("button:has-text('+ Agregar')");
-  check((await p.innerText("body")).includes("💬") && (await p.innerText("body")).includes("Selección con justificación"), "Crear encuesta: el tipo «Selección con justificación» está disponible y la pregunta se marca con 💬");
-  await p.click("button:has-text('💾 Guardar')");
+  check((await p.innerText("body")).includes("Selección con justificación"), "Crear encuesta: el tipo «Selección con justificación» está disponible");
+  await p.click("button:has-text('Guardar')");
   const nueva = await until(async () => (await leer(P + "/surveys")).find((s) => s.title === "Nueva con explicación"));
   check(nueva?.questions[0].kind === "justificable", "…y se guarda como pregunta justificable");
   await p.locator(`xpath=//span[normalize-space()="Nueva con explicación"]/ancestor::div[.//button[contains(.,'Editar')]][1]`).locator("button:has-text('Editar')").click(); await p.waitForTimeout(500);

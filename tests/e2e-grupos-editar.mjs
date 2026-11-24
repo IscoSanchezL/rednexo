@@ -31,21 +31,23 @@ const entrar = async (email) => { const p = await (await b.newContext({ viewport
 const tarjeta = (p, nombre) => p.locator(`xpath=//span[normalize-space()="${nombre}"]/ancestor::div[.//button[contains(.,'Agregar')]][1]`);
 try {
   const ro = await entrar("ro@ge.co");
-  check((await ro.locator("button:has-text('✎ Editar')").count()) === 0 && (await ro.locator("button:has-text('🗑')").count()) === 0, "solo lectura: no ve Editar ni eliminar grupos");
+  check((await ro.locator("button:has-text('Editar')").count()) === 0 && (await ro.locator("button[aria-label='Eliminar grupo']").count()) === 0, "solo lectura: no ve Editar ni eliminar grupos");
   const p = await entrar("psi@ge.co");
-  check((await p.locator("button:has-text('✎ Editar')").count()) === 3, "cada grupo tiene su botón «✎ Editar»");
+  check((await p.locator("button:has-text('Editar')").count()) === 3, "cada grupo tiene su botón «Editar»");
   // Eliminar un grupo vacío
-  await tarjeta(p, "Prueba vacía").locator("button:has-text('🗑')").click();
+  await tarjeta(p, "Prueba vacía").locator("button[aria-label='Eliminar grupo']").click();
   await until(async () => !(await leer(P + "/groups")).some((g) => g.name === "Prueba vacía"));
   check(!(await leer(P + "/groups")).some((g) => g.name === "Prueba vacía"), "eliminar un grupo vacío: desaparece");
   check(p.mensajes.some((m) => /Está vacío/.test(m)) && p.mensajes.length === 1, "…con una sola confirmación que dice que está vacío");
   // Nombre repetido
-  await tarjeta(p, "5A").locator("button:has-text('✎ Editar')").click();
+  await tarjeta(p, "5A").locator("button:has-text('Editar')").click();
   await p.fill("input[aria-label='Nombre del grupo']", "prueba con alumnos"); await p.click("button:has-text('✓ Guardar')"); await p.waitForTimeout(500);
   check((await p.innerText("body")).includes("Ya existe un grupo llamado") && (await leer(P + "/groups")).some((g) => g.name === "5A"), "editar: un nombre que ya existe se rechaza y no cambia nada");
   // Renombrar 5A → 6B y cambiar el color
   await p.fill("input[aria-label='Nombre del grupo']", "  6° B  "); await p.locator("button[aria-label='Color #34d399']").click(); await p.click("button:has-text('✓ Guardar')");
   await until(async () => (await leer(P + "/students")).filter((s) => s.group === "6° B").length === 2);
+  // El grupo y la encuesta se actualizan después de los estudiantes: se espera a que terminen (si no, la prueba lee a mitad de camino).
+  await until(async () => (await leer(P + "/groups")).some((g) => g.name === "6° B") && (await leer(P + "/surveys"))[0].group === "6° B");
   const gs = await leer(P + "/groups"), sts = await leer(P + "/students"), sv = (await leer(P + "/surveys"))[0];
   check(sts.filter((s) => s.group === "6° B").length === 2 && !sts.some((s) => s.group === "5A"), "renombrar: los estudiantes pasan al nombre nuevo");
   check(gs.some((g) => g.name === "6° B" && g.color === "#34d399") && !gs.some((g) => g.name === "5A") && gs.filter((g) => g.name === "6° B").length === 1, "…el grupo queda con el nombre y color nuevos, sin duplicados");
@@ -53,14 +55,14 @@ try {
   const sv2 = await until(async () => { const x = (await leer(P + "/surveys"))[0]; return x.roster.every((r) => r.group === "6° B") ? x : null; });
   check(!!sv2, "…y la lista de nombres de la encuesta pública se actualiza");
   check((await p.innerText("body")).includes("Grupo renombrado a «6° B»"), "…y avisa que quedó renombrado");
-  check((await leer(P + "/activity")).some((a) => /renombró el grupo/.test(a.action) && a.detail === "5A → 6° B"), "…y queda en la bitácora de actividad");
+  check(await until(async () => (await leer(P + "/activity")).some((a) => /renombró el grupo/.test(a.action) && a.detail === "5A → 6° B")), "…y queda en la bitácora de actividad");
   // Crear un grupo con el nombre viejo ya no pisa al renombrado
   await p.click("button:has-text('+ Nuevo Grupo')"); await p.fill("input[placeholder='Ej: 7° B']", "5A"); await p.click("button:has-text('Crear')"); await p.waitForTimeout(1000);
   const gs2 = await leer(P + "/groups");
   check(gs2.some((g) => g.name === "6° B") && gs2.some((g) => g.name === "5A"), "crear un grupo con el nombre anterior no pisa al grupo renombrado");
   // Eliminar un grupo con estudiantes: dos confirmaciones
   p.mensajes.length = 0;
-  await tarjeta(p, "Prueba con alumnos").locator("button:has-text('🗑')").click();
+  await tarjeta(p, "Prueba con alumnos").locator("button[aria-label='Eliminar grupo']").click();
   await until(async () => !(await leer(P + "/students")).some((s) => s.group === "Prueba con alumnos"));
   check(!(await leer(P + "/students")).some((s) => s.group === "Prueba con alumnos") && !(await leer(P + "/groups")).some((g) => g.name === "Prueba con alumnos"), "eliminar un grupo con estudiantes: se van el grupo y sus estudiantes");
   check(p.mensajes.length === 2 && /sus 2 estudiantes/.test(p.mensajes[0]) && /Última confirmación/.test(p.mensajes[1]), "…pidiendo dos confirmaciones que dicen cuántos estudiantes se eliminan");

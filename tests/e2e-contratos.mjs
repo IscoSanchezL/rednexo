@@ -73,7 +73,7 @@ try {
   await p.click("button:has-text('Registrar pago')");
   const pagos = await until(async () => { const x = await leer("colegios/col-ct/pagos"); return x.length ? x : null; });
   check(pagos?.[0]?.valor === 2520000 && pagos[0].contratoId === c2.id && pagos[0].registradoPor === "franksanlo@gmail.com", "registra el pago enlazado al contrato y a quien lo anotó");
-  await p.click("button:has-text('📄 Contratos')");
+  await p.click("button:has-text('Contratos')");
   await fila(c2.numero).locator("button:has-text('Activar licencia')").click();
   const lic = await until(async () => (await colegio()).licencia?.plan === "estandar" ? (await colegio()).licencia : null);
   const venceMs = lic?.vence?.toMillis?.() || 0;

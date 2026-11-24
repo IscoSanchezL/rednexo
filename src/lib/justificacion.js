@@ -10,7 +10,7 @@ export const MAX_JUST_TOTAL = 60; // justificaciones por respuesta (lo mismo que
 export const MAX_ABIERTA = 500;      // caracteres por respuesta abierta
 export const MAX_ABIERTAS_TOTAL = 30; // respuestas abiertas por respuesta (lo mismo que permiten las reglas)
 
-export const KIND_LABELS = { seleccion: "☑ Selección múltiple", justificable: "💬 Selección con justificación", abierta: "✎ Pregunta abierta (texto libre)" };
+export const KIND_LABELS = { seleccion: "Selección múltiple", justificable: "Selección con justificación", abierta: "Pregunta abierta (texto libre)" };
 
 /** Tipo de pregunta: «seleccion» (por defecto, también en encuestas antiguas), «justificable» o «abierta». */
 export function kindOf(q) {

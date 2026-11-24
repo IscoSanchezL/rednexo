@@ -54,10 +54,10 @@ try {
   check(dbS.status === "draft" && dbS.questions && dbS.questions.every((q) => q.id && ["pos", "neu", "neg"].includes(q.tp)) && new Set(dbS.questions.map((q) => q.id)).size === 7, "queda en borrador, y cada pregunta tiene su tipo y un identificador propio");
 
   // Exportar
-  const j = await download(p, "button:has-text('⬇ JSON')");
+  const j = await download(p, "button:has-text('JSON')");
   const pj = JSON.parse(j.text);
   check(/^encuesta-encuesta-de-prueba-sociograma-\d{4}-\d{2}-\d{2}\.json$/.test(j.name) && pj.formato === "rednexo-encuesta-v1" && pj.preguntas.length === 7 && pj.preguntas.filter((q) => q.tipo === "negativa").length === 2, "exportar JSON descarga la encuesta con el tipo de cada pregunta (" + j.name + ")");
-  const c = await download(p, "button:has-text('⬇ CSV')");
+  const c = await download(p, "button:has-text('CSV')");
   check(c.text.startsWith("﻿pregunta;tipo") && c.text.includes("¿Con quién NO te gustaría trabajar en equipo?;negativa") && c.text.split("\r\n").filter(Boolean).length === 8, "exportar CSV trae encabezado, 7 filas y los tipos (" + c.name + ")");
 
   // Activar y aplicar de verdad la encuesta de prueba
