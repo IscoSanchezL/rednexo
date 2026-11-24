@@ -77,7 +77,7 @@ export function renderStudentReportHTML(d, { version = "equipo", colegio = "", d
   const fam = version === "familias";
   const s = d.stats, nombre = d.student.name;
   const col = /^#[0-9a-fA-F]{6}$/.test(String(color)) ? color : "#3b82f6";
-  const kpi = (v, l, _c, sub = "") => `<div class="kpi"><div class="val">${v}</div><div class="lbl">${l}</div>${sub ? `<div style="font-size:10px;color:#667385;margin-top:3px">${sub}</div>` : ""}</div>`;
+  const kpi = (v, l, _c, sub = "") => `<div class="kpi"><div class="val">${v}</div><div class="lbl">${l}</div>${sub ? `<div style="font-size:10px;color:#5a6a7c;margin-top:3px">${sub}</div>` : ""}</div>`;
   const comp = (valor, prom, unidad = "%") => `Grupo: ${un(prom)}${unidad}`;
   const rol = `<span class="role role-${s.rol}">${ROLE_LABELS[s.rol]}</span>`;
   const nombres = (arr) => arr.map((x) => esc(x.name)).join(", ");
@@ -98,11 +98,11 @@ export function renderStudentReportHTML(d, { version = "equipo", colegio = "", d
       <tr><td>Rechazos mutuos</td><td><b>${s.rechazosMutuos}</b></td><td>—</td><td>Personas a las que rechazó y que también lo rechazaron.</td></tr>
       ${d.fuera.hizo + d.fuera.recibio ? `<tr><td>Con otros grupos</td><td><b>${d.fuera.hizo}</b> eligió · <b>${d.fuera.recibio}</b> lo marcaron</td><td>—</td><td>Conexiones con estudiantes de otros grupos (no entran en los % de arriba).</td></tr>` : ""}
     </tbody></table>
-    <div class="sub2" style="margin-top:8px;font-size:11px;color:#667385">Se considera «muchos» a partir de ${d.umbral} compañeros (la mitad del grupo). ${esc(ROLE_HELP[s.rol])}</div></div>`;
+    <div class="sub2" style="margin-top:8px;font-size:11px;color:#5a6a7c">Se considera «muchos» a partir de ${d.umbral} compañeros (la mitad del grupo). ${esc(ROLE_HELP[s.rol])}</div></div>`;
 
   // ── Versión equipo: detalle por pregunta, desde y hacia ──
   const bloque = (lista, vacio) => (lista.length ? `<ul class="notas">${lista.map((x) => `<li><b>${esc(x.name)}</b> <span class="q">· ${esc(x.grupo)}</span>${x.nota ? `<br><i>«${esc(x.nota)}»</i>` : ""}</li>`).join("")}</ul>` : `<div class="ln none">${vacio}</div>`);
-  const preguntasHtml = fam ? "" : `<div class="section"><h2>Detalle por pregunta: desde y hacia ${esc(nombre)}</h2><div class="sub">Para cada pregunta: a quién eligió o marcó, y quién lo eligió o marcó a él/ella. Las explicaciones aparecen entre comillas.</div>${d.preguntas.map((q) => `<div class="ficha" style="margin-bottom:12px"><h3>${esc(q.pregunta)} <span class="tag${q.tp === "neg" ? " tag-neg" : ""}">${TIPOS[q.tp] || ""}</span>${q.justificable ? ` <span class="tag">con justificación</span>` : ""}</h3><div class="sub2" style="font-size:10px;color:#667385;margin-bottom:6px">${esc(q.encuesta)}</div>
+  const preguntasHtml = fam ? "" : `<div class="section"><h2>Detalle por pregunta: desde y hacia ${esc(nombre)}</h2><div class="sub">Para cada pregunta: a quién eligió o marcó, y quién lo eligió o marcó a él/ella. Las explicaciones aparecen entre comillas.</div>${d.preguntas.map((q) => `<div class="ficha" style="margin-bottom:12px"><h3>${esc(q.pregunta)} <span class="tag${q.tp === "neg" ? " tag-neg" : ""}">${TIPOS[q.tp] || ""}</span>${q.justificable ? ` <span class="tag">con justificación</span>` : ""}</h3><div class="sub2" style="font-size:10px;color:#5a6a7c;margin-bottom:6px">${esc(q.encuesta)}</div>
       <div class="ln"><b>${esc(nombre.split(" ")[0])} eligió o marcó a (${q.elegidos.length}):</b></div>${bloque(q.elegidos, "No eligió a nadie en esta pregunta.")}
       <div class="ln"><b>Lo eligieron o marcaron (${q.recibidos.length}):</b></div>${bloque(q.recibidos, "Nadie lo eligió en esta pregunta.")}</div>`).join("") || `<div class="alert alert-warn">No hay preguntas de selección en las encuestas consideradas.</div>`}</div>`;
 
@@ -122,7 +122,7 @@ export function renderStudentReportHTML(d, { version = "equipo", colegio = "", d
   const toolbar = mode === "pdf"
     ? `<div class="barra no-print"><span>RedNexo · Informe de ${esc(nombre)} · ${fam ? "Para familias" : "Para el equipo"}</span><button onclick="window.print()">Imprimir / Guardar PDF</button></div><div style="height:46px" class="no-print"></div>`
     : "";
-  const extraCss = mode === "pdf" ? `@page{size:A4;margin:15mm 13mm}body{font-size:11px}.page{padding:8px 0}` : "";
+  const extraCss = mode === "pdf" ? `@page{size:A4;margin:14mm 12mm}body{font-size:12px}.page{padding:6px 0}table{font-size:11.5px}th,td{padding:7px 8px}.kpi .val{font-size:30px}` : "";
   return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Informe RedNexo — ${esc(nombre)}</title><style>${REPORT_CSS}${extraCss}</style></head><body>${toolbar}<div class="page">${cabeceraHTML({ etiqueta: "Informe individual · " + (fam ? "Para familias" : "Para el equipo"), titulo: esc(nombre), subtitulo: esc(d.student.group) + (colegio ? " · " + esc(colegio) : ""), meta: [esc(date), "Inteligencia sociométrica escolar"] })}${aviso}${resumen}${porPreguntaFam}${preguntasHtml}${mutuasHtml}${abiertasHtml}${notas}${aclaracion}<div class="footer">RedNexo — ${esc(date)} · ${esc(nombre)} · Documento confidencial</div></div></body></html>`;
 }
 
