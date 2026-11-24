@@ -46,7 +46,9 @@ const medir = () => {
   add("iniciales (columna)", [...document.querySelectorAll("thead th div")].find((d) => /^[A-Z]{2}$/.test(d.textContent.trim())), 4.5);
   add("grupo bajo la columna", q("thead th div", "5° A"), 4.5);
   add("«De ↓ Para →»", q("thead th div", null) && [...document.querySelectorAll("thead th div")].find((d) => d.textContent.includes("De")), 4.5);
-  add("«RECIBIDAS»", q("tbody td", "RECIBIDAS"), 4.5);
+  add("«RECIBIDAS +»", q("tbody td", "▲ RECIBIDAS +"), 4.5);
+  add("«RECIBIDAS −»", q("tbody td", "▼ RECIBIDAS −"), 4.5);
+  add("«NEUTRALES»", q("tbody td", "◯ NEUTRALES"), 4.5);
   add("encabezado Σ+", q("thead th", "Σ+"), 4.5);
   add("encabezado Σ−", q("thead th", "Σ−"), 4.5);
   const filas = [...document.querySelectorAll("tbody tr")];
@@ -62,7 +64,7 @@ const medir = () => {
   pares.push({ nombre: `símbolos de conexión (${syms.length}; el peor «${peor?.t}»)`, min: 3, ratio: peor ? Math.round(peor.r * 100) / 100 : 0 });
   // Fondos: nada casi negro en modo claro
   const luzFondo = (el) => lum(bgDe(el));
-  return { pares, luzEnc: luzFondo(document.querySelector("thead th")), luzFila: luzFondo(document.querySelector("tbody td")), luzRecib: luzFondo([...document.querySelectorAll("tbody td")].find((d) => d.textContent.trim() === "RECIBIDAS")),
+  return { pares, luzEnc: luzFondo(document.querySelector("thead th")), luzFila: luzFondo(document.querySelector("tbody td")), luzRecib: luzFondo([...document.querySelectorAll("tbody td")].find((d) => d.textContent.trim() === "▲ RECIBIDAS +")),
     celdaConexion: (() => { const c = [...document.querySelectorAll("td.nm-cell")].find((d) => /[▲⬥▼◯]/.test(d.textContent)); return c ? rgba(getComputedStyle(c).backgroundColor)[3] : -1; })() };
 };
 

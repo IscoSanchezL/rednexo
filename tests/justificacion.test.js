@@ -145,3 +145,29 @@ test("las preguntas abiertas no generan conexiones", () => {
   const c = buildConnections([{ surveyId: "s", respondentId: "1", answers: {}, abiertas: { q2: "hola" } }], [{ id: "s", questions: QA }]);
   assert.deepEqual(c, []);
 });
+
+// ── Informe de un estudiante ──
+import { buildStudentReport, renderStudentReportHTML, informeEstudianteNombre } from "../src/lib/informeEstudiante.js";
+test("informe de un estudiante: desde y hacia, por pregunta, con explicaciones y comparación con el grupo", () => {
+  const N = ["Vanegas Agredo Benjamín", "Garzón Medina Samuel", "Granados Estupiñán Jerónimo", "Ramírez Díaz Ignacio", "Montoya Quintero Eva", "Otra Persona Más"];
+  const st = N.map((name, i) => ({ id: String(i + 1), name, group: i < 5 ? "A" : "B" }));
+  const sv = [{ id: "s", title: "E", questions: [{ id: "q1", text: "¿Con quién?", tp: "pos", kind: "justificable" }, { id: "q2", text: "¿Con quién NO?", tp: "neg", kind: "justificable" }, { id: "q3", text: "¿Cómo mejorar?", tp: "neu", kind: "abierta" }] }, { id: "borrada", deleted: true, title: "x", questions: [{ id: "z", text: "Z", tp: "pos" }] }];
+  const rs = [{ surveyId: "s", respondentId: "2", answers: { q2: ["1"], q1: ["5"] }, justificaciones: { "q2|1": "Me molesta", "q1|5": "Es amiga" }, abiertas: { q3: "Más respeto" } },
+    { surveyId: "s", respondentId: "3", answers: { q2: ["1"] }, justificaciones: { "q2|1": "Me insulta" } }, { surveyId: "s", respondentId: "4", answers: { q2: ["1"], q1: ["1"] }, justificaciones: { "q2|1": "Grita", "q1|1": "A veces amable" } },
+    { surveyId: "s", respondentId: "6", answers: { q1: ["1"] } }, { surveyId: "borrada", respondentId: "5", answers: { z: ["1"] } }];
+  const d = buildStudentReport({ student: st[0], students: st, responses: rs, surveys: sv });
+  assert.equal(d.respondio, false); assert.equal(d.n, 5);        // el grupo A tiene 5; la persona del grupo B votó por él pero no cuenta en el grupo
+  assert.equal(d.stats.negR, 3); assert.equal(d.stats.posR, 1); assert.deepEqual(d.fuera, { hizo: 0, recibio: 1 });
+  assert.deepEqual(d.preguntas.map((q) => [q.pregunta, q.recibidos.length]), [["¿Con quién?", 2], ["¿Con quién NO?", 3]]);   // sin la encuesta borrada ni la abierta
+  assert.deepEqual(d.preguntas[1].recibidos.map((x) => [x.name, x.nota]), [["Garzón Medina Samuel", "Me molesta"], ["Granados Estupiñán Jerónimo", "Me insulta"], ["Ramírez Díaz Ignacio", "Grita"]]);
+  assert.ok(d.destacados.some((t) => /3 marcas negativas/.test(t)));
+  const garzon = buildStudentReport({ student: st[1], students: st, responses: rs, surveys: sv });
+  assert.deepEqual(garzon.abiertas, [{ encuesta: "E", pregunta: "¿Cómo mejorar?", text: "Más respeto" }]);
+  assert.deepEqual(garzon.preguntas[0].elegidos, [{ name: "Montoya Quintero Eva", grupo: "A", nota: "Es amiga" }]);
+  const eq = renderStudentReportHTML(d, { version: "equipo" }), fa = renderStudentReportHTML(d, { version: "familias" });
+  assert.match(eq, /Garzón Medina Samuel/); assert.match(eq, /«Me molesta»/); assert.match(eq, /No lo entregue ni lo muestre a familias/);
+  assert.doesNotMatch(fa, /Garzón|Granados|Ramírez|Montoya|Me molesta|Grita|Otra Persona/); assert.match(fa, /Acuerdos de la reunión/);
+  const xss = buildStudentReport({ student: { id: "1", name: "<img src=x onerror=alert(1)>", group: "A" }, students: [{ id: "1", name: "<img src=x onerror=alert(1)>", group: "A" }], responses: [], surveys: [] });
+  assert.doesNotMatch(renderStudentReportHTML(xss), /<img src=x/);
+  assert.equal(informeEstudianteNombre("Vanegas Agredo Benjamín", "familias", "html"), "informe_familias_Vanegas_Agredo_Benjamin.html");
+});
