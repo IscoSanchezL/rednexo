@@ -14,3 +14,7 @@ ui-debug.log
 # Documentos generados
 docs/manuales/img/
 *.pdf
+
+# Capturas del manual de usuario (se regeneran con scripts/capturas-usuario.mjs)
+docs/manuales/img-usuario/
+.manual-usuario.tmp.html
