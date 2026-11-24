@@ -51,7 +51,7 @@ test("tres tipos de reporte que SÍ se diferencian", () => {
   assert.deepEqual(h(html("individual")), ["Resumen", "Índices individuales", "Fichas por estudiante"]);
   assert.deepEqual(h(html("grupal")), ["Resumen", "Grupos"]);
   assert.deepEqual(h(html("ambos")), ["Resumen", "Índices individuales", "Grupos", "Matriz sociométrica", "Fichas por estudiante"]);
-  for (const t of Object.keys(REPORT_TYPES)) assert.match(html(t), new RegExp(`Reporte ${REPORT_TYPES[t]} ·`));   // el Completo ya no se llama «Grupal»
+  for (const t of Object.keys(REPORT_TYPES)) assert.match(html(t), new RegExp(`<div class="kicker">Reporte ${REPORT_TYPES[t]}</div>`));   // el Completo ya no se llama «Grupal»
 });
 test("el reporte Grupal no contiene ningún nombre ni quién eligió a quién", () => {
   const g = html("grupal");

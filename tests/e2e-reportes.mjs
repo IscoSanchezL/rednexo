@@ -61,7 +61,7 @@ try {
   // PDF
   const [pop] = await Promise.all([p.ctx.waitForEvent("page", { timeout: 10000 }), p.locator("text=Abre una ventana lista para imprimir").click()]);
   await pop.waitForSelector("text=Fichas por estudiante");
-  check(await pop.locator("button:has-text('Imprimir / PDF')").count() === 1 && (await pop.locator("h2").allInnerTexts()).length === 5, "el PDF abre una ventana con el botón de imprimir y las mismas 5 secciones");
+  check(await pop.locator("button:has-text('Imprimir')").count() === 1 && (await pop.locator("h2").allInnerTexts()).length === 5, "el PDF abre una ventana con el botón de imprimir y las mismas 5 secciones");
   await pop.close();
   check(p.errs.length === 0, "sin errores de JavaScript" + (p.errs.length ? ": " + p.errs[0] : ""));
 

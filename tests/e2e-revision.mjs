@@ -84,7 +84,7 @@ try {
   // 5) Papelera: lo que está en la papelera no cuenta; eliminar para siempre borra las respuestas
   const card = (titulo) => d.locator(`xpath=//span[normalize-space()="${titulo}"]/ancestor::div[.//button[contains(.,'Editar')]][1]`);
   await d.click("header button:has-text('Encuestas')"); await d.waitForTimeout(700);
-  await card("Sociograma 5° A — Primer periodo").locator("button:has-text('🗑')").click(); await d.waitForTimeout(1000);
+  await card("Sociograma 5° A — Primer periodo").locator("button[aria-label='Eliminar encuesta']").click(); await d.waitForTimeout(1000);
   await d.click("header button:has-text('Dashboard')"); await d.waitForTimeout(900);
   check(/0\s*CONEXIONES/i.test(await d.innerText("body")), "papelera: las respuestas de una encuesta en la papelera no cuentan en el mapa");
   await d.click("header button:has-text('Encuestas')"); await d.click("button:has-text('Papelera')"); await d.waitForTimeout(500);

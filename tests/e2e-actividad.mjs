@@ -43,7 +43,7 @@ try {
   await tab(p, "Encuestas");
   await p.locator("button:has-text('Encuesta de prueba')").first().click(); await p.waitForSelector("text=Encuesta de prueba — Sociograma");
   await p.locator("button:has-text('Borrador')").first().click(); await p.waitForSelector("text=● Activa");
-  const [dl] = await Promise.all([p.waitForEvent("download"), p.locator("button:has-text('⬇ JSON')").first().click()]); await dl.path();
+  const [dl] = await Promise.all([p.waitForEvent("download"), p.locator("button:has-text('JSON')").first().click()]); await dl.path();
   // Reportes
   await tab(p, "Reportes"); await p.waitForSelector("text=Configurar reporte");
   const [dl2] = await Promise.all([p.waitForEvent("download"), p.locator("text=Archivo HTML completo").click()]); await dl2.path();

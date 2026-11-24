@@ -76,7 +76,7 @@ try {
   await p.locator("[data-celda]").first().click();
   check(/hacia|Dentro de/.test(await p.innerText("[data-graficos]")), "clic en el mapa de calor → detalle de celda");
   const [img] = await Promise.all([p.waitForEvent("download", { timeout: 15000 }), p.locator("button:has-text('Imagen')").first().click()]);
-  check(/\.png$/.test(img.suggestedFilename()) && statSync(await img.path()).size > 1500, "«⬇ Imagen» descarga el gráfico como PNG: " + img.suggestedFilename());
+  check(/\.png$/.test(img.suggestedFilename()) && statSync(await img.path()).size > 1500, "«Imagen» descarga el gráfico como PNG: " + img.suggestedFilename());
 
   await p.click("button:has-text('Estudiantes')"); await p.waitForTimeout(300);
   check(await p.locator("[data-punto]").count() === 8, "Estudiantes: un punto por estudiante (8)");

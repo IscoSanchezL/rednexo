@@ -78,8 +78,8 @@ try {
   await fila.locator("select").nth(1).selectOption("abierta");
   check(await fila.locator("select").count() === 1, "…al elegir «Pregunta abierta» desaparece el carácter (+ / − / ○), que no aplica");
   await p.click("button:has-text('+ Agregar')");
-  check((await p.innerText("body")).includes("✎ abierta"), "…y la pregunta se marca como «✎ abierta»");
-  await p.click("button:has-text('💾 Guardar')");
+  check((await p.innerText("body")).includes("abierta"), "…y la pregunta se marca como «abierta»");
+  await p.click("button:has-text('Guardar')");
   const nueva = await until(async () => (await leer(P + "/surveys")).find((s) => s.title === "Nueva con abierta"));
   check(nueva?.questions[0].kind === "abierta" && nueva.questions[0].tp === "neu", "…y se guarda como pregunta abierta");
   const tarjeta = p.locator(`xpath=//span[normalize-space()="Nueva con abierta"]/ancestor::div[.//button[contains(.,'Editar')]][1]`);

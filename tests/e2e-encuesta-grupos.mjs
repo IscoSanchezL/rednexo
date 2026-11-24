@@ -48,7 +48,7 @@ try {
   const bor = await until(async () => { const s = await survey("sv_borrador"); return JSON.stringify(s.groups) === '["Grupo Prueba 1"]' ? s : null; });
   check(!!bor, "también se corrige la encuesta en borrador");
   let t = (await p.innerText("body")).replace(/\s+/g, " ");
-  check(t.includes("👥 Grupo Prueba 1") && !t.includes("👥 Grupo Prueba,"), "la tarjeta muestra el grupo correcto");
+  check(t.includes("Grupo Prueba 1") && !t.includes("Grupo Prueba,"), "la tarjeta muestra el grupo correcto");
   // 2. Lo que ven los estudiantes
   let { p: pub, t: tp } = await publica();
   check(["pacho", "pacho1", "pacho2", "pacho3"].every((n) => tp.includes(n)) && !tp.includes("Isco") && !tp.includes("Milena") && tp.includes("4 participantes"), "los estudiantes ven a pacho, pacho1, pacho2 y pacho3; ya no a Isco ni a Milena");

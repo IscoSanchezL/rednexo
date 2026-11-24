@@ -6,6 +6,7 @@ import { buildConnections } from "./lib/sociometry.js";
 import { ROLES_ORDEN, ROL_COLOR, rolesPorGrupo, puntosDispersion, mapaCalorGrupos, rankingMutuas, redIndividual, compararAplicaciones, maxEje } from "./lib/graficos.js";
 import { GLOSARIO } from "./lib/glosario.js";
 import { Ayuda } from "./Ayuda.jsx";
+import { Ico } from "./Icono.jsx";
 
 const V = (n) => `var(--c-${n})`;
 const caja = { background: V("card"), border: `1px solid ${V("border")}`, borderRadius: 14, padding: 16, marginBottom: 14 };
@@ -36,7 +37,7 @@ function Marco({ titulo, ayuda, nota, children, svgRef, archivo }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", marginBottom: 6 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0 }}>{titulo}{ayuda && <Ayuda clave={ayuda} />}</h3>
         <span style={{ flex: 1 }} />
-        {svgRef && <button type="button" style={btn(false)} onClick={() => descargarPng(svgRef.current, archivo || "grafico")}>⬇ Imagen</button>}
+        {svgRef && <button type="button" style={btn(false)} onClick={() => descargarPng(svgRef.current, archivo || "grafico")}><Ico n="descargar" size={13} />Imagen</button>}
       </div>
       {nota && <div style={{ fontSize: 11, color: V("t3"), marginBottom: 8, lineHeight: 1.5 }}>{nota}</div>}
       {children}
@@ -62,7 +63,7 @@ function Ficha({ row, report, ver, onIndividual }) {
         <span style={{ fontSize: 11, color: V("t2") }}>{row.student.group}</span>
         <Chip rol={row.rol} />
         <span style={{ flex: 1 }} />
-        {onIndividual && <button type="button" style={btn(false)} onClick={() => onIndividual(String(row.student.id))}>Ver gráfico individual →</button>}
+        {onIndividual && <button type="button" style={btn(false)} onClick={() => onIndividual(String(row.student.id))}>Ver gráfico individual</button>}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(110px,1fr))", gap: 8, marginBottom: 8 }}>
         {celdas.map(([l, v, p, c]) => <div key={l} style={{ textAlign: "center", padding: 8, borderRadius: 8, border: `1px solid ${V("border")}` }}><div style={{ fontSize: 18, fontWeight: 800, color: c }}>{v}</div><div style={{ fontSize: 10, color: V("t2"), textTransform: "uppercase" }}>{l}</div><div style={{ fontSize: 10, color: V("t3") }}>grupo: {p}</div></div>)}
@@ -398,7 +399,7 @@ export function GraficosPanel({ students, conns, surveys = [], responses = [], v
   return (
     <div data-graficos style={{ maxWidth: 980, margin: "0 auto" }}>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
-        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}>📈 Gráficos</h2>
+        <h2 style={{ fontSize: 16, fontWeight: 800, margin: 0 }}><Ico n="lineas" size={17} />Gráficos</h2>
         <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>{vistas.map(([k, l]) => <button key={k} type="button" aria-pressed={vista === k} onClick={() => setVista(k)} style={btn(vista === k)}>{l}</button>)}</div>
         <span style={{ flex: 1 }} />
         {vista !== "comparar" && <label style={{ fontSize: 12, color: V("t2") }}>Grupo: <select aria-label="Grupo" value={grupo} onChange={(e) => { setGrupo(e.target.value); setPickRol(null); setPickDens(null); }} style={sel}><option>Todos</option>{grupos.map((g) => <option key={g}>{g}</option>)}</select></label>}

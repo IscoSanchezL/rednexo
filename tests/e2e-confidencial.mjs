@@ -32,7 +32,7 @@ try {
   await p.goto("http://localhost:5183/"); await p.waitForFunction(() => !!window.__rnSignIn); await p.evaluate((e) => window.__rnSignIn(e), "psi@cf.co");
   await p.waitForSelector("text=Dashboard", { timeout: 15000 }); await p.click("button:has-text('Encuestas')"); await p.waitForSelector("text=Antigua anónima");
   let t = (await p.innerText("body")).replace(/\s+/g, " ");
-  check((t.match(/🔒 Confidencial/g) || []).length === 2 && !/Anónima|Identificada/.test(t.replace("Antigua anónima", "").replace("Antigua identificada", "")), "las dos encuestas antiguas (marcadas «anónima» e «identificada») se ven igual: «🔒 Confidencial»");
+  check((t.match(/Confidencial/g) || []).length === 2 && !/Anónima|Identificada/.test(t.replace("Antigua anónima", "").replace("Antigua identificada", "")), "las dos encuestas antiguas (marcadas «anónima» e «identificada») se ven igual: «Confidencial»");
   // Formulario nuevo
   await p.locator("button:has-text('+ Nueva Encuesta')").first().click(); await p.waitForSelector("text=Crear Nueva Encuesta");
   t = (await p.innerText("body")).replace(/\s+/g, " ");
