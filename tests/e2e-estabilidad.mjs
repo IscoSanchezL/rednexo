@@ -160,6 +160,14 @@ try {
     check(/Ya respondiste/.test(await e.innerText("body")), "Volver a entrar como quien ya respondió: lo indica");
     check(errs.length === 0, "Estudiante: sin errores de JavaScript" + (errs.length ? " → " + errs[0] : ""));
     await ctx.close(); }
+  // ── Ingreso: fondo oscuro fijo → siempre el logo de texto blanco, aunque el tema guardado sea claro ──
+  for (const tema of ["light", "dark"]) {
+    const ctx = await b.newContext({ viewport: { width: 390, height: 800 } }); await ctx.addInitScript((x) => { try { localStorage.setItem("rednexo-theme", x); } catch {} }, tema);
+    const p = await ctx.newPage(); await p.goto(`http://localhost:${PORT}/`); await p.waitForSelector("text=Iniciar sesión", { timeout: 20000 });
+    const visibles = await p.evaluate(() => [...document.images].filter((i) => i.offsetWidth > 0).map((i) => i.src.replace(location.origin, "")));
+    check(visibles.length === 1 && /rednexo-logo-oscuro/.test(visibles[0]), `Ingreso con tema ${tema === "light" ? "claro" : "oscuro"} guardado: se ve el logo de texto blanco (${visibles.join(", ")})`);
+    await ctx.close();
+  }
   // ── G. Celular: la ayuda «i» no se sale de la pantalla ──
   { const { p, errs } = await sesion("lleno", mail("psychologist", "lleno"), { movil: true }); await p.waitForSelector("text=PARTICIPANTES", { timeout: 20000 });
     for (const k of ["conexiones", "densidad"]) {
