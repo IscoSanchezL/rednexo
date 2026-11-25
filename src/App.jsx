@@ -443,7 +443,10 @@ const LogoIcon = ({ size = 40 }) => (
 
 // Logo RedNexo by Iskonex: versión de texto blanco (modo oscuro) y de texto oscuro (modo claro);
 // el CSS del tema muestra solo la que corresponde.
-const LogoFull = ({ width, style }) => (
+// `oscuro`: para pantallas con fondo oscuro fijo (el ingreso), donde siempre va la versión de texto blanco aunque el tema guardado sea claro.
+const LogoFull = ({ width, style, oscuro = false }) => oscuro ? (
+  <img src="/rednexo-logo-oscuro.png" alt="RedNexo by Iskonex" style={{ display: "block", width, height: "auto", userSelect: "none", ...style }} />
+) : (
   <>
     <img className="rx-logo-dark" src="/rednexo-logo-oscuro.png" alt="RedNexo by Iskonex" style={{ display: "block", width, height: "auto", userSelect: "none", ...style }} />
     <img className="rx-logo-light" src="/rednexo-logo-claro.png" alt="" aria-hidden="true" style={{ width, height: "auto", userSelect: "none", ...style }} />
@@ -592,7 +595,7 @@ function LoginPage({ onGoogleLogin, onRegister, loading, error }) {
         zIndex: 1,
       }}>
         <div style={{ animation: "fadeUp .5s ease both" }}>
-          <LogoFull width="min(560px, 100%)" style={{ pointerEvents: "none" }} />
+          <LogoFull oscuro width="min(560px, 100%)" style={{ pointerEvents: "none" }} />
           <div style={{ marginTop: 8, fontSize: 48, fontWeight: 900, lineHeight: 1.1, color: "#fff", letterSpacing: "-2px" }}>
             Entiende<br/>
             <span style={{ background: "linear-gradient(90deg,#38bdf8 0%,#3b82f6 50%,#a78bfa 100%)", WebkitBackgroundClip: "text", backgroundClip: "text", WebkitTextFillColor: "transparent", color: "#3b82f6" }}>las conexiones</span><br/>
